@@ -1457,6 +1457,31 @@
     .site-foot-row { gap: 14px; }
     .site-foot-mid, .site-foot-links { gap: 18px; }
   }
+
+  /* ========== Mobile overrides (≤780px) ========== */
+  @media (max-width: 780px) {
+    .wrap { padding: 0 20px; }
+    .masthead {
+      padding: 14px 20px;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+    }
+    .masthead .tagline { display: none; }
+    .masthead .mark {
+      font-size: 13.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .masthead .mark .dot { width: 6px; height: 6px; }
+    .masthead .right { gap: 18px; font-size: 12.5px; }
+    .masthead .right a { white-space: nowrap; }
+  }
+  @media (max-width: 420px) {
+    .masthead .right a[href="#how"] { display: none; }
+    .masthead .mark { font-size: 12.5px; }
+    .masthead .right { gap: 16px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
