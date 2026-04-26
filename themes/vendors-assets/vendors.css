@@ -65,7 +65,13 @@ a { color: inherit; }
   justify-self: start;
   display: inline-flex; align-items: center; gap: 10px;
   text-decoration: none;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.masthead .mark .full { display: inline; }
+.masthead .mark .short { display: none; }
 .masthead .mark .dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--red);
@@ -309,12 +315,83 @@ a { color: inherit; }
   text-transform: uppercase;
   margin-top: 2px;
 }
+/* Reusable US-flag inline marker for the Origin cell */
+.flag-us {
+  background: linear-gradient(180deg,
+    #BF0A30 0 14%, #fff 14% 28%,
+    #BF0A30 28% 42%, #fff 42% 56%,
+    #BF0A30 56% 70%, #fff 70% 84%,
+    #BF0A30 84% 100%);
+}
+
 @media (max-width: 780px) {
+  /* Card layout: grade in top-left, name + country to its right,
+     numeric stats stacked beneath as labelled rows. */
   .vendor-table thead { display: none; }
-  .vendor-table, .vendor-table tbody, .vendor-table tr, .vendor-table td { display: block; width: 100%; }
-  .vendor-table tbody tr { padding: 18px 0; }
-  .vendor-table tbody td { padding: 4px 0; border: 0; }
-  .vendor-table .num { text-align: left; }
+  .vendor-table { display: block; }
+  .vendor-table tbody { display: block; }
+  .vendor-table tbody tr {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    column-gap: 16px;
+    row-gap: 4px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .vendor-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .vendor-table tbody td.grade {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+  .vendor-table tbody td.grade .rating { width: 38px; height: 38px; font-size: 16px; }
+  .vendor-table tbody td.name { grid-column: 2; grid-row: 1; }
+  .vendor-table tbody td.country { grid-column: 2; grid-row: 2; font-size: 13px; }
+  /* The four numeric cells become a 2x2 grid below */
+  .vendor-table tbody td.num {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 6px 0 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    font-size: 14px;
+  }
+  /* Group the four numeric rows with one shared border-top, not one per row */
+  .vendor-table tbody td.col-products { margin-top: 10px; }
+  .vendor-table tbody td.col-samples,
+  .vendor-table tbody td.col-purity,
+  .vendor-table tbody td.col-latest {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 4px;
+  }
+  .vendor-table tbody td.num::before {
+    content: attr(data-label);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--ink-mute);
+  }
+  .vendor-table tbody td.num small {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+    text-transform: none;
+    margin-left: 2px;
+  }
 }
 
 /* ========== Rating badges ========== */
@@ -807,14 +884,31 @@ a { color: inherit; }
 /* ========== Mobile ========== */
 @media (max-width: 780px) {
   .wrap, .wrap-narrow { padding: 0 20px; }
-  .masthead { padding: 14px 20px; grid-template-columns: 1fr auto; gap: 14px; }
-  .masthead .tagline { display: none; }
-  .masthead .mark {
-    font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .masthead {
+    padding: 14px 20px;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
   }
+  .masthead .tagline { display: none; }
+  .masthead .mark { font-size: 13.5px; }
   .masthead .mark .dot { width: 6px; height: 6px; }
-  .masthead .right { gap: 18px; font-size: 12.5px; }
+  .masthead .right { gap: 18px; font-size: 12px; letter-spacing: 0.16em; }
+  .masthead .right a { white-space: nowrap; }
   .site-foot { padding: 24px 24px 0; }
   .site-foot-stripe { margin: 0 -24px; padding: 14px 24px; }
   .cta-card { padding: 36px 24px; }
+}
+
+/* Progressive nav-link hiding so brand never collides with the nav */
+@media (max-width: 620px) {
+  .masthead .right a.opt-2 { display: none; }
+  .masthead .mark .full { display: none; }
+  .masthead .mark .short { display: inline; }
+  .masthead .mark { font-size: 13px; }
+}
+@media (max-width: 420px) {
+  .masthead .right a.opt-1 { display: none; }
+  .masthead .right { gap: 14px; }
+  .masthead .mark { font-size: 12.5px; }
+  .masthead { padding: 12px 16px; }
 }
