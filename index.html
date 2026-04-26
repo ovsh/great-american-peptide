@@ -1527,7 +1527,7 @@
 
 <div class="masthead">
   <div class="mark"><span class="dot"></span> The Great American Peptide Co.</div>
-  <div class="tagline">From $200 · 3–5 day turnaround · No account</div>
+  <div class="tagline">From $225 · 3–5 day turnaround · No account</div>
   <div class="right">
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
@@ -1572,10 +1572,10 @@
       <p class="lede">
         Mail us your sample. A few days later, a signed report from our
         independent American lab tells you what's in the vial, and whether
-        it's clean. From $200 a test. No subscription.
+        it's clean. From $225 a test. No subscription.
       </p>
       <div class="hero-actions">
-        <a href="#pricing" class="btn">Order a Test &mdash; from $200 <span class="arrow">→</span></a>
+        <a href="#pricing" class="btn">Order a Test &mdash; from $225 <span class="arrow">→</span></a>
         <a href="#process" class="link-cta">See what you get back</a>
       </div>
     </div>
@@ -1919,29 +1919,29 @@
     <div class="pillars">
       <div class="pillar">
         <div class="label"><span class="n">01</span> Purity</div>
-        <div class="figure">$200</div>
-        <h3>Identity &amp; purity</h3>
+        <div class="figure">$225</div>
+        <h3>Purity</h3>
         <p>HPLC-UV. Tells you what's in the vial and how clean it is. Mass percentage, identified impurities, signed and dated.</p>
         <div class="pillar-cta">
-          <a href="https://shop.peptide.industries/products/purity-testing" class="btn">Order Purity <span class="arrow">→</span></a>
+          <div id="buy-purity" class="buy-button-mount"></div>
         </div>
       </div>
       <div class="pillar">
         <div class="label"><span class="n">02</span> Endotoxin</div>
-        <div class="figure">$300</div>
-        <h3>Bacterial contamination</h3>
-        <p>The pharmacy-grade safety screen. The same test hospitals run before anything goes into a needle. Pass or fail, the paper says so.</p>
+        <div class="figure">$325</div>
+        <h3>Endotoxins</h3>
+        <p>Bacterial contamination, pharmacy-grade safety screen. The same test hospitals run before anything goes into a needle.</p>
         <div class="pillar-cta">
-          <a href="https://shop.peptide.industries/products/endotoxin-testing" class="btn">Order Endotoxin <span class="arrow">→</span></a>
+          <div id="buy-endotoxin" class="buy-button-mount"></div>
         </div>
       </div>
       <div class="pillar">
         <div class="label"><span class="n">03</span> Combo</div>
-        <div class="figure">$325<small>save $175</small></div>
+        <div class="figure">$350<small>save $200</small></div>
         <h3>Both tests, one sample</h3>
         <p>Purity and endotoxin together. Both certificates from one vial. The right pick for first-time vendors and high-stakes batches.</p>
         <div class="pillar-cta">
-          <a href="https://shop.peptide.industries/products/purity-endotoxin-combo" class="btn">Order Combo <span class="arrow">→</span></a>
+          <div id="buy-combo" class="buy-button-mount"></div>
         </div>
       </div>
     </div>
@@ -2032,7 +2032,7 @@
   <div class="wrap">
     <h2>Stop guessing. <em>Start testing.</em></h2>
     <p>
-      From $200. A few days. One vial. One certificate. No account, no
+      From $225. A few days. One vial. One certificate. No account, no
       contract, no phone call. Just proof.
     </p>
     <div class="hero-actions">
@@ -2049,7 +2049,7 @@
       <span class="dot"></span> The Great American Peptide Co.
     </div>
     <div class="site-foot-mid">
-      <span>From $200</span>
+      <span>From $225</span>
       <span>3–5 day turnaround</span>
       <span>No account</span>
     </div>
@@ -2068,6 +2068,132 @@
     <div><a href="mailto:contact@peptide.industries">contact@peptide.industries</a></div>
   </div>
 </footer>
+
+<!-- Shopify Buy Button SDK: opens product modal in-page; checkout still on Shopify -->
+<script>
+(function () {
+  var SHOP_DOMAIN = 'kz7p55-m0.myshopify.com';
+  var STOREFRONT_TOKEN = '0a024d8c43b2a8e1834dca3db740e704';
+  var SCRIPT_URL = 'https://sdks.shopifycdn.com/buy-button/latest/buy-button-storefront.min.js';
+
+  var PRODUCTS = [
+    { id: '8819471417541', node: 'buy-purity',    text: 'Order Purity' },
+    { id: '8819471450309', node: 'buy-endotoxin', text: 'Order Endotoxin' },
+    { id: '8819472400581', node: 'buy-combo',     text: 'Order Combo' }
+  ];
+
+  var BTN_STYLE = {
+    'font-family': "'Cinzel', 'Times New Roman', serif",
+    'font-weight': '700',
+    'font-size': '15px',
+    'letter-spacing': '0.08em',
+    'text-transform': 'uppercase',
+    'background-color': '#B22234',
+    'color': '#FFF8E7',
+    'border': '1px solid #7C0A12',
+    'border-radius': '0',
+    'padding-top': '14px',
+    'padding-bottom': '14px',
+    'padding-left': '24px',
+    'padding-right': '24px',
+    'width': '100%',
+    'box-shadow': '0 1px 0 rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
+    ':hover': {
+      'background-color': '#7C0A12',
+      'color': '#FFF8E7'
+    },
+    ':focus': {
+      'background-color': '#7C0A12'
+    }
+  };
+
+  var TITLE_STYLE = {
+    'font-family': "'Cinzel', 'Times New Roman', serif",
+    'color': '#0A1F44',
+    'font-weight': '700',
+    'letter-spacing': '0.02em'
+  };
+
+  var PRICE_STYLE = {
+    'font-family': "'Cinzel', 'Times New Roman', serif",
+    'color': '#0A1F44',
+    'font-weight': '700'
+  };
+
+  function buildOptions(text) {
+    return {
+      product: {
+        buttonDestination: 'modal',
+        contents: { img: false, title: false, price: false, options: false, description: false, button: true, quantity: false },
+        text: { button: text },
+        styles: { button: BTN_STYLE }
+      },
+      modalProduct: {
+        contents: { img: false, imgWithCarousel: false, button: false, buttonWithQuantity: true, description: true },
+        styles: {
+          product: { '@media (min-width: 601px)': { 'max-width': '100%', 'margin-left': '0px', 'margin-bottom': '0px' } },
+          title:   Object.assign({ 'font-size': '28px' }, TITLE_STYLE),
+          price:   Object.assign({ 'font-size': '20px' }, PRICE_STYLE),
+          compareAt: PRICE_STYLE,
+          button:  BTN_STYLE
+        },
+        text: { button: 'Add to cart' }
+      },
+      modal: {
+        styles: {
+          modal: { 'background-color': '#FFF8E7' }
+        }
+      },
+      cart: {
+        styles: {
+          button: BTN_STYLE,
+          cart:   { 'background-color': '#FFF8E7' },
+          footer: { 'background-color': '#FFF8E7' },
+          title:  TITLE_STYLE,
+          subtotal: PRICE_STYLE
+        },
+        text: { total: 'Subtotal', button: 'Checkout' }
+      },
+      toggle: {
+        styles: {
+          toggle: { 'background-color': '#B22234', ':hover': { 'background-color': '#7C0A12' } },
+          count:  { 'font-family': "'Cinzel', 'Times New Roman', serif", 'color': '#FFF8E7' }
+        }
+      },
+      option: {
+        styles: {
+          label:  { 'font-family': "'Inter', sans-serif", 'color': '#0A1F44', 'font-weight': '600' },
+          select: { 'font-family': "'Inter', sans-serif", 'border-radius': '0', 'border-color': '#0A1F44' }
+        }
+      }
+    };
+  }
+
+  function init() {
+    var client = ShopifyBuy.buildClient({ domain: SHOP_DOMAIN, storefrontAccessToken: STOREFRONT_TOKEN });
+    ShopifyBuy.UI.onReady(client).then(function (ui) {
+      PRODUCTS.forEach(function (p) {
+        ui.createComponent('product', {
+          id: p.id,
+          node: document.getElementById(p.node),
+          moneyFormat: '%24%7B%7Bamount%7D%7D',
+          options: buildOptions(p.text)
+        });
+      });
+    });
+  }
+
+  if (window.ShopifyBuy && window.ShopifyBuy.UI) {
+    init();
+  } else {
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = SCRIPT_URL;
+    s.onload = init;
+    (document.head || document.body).appendChild(s);
+  }
+})();
+</script>
 
 </body>
 </html>
