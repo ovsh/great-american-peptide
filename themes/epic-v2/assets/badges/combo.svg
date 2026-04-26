@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">
+  <defs>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E2655"/>
+      <stop offset="1" stop-color="#0A1F44"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E5C77A"/>
+      <stop offset=".5" stop-color="#C5A572"/>
+      <stop offset="1" stop-color="#9B7E48"/>
+    </linearGradient>
+    <pattern id="grain" patternUnits="userSpaceOnUse" width="6" height="6">
+      <rect width="6" height="6" fill="#FFF8E7"/>
+      <circle cx="1" cy="1" r=".4" fill="#0A1F44" opacity=".035"/>
+      <circle cx="4" cy="3" r=".3" fill="#0A1F44" opacity=".03"/>
+    </pattern>
+  </defs>
+
+  <!-- navy field -->
+  <rect width="1200" height="1200" fill="url(#navyGrad)"/>
+
+  <!-- gold ornate border -->
+  <rect x="40" y="40" width="1120" height="1120" fill="none" stroke="url(#goldGrad)" stroke-width="2"/>
+  <rect x="60" y="60" width="1080" height="1080" fill="none" stroke="url(#goldGrad)" stroke-width="8"/>
+  <rect x="84" y="84" width="1032" height="1032" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity=".55"/>
+  <rect x="100" y="100" width="1000" height="1000" fill="none" stroke="url(#goldGrad)" stroke-width=".5" opacity=".5"/>
+
+  <!-- corner stars -->
+  <g fill="url(#goldGrad)" font-family="Times New Roman, serif" font-size="40" text-anchor="middle">
+    <text x="60" y="80">★</text>
+    <text x="1140" y="80">★</text>
+    <text x="60" y="1148">★</text>
+    <text x="1140" y="1148">★</text>
+  </g>
+
+  <!-- top eyebrow -->
+  <g font-family="Times New Roman, serif" fill="url(#goldGrad)" text-anchor="middle">
+    <text x="600" y="170" font-size="34" letter-spacing="14">THE GREAT AMERICAN PEPTIDE CO.</text>
+    <line x1="340" y1="190" x2="860" y2="190" stroke="url(#goldGrad)" stroke-width="1"/>
+    <text x="600" y="225" font-size="20" letter-spacing="10">FULL CERTIFICATE OF ANALYSIS</text>
+  </g>
+
+  <!-- cream document panel -->
+  <rect x="140" y="280" width="920" height="620" fill="url(#grain)" stroke="url(#goldGrad)" stroke-width="2"/>
+
+  <!-- LEFT HALF: chromatogram peak -->
+  <g transform="translate(180, 380)">
+    <g stroke="#0A1F44" stroke-width="1" opacity=".08">
+      <line x1="0" y1="60"  x2="380" y2="60"/>
+      <line x1="0" y1="140" x2="380" y2="140"/>
+      <line x1="0" y1="220" x2="380" y2="220"/>
+      <line x1="0" y1="300" x2="380" y2="300"/>
+      <line x1="0" y1="380" x2="380" y2="380"/>
+    </g>
+    <line x1="0" y1="20" x2="0" y2="460" stroke="#0A1F44" stroke-width="1.5" opacity=".55"/>
+    <line x1="0" y1="460" x2="380" y2="460" stroke="#0A1F44" stroke-width="1.5" opacity=".55"/>
+
+    <path d="
+      M 0 452
+      L 60 452
+      Q 80 450 100 452
+      L 150 451
+      Q 170 450 180 449
+      Q 184 60 192 36
+      Q 200 60 210 449
+      Q 220 451 240 451
+      L 300 451
+      Q 330 450 360 450
+      Q 366 450 372 449
+      L 380 449"
+      fill="none" stroke="#B22234" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <line x1="195" y1="36" x2="195" y2="6" stroke="#0A1F44" stroke-width="1" stroke-dasharray="3,3"/>
+    <text x="195" y="-2" font-family="Times New Roman, serif" font-weight="700" font-size="22" fill="#0A1F44" text-anchor="middle">99.80%</text>
+
+    <text x="190" y="490" font-family="Menlo, monospace" font-size="13" fill="#0A1F44" opacity=".55" text-anchor="middle" letter-spacing="3">RETENTION TIME</text>
+  </g>
+
+  <!-- divider -->
+  <line x1="600" y1="340" x2="600" y2="850" stroke="#0A1F44" stroke-width="1" opacity=".25"/>
+
+  <!-- RIGHT HALF: pass stamp -->
+  <g transform="translate(820, 590)">
+    <circle r="180" fill="none" stroke="#B22234" stroke-width="4"/>
+    <circle r="166" fill="none" stroke="#B22234" stroke-width="1"/>
+    <circle r="148" fill="none" stroke="#B22234" stroke-width="10" opacity=".18"/>
+    <circle r="124" fill="none" stroke="#B22234" stroke-width="1"/>
+
+    <text x="0" y="-14" font-family="Times New Roman, serif" font-weight="700" font-size="76" fill="#B22234" text-anchor="middle" letter-spacing="4">PASS</text>
+    <line x1="-72" y1="6" x2="72" y2="6" stroke="#B22234" stroke-width="2"/>
+    <text x="0" y="42" font-family="Menlo, monospace" font-size="20" fill="#0A1F44" text-anchor="middle" letter-spacing="3">&#60; 0.25 EU/mg</text>
+    <text x="0" y="74" font-family="Times New Roman, serif" font-style="italic" font-size="16" fill="#0A1F44" text-anchor="middle" opacity=".7">pharmacy grade</text>
+  </g>
+
+  <!-- title block -->
+  <g text-anchor="middle">
+    <text x="600" y="990" font-family="Times New Roman, serif" font-weight="700" font-size="120" fill="#FFF8E7" letter-spacing="14">COMBO</text>
+    <line x1="380" y1="1018" x2="820" y2="1018" stroke="url(#goldGrad)" stroke-width="1"/>
+    <text x="600" y="1058" font-family="Times New Roman, serif" font-size="28" fill="url(#goldGrad)" letter-spacing="10">PURITY + ENDOTOXIN  ·  ONE VIAL</text>
+  </g>
+
+  <!-- bottom seal -->
+  <g transform="translate(600, 1078)" text-anchor="middle">
+    <text font-family="Times New Roman, serif" font-size="18" fill="url(#goldGrad)" letter-spacing="6">ISO/IEC 17025  ·  A2LA ACCREDITED</text>
+  </g>
+</svg>

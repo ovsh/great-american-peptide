@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">
+  <defs>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E2655"/>
+      <stop offset="1" stop-color="#0A1F44"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E5C77A"/>
+      <stop offset=".5" stop-color="#C5A572"/>
+      <stop offset="1" stop-color="#9B7E48"/>
+    </linearGradient>
+    <pattern id="grain" patternUnits="userSpaceOnUse" width="6" height="6">
+      <rect width="6" height="6" fill="#FFF8E7"/>
+      <circle cx="1" cy="1" r=".4" fill="#0A1F44" opacity=".035"/>
+      <circle cx="4" cy="3" r=".3" fill="#0A1F44" opacity=".03"/>
+    </pattern>
+    <!-- circular path for curved text top -->
+    <path id="topArc" d="M 320 600 A 280 280 0 0 1 880 600"/>
+    <path id="botArc" d="M 320 600 A 280 280 0 0 0 880 600"/>
+  </defs>
+
+  <!-- navy field -->
+  <rect width="1200" height="1200" fill="url(#navyGrad)"/>
+
+  <!-- gold double border -->
+  <rect x="40" y="40" width="1120" height="1120" fill="none" stroke="url(#goldGrad)" stroke-width="2"/>
+  <rect x="60" y="60" width="1080" height="1080" fill="none" stroke="url(#goldGrad)" stroke-width="6"/>
+  <rect x="84" y="84" width="1032" height="1032" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity=".6"/>
+
+  <!-- corner stars -->
+  <g fill="url(#goldGrad)" font-family="Times New Roman, serif" font-size="34" text-anchor="middle">
+    <text x="60" y="78">★</text>
+    <text x="1140" y="78">★</text>
+    <text x="60" y="1146">★</text>
+    <text x="1140" y="1146">★</text>
+  </g>
+
+  <!-- top eyebrow -->
+  <g font-family="Times New Roman, serif" fill="url(#goldGrad)" text-anchor="middle">
+    <text x="600" y="170" font-size="34" letter-spacing="14">THE GREAT AMERICAN PEPTIDE CO.</text>
+    <line x1="380" y1="190" x2="820" y2="190" stroke="url(#goldGrad)" stroke-width="1"/>
+    <text x="600" y="225" font-size="20" letter-spacing="10">SAFETY ATTESTATION</text>
+  </g>
+
+  <!-- cream document panel -->
+  <rect x="140" y="280" width="920" height="620" fill="url(#grain)" stroke="url(#goldGrad)" stroke-width="2"/>
+
+  <!-- pass stamp: concentric rings + rosette -->
+  <g transform="translate(600, 590)">
+    <!-- outer ring with curved label text -->
+    <circle r="270" fill="none" stroke="#B22234" stroke-width="6"/>
+    <circle r="250" fill="none" stroke="#B22234" stroke-width="2"/>
+    <circle r="225" fill="none" stroke="#B22234" stroke-width="14" opacity=".18"/>
+    <circle r="190" fill="none" stroke="#B22234" stroke-width="2"/>
+
+    <!-- ring label text using curved path -->
+    <path id="topArcInner" d="M 0 0 m -226 0 a 226 226 0 1 1 452 0" fill="none"/>
+    <path id="botArcInner" d="M 0 0 m -226 0 a 226 226 0 0 0 452 0" fill="none"/>
+    <text font-family="Times New Roman, serif" font-weight="700" font-size="30" fill="#B22234" letter-spacing="22">
+      <textPath href="#topArcInner" startOffset="50%" text-anchor="middle">ENDOTOXIN  ·  CLEARED</textPath>
+    </text>
+    <text font-family="Times New Roman, serif" font-size="24" fill="#B22234" letter-spacing="14">
+      <textPath href="#botArcInner" startOffset="50%" text-anchor="middle">L A L  ·  PHARMACY GRADE</textPath>
+    </text>
+
+    <!-- center pass mark -->
+    <text x="0" y="-30" font-family="Times New Roman, serif" font-weight="700" font-size="118" fill="#B22234" text-anchor="middle" letter-spacing="6">PASS</text>
+    <line x1="-110" y1="14" x2="110" y2="14" stroke="#B22234" stroke-width="2"/>
+    <text x="0" y="68" font-family="Menlo, monospace" font-size="32" fill="#0A1F44" text-anchor="middle" letter-spacing="6">&#60; 0.25 EU/mg</text>
+    <text x="0" y="118" font-family="Times New Roman, serif" font-style="italic" font-size="20" fill="#0A1F44" text-anchor="middle" opacity=".7">below pharmacy threshold</text>
+
+    <!-- ribbon stars -->
+    <g fill="#B22234" font-family="Times New Roman, serif" font-size="22" text-anchor="middle">
+      <text x="-260" y="8">★</text>
+      <text x="260" y="8">★</text>
+    </g>
+  </g>
+
+  <!-- title block -->
+  <g text-anchor="middle">
+    <text x="600" y="990" font-family="Times New Roman, serif" font-weight="700" font-size="100" fill="#FFF8E7" letter-spacing="12">ENDOTOXINS</text>
+    <line x1="380" y1="1018" x2="820" y2="1018" stroke="url(#goldGrad)" stroke-width="1"/>
+    <text x="600" y="1058" font-family="Times New Roman, serif" font-size="28" fill="url(#goldGrad)" letter-spacing="10">LIMULUS AMEBOCYTE LYSATE</text>
+  </g>
+
+  <!-- bottom seal -->
+  <g transform="translate(600, 1090)" text-anchor="middle">
+    <text font-family="Times New Roman, serif" font-size="18" fill="url(#goldGrad)" letter-spacing="6">ISO/IEC 17025  ·  A2LA ACCREDITED</text>
+  </g>
+</svg>
