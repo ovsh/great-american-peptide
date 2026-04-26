@@ -1152,6 +1152,40 @@
   .pillars-band .pillar h3 { color: var(--epic-cream); }
   .pillars-band .pillar p  { color: var(--epic-cream-soft); max-width: 36ch; }
 
+  /* SKU card "save $175" tag — italic small that lives next to the price */
+  .pillars-band .pillar .figure small {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 4px 8px;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--red);
+    background: rgba(191, 30, 46, 0.10);
+    border: 1px solid rgba(191, 30, 46, 0.45);
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  /* Per-SKU order CTA inside the dark pillar */
+  .pillar-cta { margin-top: 28px; }
+  .pillars-band .pillar-cta .btn {
+    background: var(--red);
+    color: #fff;
+    border-color: var(--red);
+    padding: 13px 22px;
+    font-size: 12px;
+    box-shadow: 0 8px 20px rgba(191, 10, 48, 0.30), 0 2px 0 rgba(0, 0, 0, 0.25);
+  }
+  .pillars-band .pillar-cta .btn:hover {
+    background: #D41236;
+    border-color: #D41236;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(191, 10, 48, 0.42);
+  }
+
   @media (max-width: 900px) {
     .pillars-band { padding: 80px 0 88px; }
     .pillars-band .pillars { grid-template-columns: 1fr; gap: 48px; }
@@ -1493,7 +1527,7 @@
 
 <div class="masthead">
   <div class="mark"><span class="dot"></span> The Great American Peptide Co.</div>
-  <div class="tagline">$49 per test · 48-hour turnaround · No account</div>
+  <div class="tagline">From $200 · 3–5 day turnaround · No account</div>
   <div class="right">
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
@@ -1536,13 +1570,13 @@
       <div class="eyebrow">Independent American Lab</div>
       <h1>Test your peptide in a real <em>US</em> lab.</h1>
       <p class="lede">
-        Mail us your sample. 48 hours later, a signed report from our
+        Mail us your sample. A few days later, a signed report from our
         independent American lab tells you what's in the vial, and whether
-        it's clean. $49 a test. No subscription.
+        it's clean. From $200 a test. No subscription.
       </p>
       <div class="hero-actions">
-        <a href="#submit" class="btn">Test My Peptide &mdash; $49 <span class="arrow">→</span></a>
-        <a href="#standard" class="link-cta">See what you get back</a>
+        <a href="#pricing" class="btn">Order a Test &mdash; from $200 <span class="arrow">→</span></a>
+        <a href="#process" class="link-cta">See what you get back</a>
       </div>
     </div>
 
@@ -1681,13 +1715,13 @@
           <span class="ic" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6.8 V12 L15.4 14.3"/><path d="M12 2.2 V3.6 M12 20.4 V21.8 M21.8 12 H20.4 M3.6 12 H2.2"/></svg>
           </span>
-          48-hour standard turnaround
+          3–5 day standard turnaround
         </div>
         <div class="trust-item">
           <span class="ic" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M13 3 H20 V10 L11 19 L4 12 L13 3 Z"/><circle cx="16.1" cy="7" r="1.25" fill="currentColor" stroke="none"/></svg>
           </span>
-          $49 per test. No account.
+          From $200. No account.
         </div>
       </section>
     </div>
@@ -1876,30 +1910,39 @@
 </main>
 
 <!-- ========== PILLARS BAND: Safe. Fast. Simple. ========== -->
-<section class="pillars-band" id="standard">
+<section class="pillars-band" id="pricing">
   <div class="wrap">
     <div class="pillars-head">
       <div class="star-divider" aria-hidden="true"><span class="s">★</span></div>
-      <h2>Safe. <em>Fast.</em> Simple.</h2>
+      <h2>Three tests. <em>One certificate per peptide.</em></h2>
     </div>
     <div class="pillars">
       <div class="pillar">
-        <div class="label"><span class="n">01</span> Reliable</div>
-        <div class="figure">Safe</div>
-        <h3>Pharmacy-grade contamination check</h3>
-        <p>The same bacterial-contamination test hospitals run before anything goes into a needle. If your peptide is dirty, we tell you. If it's clean, the paper says so.</p>
+        <div class="label"><span class="n">01</span> Purity</div>
+        <div class="figure">$200</div>
+        <h3>Identity &amp; purity</h3>
+        <p>HPLC-UV. Tells you what's in the vial and how clean it is. Mass percentage, identified impurities, signed and dated.</p>
+        <div class="pillar-cta">
+          <a href="https://shop.peptide.industries/products/peptide-purity-test" class="btn">Order Purity <span class="arrow">→</span></a>
+        </div>
       </div>
       <div class="pillar">
-        <div class="label"><span class="n">02</span> Fast</div>
-        <div class="figure">48<sup>hr</sup></div>
-        <h3>Envelope to inbox</h3>
-        <p>Drop your sample in the mail Monday. Signed certificate in your inbox Wednesday. Most come back faster. No guessing, no chasing.</p>
+        <div class="label"><span class="n">02</span> Endotoxin</div>
+        <div class="figure">$300</div>
+        <h3>Bacterial contamination</h3>
+        <p>The pharmacy-grade safety screen. The same test hospitals run before anything goes into a needle. Pass or fail, the paper says so.</p>
+        <div class="pillar-cta">
+          <a href="https://shop.peptide.industries/products/endotoxin-test" class="btn">Order Endotoxin <span class="arrow">→</span></a>
+        </div>
       </div>
       <div class="pillar">
-        <div class="label"><span class="n">03</span> Simple</div>
-        <div class="figure">$49<small>/test</small></div>
-        <h3>Per sample. No accounts.</h3>
-        <p>No subscriptions. No minimums. No retainer. Pay for the test you want, not the plan you don't. Less than the vial you're testing.</p>
+        <div class="label"><span class="n">03</span> Combo</div>
+        <div class="figure">$325<small>save $175</small></div>
+        <h3>Both tests, one sample</h3>
+        <p>Purity and endotoxin together. Both certificates from one vial. The right pick for first-time vendors and high-stakes batches.</p>
+        <div class="pillar-cta">
+          <a href="https://shop.peptide.industries/products/peptide-combo-test" class="btn">Order Combo <span class="arrow">→</span></a>
+        </div>
       </div>
     </div>
   </div>
@@ -1934,7 +1977,7 @@
         </span>
         <div class="num">03 / Proof</div>
         <h4>Signed certificate</h4>
-        <p>Signed PDF in your inbox inside 48 hours. Exactly what a pharmacy would send you.</p>
+        <p>Signed PDF in your inbox in 3–5 business days. Exactly what a pharmacy would send you.</p>
       </div>
       <div class="step">
         <span class="step-icon" aria-hidden="true">
@@ -1974,7 +2017,7 @@
       </div>
       <div class="qa">
         <h3>Can I send more than one vial?</h3>
-        <p>Yes. Each vial is its own $49 test with its own certificate. Drop them in the same envelope.</p>
+        <p>Yes. Each vial is its own test with its own certificate. Drop them in the same envelope.</p>
       </div>
       <div class="qa">
         <h3>How is this different from the vendor's COA?</h3>
@@ -1989,12 +2032,12 @@
   <div class="wrap">
     <h2>Stop guessing. <em>Start testing.</em></h2>
     <p>
-      $49. 48 hours. One vial. One certificate. No account, no contract, no
-      phone call. Just proof.
+      From $200. A few days. One vial. One certificate. No account, no
+      contract, no phone call. Just proof.
     </p>
     <div class="hero-actions">
-      <a href="mailto:hello@greatamericanpeptide.co?subject=Test%20my%20peptide" class="btn">Test My First Peptide <span class="arrow">→</span></a>
-      <a href="mailto:hello@greatamericanpeptide.co" class="link-cta">Questions first?</a>
+      <a href="#pricing" class="btn">Order a Test <span class="arrow">→</span></a>
+      <a href="mailto:hello@peptide.industries" class="link-cta">Questions first?</a>
     </div>
   </div>
 </section>
@@ -2006,20 +2049,22 @@
       <span class="dot"></span> The Great American Peptide Co.
     </div>
     <div class="site-foot-mid">
-      <span>$49 per test</span>
-      <span>48-hour turnaround</span>
+      <span>From $200</span>
+      <span>3–5 day turnaround</span>
       <span>No account</span>
     </div>
     <div class="site-foot-links">
-      <a href="#how">How it works</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#pricing">Order</a>
       <a href="#faq">FAQ</a>
+      <a href="https://shop.peptide.industries/policies/terms-of-service">Terms</a>
+      <a href="https://shop.peptide.industries/policies/privacy-policy">Privacy</a>
+      <a href="https://shop.peptide.industries/policies/refund-policy">Refunds</a>
     </div>
   </div>
   <div class="site-foot-stripe">
     <div><span class="flag"></span> Made &amp; tested · United States</div>
     <div>For research use only</div>
-    <div><a href="mailto:hello@greatamericanpeptide.co">hello@greatamericanpeptide.co</a></div>
+    <div><a href="mailto:hello@peptide.industries">hello@peptide.industries</a></div>
   </div>
 </footer>
 
