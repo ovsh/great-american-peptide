@@ -2129,13 +2129,14 @@
         styles: { button: BTN_STYLE }
       },
       modalProduct: {
-        contents: { img: false, imgWithCarousel: false, button: false, buttonWithQuantity: true, description: true },
+        contents: { img: true, imgWithCarousel: false, button: false, buttonWithQuantity: true, description: true },
         styles: {
           product: { '@media (min-width: 601px)': { 'max-width': '100%', 'margin-left': '0px', 'margin-bottom': '0px' } },
           title:   Object.assign({ 'font-size': '28px' }, TITLE_STYLE),
           price:   Object.assign({ 'font-size': '20px' }, PRICE_STYLE),
           compareAt: PRICE_STYLE,
-          button:  BTN_STYLE
+          button:  BTN_STYLE,
+          img: { 'border-radius': '0' }
         },
         text: { button: 'Add to cart' }
       },
