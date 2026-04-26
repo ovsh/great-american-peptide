@@ -210,8 +210,14 @@ a { color: inherit; }
 }
 @media (max-width: 780px) {
   .metric-strip { grid-template-columns: 1fr 1fr; }
+  .metric-strip .cell { padding: 18px 16px; }
   .metric-strip .cell:nth-child(odd) { border-left: 0; }
   .metric-strip .cell:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  /* Prevent date values from breaking across two lines in narrow cells */
+  .metric-strip .v { font-size: 1.55rem; white-space: nowrap; }
+}
+@media (max-width: 380px) {
+  .metric-strip .v { font-size: 1.35rem; }
 }
 
 /* ========== Vendor table (directory page) ========== */
@@ -574,6 +580,18 @@ a { color: inherit; }
 }
 .prose p b { color: var(--ink); font-weight: 600; }
 
+/* Two-column prose grid (collapses on mobile) */
+.prose-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 56px;
+  max-width: none;
+}
+.prose-2col p { margin: 0 0 14px; max-width: none; }
+@media (max-width: 780px) {
+  .prose-2col { grid-template-columns: 1fr; gap: 0; }
+}
+
 /* ========== Per-product cards (vendor detail) ========== */
 .products-grid {
   display: grid;
@@ -702,6 +720,11 @@ a { color: inherit; }
   font-size: 15px;
   color: var(--ink);
 }
+.reports-table td.score small {
+  color: var(--ink-mute);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
 .reports-table td.purity {
   font-family: "Playfair Display", serif;
   font-weight: 600;
@@ -726,10 +749,78 @@ a { color: inherit; }
 }
 .reports-table td.cta a:hover { text-decoration: underline; }
 @media (max-width: 780px) {
+  /* Card layout: date + product as a header line, then labelled stat rows
+     for score / purity / lot, then View COA at the bottom. */
   .reports-table thead { display: none; }
-  .reports-table, .reports-table tbody, .reports-table tr, .reports-table td { display: block; width: 100%; }
-  .reports-table tbody tr { padding: 16px 0; }
-  .reports-table tbody td { padding: 4px 0; border: 0; }
+  .reports-table, .reports-table tbody { display: block; width: 100%; }
+  .reports-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr;
+    row-gap: 4px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .reports-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .reports-table tbody td.date {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .reports-table tbody td.product {
+    font-family: "Playfair Display", serif;
+    font-weight: 600;
+    font-size: 17px;
+    color: var(--ink);
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+  /* Stat rows: label floated left, value(s) flow right.
+     Float keeps multi-token values like "8.4 /10" together as one
+     right-aligned run instead of splitting them across flex items. */
+  .reports-table tbody td.score,
+  .reports-table tbody td.purity,
+  .reports-table tbody td.lot {
+    display: block;
+    padding: 6px 0;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    font-size: 13.5px;
+    text-align: right;
+    overflow: hidden;
+  }
+  .reports-table tbody td.score { border-top: 1px solid var(--rule); margin-top: 6px; padding-top: 10px; }
+  .reports-table tbody td.score::before,
+  .reports-table tbody td.purity::before,
+  .reports-table tbody td.lot::before {
+    content: attr(data-label);
+    float: left;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--ink-mute);
+    line-height: 1.5;
+  }
+  /* Override desktop serif-purity look for mobile readability */
+  .reports-table tbody td.purity {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .reports-table tbody td.lot { font-size: 12px; letter-spacing: 0.04em; color: var(--ink-soft); }
+  .reports-table tbody td.cta {
+    margin-top: 8px;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+  }
 }
 
 /* ========== Score-bar visualization ========== */
