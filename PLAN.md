@@ -44,9 +44,9 @@ Reasoning: the bespoke navy/red/cream/gold-foil aesthetic on the landing is the 
 The landing's Order CTAs already point at canonical Shopify product URLs:
 
 ```
-https://shop.peptide.industries/products/peptide-purity-test
-https://shop.peptide.industries/products/endotoxin-test
-https://shop.peptide.industries/products/peptide-combo-test
+https://shop.peptide.industries/products/purity-testing
+https://shop.peptide.industries/products/endotoxin-testing
+https://shop.peptide.industries/products/purity-endotoxin-combo
 ```
 
 When you create the products in step 1 with the names above, Shopify mints exactly these URLs. **No code change needed** — once the store is live and the domain is connected, every CTA on the landing page works.
