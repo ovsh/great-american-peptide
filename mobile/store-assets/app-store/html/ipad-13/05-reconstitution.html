@@ -301,6 +301,84 @@
 	      line-height: 1.25;
 	      font-weight: 700;
 	    }
+	    .mock-volume-meter {
+	      display: flex;
+	      align-items: center;
+	      gap: 0;
+	      margin-top: 38px;
+	      padding: 22px 0 8px;
+	    }
+	    .meter-plunger {
+	      width: 36px;
+	      height: 18px;
+	      background: #D7CEB9;
+	    }
+	    .meter-barrel {
+	      position: relative;
+	      flex: 1;
+	      height: 36px;
+	      border: 2px solid var(--ink);
+	      border-radius: 4px;
+	      background: #FFFDF8;
+	    }
+	    .meter-fill {
+	      position: absolute;
+	      left: 0;
+	      top: 0;
+	      bottom: 0;
+	      width: 10%;
+	      background: rgba(176,32,46,.60);
+	    }
+	    .meter-ticks {
+	      position: absolute;
+	      left: 0;
+	      right: 0;
+	      top: -32px;
+	      height: 28px;
+	    }
+	    .meter-ticks::before {
+	      content: "";
+	      position: absolute;
+	      left: 0;
+	      right: 0;
+	      bottom: 0;
+	      height: 14px;
+	      background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 5%);
+	      opacity: .65;
+	    }
+	    .meter-ticks span {
+	      position: absolute;
+	      top: -2px;
+	      transform: translateX(-50%);
+	      color: var(--muted);
+	      font-size: 18px;
+	      line-height: 1;
+	      font-weight: 800;
+	    }
+	    .meter-barrel b {
+	      position: absolute;
+	      left: 10%;
+	      top: 48px;
+	      transform: translateX(-50%);
+	      color: var(--red);
+	      font-size: 22px;
+	      line-height: 1;
+	      font-weight: 900;
+	    }
+	    .meter-barrel b::before {
+	      content: "";
+	      position: absolute;
+	      left: 50%;
+	      top: -16px;
+	      width: 2px;
+	      height: 14px;
+	      background: var(--red);
+	    }
+	    .meter-tip {
+	      width: 48px;
+	      height: 2px;
+	      background: var(--ink);
+	    }
 	    .device::after {
 	      content: "";
       position: absolute;
@@ -378,7 +456,7 @@
           </div>
           <div class="mock-field last">
             <label>OPTIONAL ALIQUOT AMOUNT</label>
-            <div><strong></strong><span>mcg</span></div>
+            <div><strong>250</strong><span>mcg</span></div>
             <em>Optional research sample amount for mL conversion.</em>
           </div>
         </div>
@@ -389,6 +467,25 @@
           <div class="mock-grid">
             <div><label>MG / ML</label><p>2.500 mg/mL</p></div>
             <div><label>VIAL TOTAL</label><p>5000 mcg</p></div>
+          </div>
+          <div class="mock-volume-meter">
+            <div class="meter-plunger"></div>
+            <div class="meter-barrel">
+              <div class="meter-fill"></div>
+              <div class="meter-ticks">
+                <span style="left: 0%">0</span>
+                <span style="left: 25%">0.25</span>
+                <span style="left: 50%">0.5</span>
+                <span style="left: 75%">0.75</span>
+                <span style="left: 100%">1.0</span>
+              </div>
+              <b>0.10 mL</b>
+            </div>
+            <div class="meter-tip"></div>
+          </div>
+          <div class="mock-grid">
+            <div><label>ALIQUOT VOLUME</label><p>0.100 mL</p></div>
+            <div><label>DILUENT</label><p>2.00 mL</p></div>
           </div>
           <div class="mock-note">Research calculation only. No administration instructions, clinical guidance, or use recommendations.</div>
         </div>

@@ -2,23 +2,29 @@ import Svg, { Rect, Line, G, Text as SvgText } from 'react-native-svg';
 import { colors, fonts } from '../theme';
 
 interface SyringeVizProps {
-  units: number;
-  capacity: 100 | 40;
+  volumeMl: number;
+  capacityMl?: number;
   width?: number;
   height?: number;
 }
 
-export function SyringeViz({ units, capacity, width = 320, height = 80 }: SyringeVizProps) {
+function fmt(value: number) {
+  if (value === 0) return '0';
+  if (value < 1) return value.toFixed(2).replace(/0$/, '');
+  return value.toFixed(1);
+}
+
+export function SyringeViz({ volumeMl, capacityMl = 1, width = 320, height = 80 }: SyringeVizProps) {
   const padX = 30;
   const barrelL = padX;
   const barrelR = width - 30;
   const barrelTop = 28;
   const barrelBottom = 56;
   const barrelW = barrelR - barrelL;
-  const fillRatio = Math.max(0, Math.min(1, units / capacity));
+  const safeCapacity = Math.max(0.1, capacityMl);
+  const fillRatio = Math.max(0, Math.min(1, volumeMl / safeCapacity));
   const fillRight = barrelL + barrelW * fillRatio;
-  const tickStep = capacity === 100 ? 10 : 5;
-  const tickCount = capacity / tickStep;
+  const tickCount = 20;
   return (
     <Svg width={width} height={height}>
       <Rect x={barrelL} y={barrelTop} width={barrelW} height={barrelBottom - barrelTop} fill={colors.surface} stroke={colors.ink} strokeWidth={1} rx={2} />
@@ -29,13 +35,13 @@ export function SyringeViz({ units, capacity, width = 320, height = 80 }: Syring
       <G>
         {Array.from({ length: tickCount + 1 }).map((_, i) => {
           const x = barrelL + (barrelW * i) / tickCount;
-          const isMajor = i % (capacity === 100 ? 2 : 2) === 0;
+          const isMajor = i % 5 === 0;
           return (
             <G key={i}>
               <Line x1={x} y1={barrelTop} x2={x} y2={barrelTop - (isMajor ? 6 : 3)} stroke={colors.ink} strokeWidth={0.7} />
               {isMajor && (
                 <SvgText x={x} y={barrelTop - 8} fontSize={8} fontFamily={fonts.sans} fill={colors.inkMuted} textAnchor="middle">
-                  {i * tickStep}
+                  {fmt((safeCapacity * i) / tickCount)}
                 </SvgText>
               )}
             </G>
@@ -58,7 +64,7 @@ export function SyringeViz({ units, capacity, width = 320, height = 80 }: Syring
         fill={colors.red}
         textAnchor="middle"
       >
-        {units < 0.1 ? '' : units.toFixed(units < 10 ? 2 : 1)}
+        {volumeMl <= 0 ? '' : `${fmt(volumeMl)} mL`}
       </SvgText>
     </Svg>
   );

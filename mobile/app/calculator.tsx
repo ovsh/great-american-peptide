@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, TextInput, useWindowDimensions } from 'react-native';
 import { X, AlertTriangle } from 'lucide-react-native';
 
 import { Header } from '@/components/Header';
@@ -7,15 +7,17 @@ import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { Eyebrow } from '@/components/Eyebrow';
 import { Field } from '@/components/Field';
+import { SyringeViz } from '@/components/SyringeViz';
 
 import { reconstitution, formatMcg, formatMl } from '@/domain/reconstitution';
 import { safeBack } from '@/utils/nav';
 import { colors, spacing } from '@/theme';
 
 export default function CalculatorScreen() {
+  const { width } = useWindowDimensions();
   const [materialMg, setMaterialMg] = useState('5');
   const [diluentMl, setDiluentMl] = useState('2');
-  const [aliquotMcg, setAliquotMcg] = useState('');
+  const [aliquotMcg, setAliquotMcg] = useState('250');
 
   const result = useMemo(
     () => reconstitution({
@@ -25,6 +27,8 @@ export default function CalculatorScreen() {
     }),
     [materialMg, diluentMl, aliquotMcg],
   );
+  const vizWidth = Math.min(width - spacing.screen * 2 - spacing.lg * 2, 380);
+  const vizCapacityMl = Math.max(1, Math.ceil(result.aliquotVolumeMl ?? 1));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -120,16 +124,26 @@ export default function CalculatorScreen() {
               </View>
 
               {result.aliquotVolumeMl !== null && (
-                <View style={styles.summaryGrid}>
-                  <SummaryItem
-                    label="ALIQUOT VOLUME"
-                    value={`${formatMl(result.aliquotVolumeMl)} mL`}
-                  />
-                  <SummaryItem
-                    label="DILUENT"
-                    value={`${formatMl(parseFloat(diluentMl) || 0)} mL`}
-                  />
-                </View>
+                <>
+                  <View style={styles.volumeViz}>
+                    <SyringeViz
+                      volumeMl={result.aliquotVolumeMl}
+                      capacityMl={vizCapacityMl}
+                      width={vizWidth}
+                      height={88}
+                    />
+                  </View>
+                  <View style={styles.summaryGrid}>
+                    <SummaryItem
+                      label="ALIQUOT VOLUME"
+                      value={`${formatMl(result.aliquotVolumeMl)} mL`}
+                    />
+                    <SummaryItem
+                      label="DILUENT"
+                      value={`${formatMl(parseFloat(diluentMl) || 0)} mL`}
+                    />
+                  </View>
+                </>
               )}
 
               <View style={styles.noteBox}>
@@ -213,6 +227,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.divider,
+  },
+  volumeViz: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
   },
   noteBox: {
     marginTop: spacing.lg,
