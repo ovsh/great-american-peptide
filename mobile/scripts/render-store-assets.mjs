@@ -18,30 +18,29 @@ const real = {
   logShot: 'WhatsApp Image 2026-04-30 at 01.25.14 (1).jpeg',
   siteMap: 'WhatsApp Image 2026-04-30 at 01.25.15.jpeg',
   calendar: 'WhatsApp Image 2026-04-30 at 01.25.15 (1).jpeg',
-  calc: 'WhatsApp Image 2026-04-30 at 01.25.15 (4).jpeg',
 };
 
 const slides = [
   {
     id: '01-today',
     kicker: 'TODAY',
-    title: "Never miss today's shot.",
-    sub: 'Dose, timing, level, weight, and goal in one focused home view.',
+    title: "Keep today's plan visible.",
+    sub: 'Timing, trends, weight, and goals in one focused home view.',
     image: real.today,
-    chips: ['Next step', 'Level trend', 'Weight goal'],
+    chips: ['Next entry', 'Trend view', 'Weight goal'],
   },
   {
     id: '02-log-shot',
     kicker: 'LOG SHOT',
     title: 'Log in seconds.',
-    sub: 'Medication, dose, date, time, and site stay together.',
+    sub: 'Item, amount, date, time, and site stay together.',
     image: real.logShot,
-    chips: ['0.1 dose ticks', 'Date & time', 'Site rotation'],
+    chips: ['Amount steps', 'Date & time', 'Site rotation'],
   },
   {
     id: '03-site-map',
     kicker: 'BODY SITES',
-    title: 'See every injection site.',
+    title: 'See every body site.',
     sub: 'Tap front or back and keep rotation visible while you log.',
     image: real.siteMap,
     chips: ['Front & back', 'All sites', 'Rotation context'],
@@ -50,17 +49,17 @@ const slides = [
     id: '04-calendar',
     kicker: 'CALENDAR',
     title: 'Keep the routine visible.',
-    sub: 'Review shot days, doses, and timing without digging.',
+    sub: 'Review logged days, amounts, and timing without digging.',
     image: real.calendar,
-    chips: ['Monthly view', 'Shot history', 'Dose notes'],
+    chips: ['Monthly view', 'Entry history', 'Amount notes'],
   },
   {
     id: '05-reconstitution',
-    kicker: 'CALCULATOR',
-    title: 'Built-in reconstitution math.',
-    sub: 'Calculate BAC water and syringe units before you draw.',
-    image: real.calc,
-    chips: ['U-100 / U-40', 'Units to draw', 'Dose planning'],
+    kicker: 'LAB CALC',
+    title: 'Research reconstitution math.',
+    sub: 'Convert vial mass and diluent volume into concentration values.',
+    mock: 'reconstitution',
+    chips: ['mcg/mL', 'mg/mL', 'Aliquot volume'],
   },
 ];
 
@@ -78,11 +77,61 @@ function cssUrl(filePath) {
   return pathToFileURL(filePath).href;
 }
 
+function deviceContent(slide, shotUrl) {
+  if (slide.mock === 'reconstitution') {
+    return `<div class="mock-screen">
+      <div class="mock-status">
+        <span>1:24</span>
+        <span class="status-icons">LTE 100%</span>
+      </div>
+      <div class="mock-nav">
+        <span class="close">x</span>
+        <strong>Reconstitution</strong>
+      </div>
+      <div class="mock-content">
+        <div class="mock-title-row">
+          <h2>Lab Calc</h2>
+          <p>RECONSTITUTION MATH</p>
+        </div>
+        <p class="mock-sub">For laboratory researchers and scientists. Convert vial mass and diluent volume into concentration values.</p>
+
+        <div class="mock-card">
+          <div class="mock-field">
+            <label>VIAL MATERIAL</label>
+            <div><strong>5</strong><span>mg</span></div>
+          </div>
+          <div class="mock-field">
+            <label>DILUENT VOLUME</label>
+            <div><strong>2</strong><span>mL</span></div>
+          </div>
+          <div class="mock-field last">
+            <label>OPTIONAL ALIQUOT AMOUNT</label>
+            <div><strong></strong><span>mcg</span></div>
+            <em>Optional research sample amount for mL conversion.</em>
+          </div>
+        </div>
+
+        <div class="mock-card muted">
+          <label class="accent">CALCULATED CONCENTRATION</label>
+          <div class="mock-result"><strong>2500</strong><span>mcg/mL</span></div>
+          <div class="mock-grid">
+            <div><label>MG / ML</label><p>2.500 mg/mL</p></div>
+            <div><label>VIAL TOTAL</label><p>5000 mcg</p></div>
+          </div>
+          <div class="mock-note">Research calculation only. No administration instructions, clinical guidance, or use recommendations.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `<img src="${shotUrl}" alt="">`;
+}
+
 function slideHtml(slide, device) {
   const isPad = device.key === 'ipad-13';
-  const shotPath = path.join(REAL, slide.image);
+  const shotPath = slide.image ? path.join(REAL, slide.image) : null;
   const bgUrl = cssUrl(BG);
-  const shotUrl = cssUrl(shotPath);
+  const shotUrl = shotPath ? cssUrl(shotPath) : '';
   return `<!doctype html>
 <html>
 <head>
@@ -202,13 +251,196 @@ function slideHtml(slide, device) {
         0 ${isPad ? 42 : 38}px ${isPad ? 90 : 74}px rgba(15,27,45,.25),
         0 0 0 2px rgba(255,255,255,.8) inset;
     }
-    .device img {
-      display: block;
-      width: 100%;
-      height: auto;
-    }
-    .device::after {
-      content: "";
+	    .device img {
+	      display: block;
+	      width: 100%;
+	      height: auto;
+	    }
+	    .mock-screen {
+	      width: 100%;
+	      height: ${isPad ? 2140 : 2360}px;
+	      background: #F2E9D8;
+	      color: var(--ink);
+	      overflow: hidden;
+	      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", Arial, sans-serif;
+	    }
+	    .mock-status {
+	      display: flex;
+	      justify-content: space-between;
+	      align-items: center;
+	      padding: 64px 92px 36px;
+	      color: #05070B;
+	      font-size: 42px;
+	      font-weight: 900;
+	    }
+	    .status-icons {
+	      font-size: 31px;
+	      letter-spacing: 0;
+	    }
+	    .mock-nav {
+	      position: relative;
+	      display: flex;
+	      justify-content: center;
+	      align-items: center;
+	      padding: 58px 72px 42px;
+	      color: var(--ink);
+	    }
+	    .mock-nav .close {
+	      position: absolute;
+	      left: 72px;
+	      top: 54px;
+	      font-size: 56px;
+	      line-height: 1;
+	      font-weight: 400;
+	    }
+	    .mock-nav strong {
+	      font-family: Georgia, "Times New Roman", serif;
+	      font-size: 55px;
+	      line-height: 1;
+	    }
+	    .mock-content {
+	      padding: 26px 70px 120px;
+	    }
+	    .mock-title-row {
+	      display: flex;
+	      align-items: baseline;
+	      justify-content: space-between;
+	      gap: 28px;
+	    }
+	    .mock-title-row h2 {
+	      margin: 0;
+	      font-family: Georgia, "Times New Roman", serif;
+	      font-size: 72px;
+	      line-height: 1;
+	      letter-spacing: 0;
+	    }
+	    .mock-title-row p {
+	      margin: 0;
+	      max-width: 360px;
+	      color: var(--muted);
+	      font-size: 24px;
+	      line-height: 1.2;
+	      font-weight: 900;
+	      letter-spacing: 3px;
+	      text-align: right;
+	    }
+	    .mock-sub {
+	      margin: 24px 0 44px;
+	      color: var(--muted);
+	      font-size: 32px;
+	      line-height: 1.28;
+	      font-weight: 700;
+	    }
+	    .mock-card {
+	      margin-top: 34px;
+	      padding: 38px 42px;
+	      border-radius: 30px;
+	      border: 1px solid rgba(15,27,45,.10);
+	      background: #FFFDF8;
+	    }
+	    .mock-card.muted {
+	      background: #F7F0E2;
+	    }
+	    .mock-field {
+	      padding: 0 0 30px;
+	      margin-bottom: 30px;
+	      border-bottom: 1px solid rgba(15,27,45,.09);
+	    }
+	    .mock-field.last {
+	      padding-bottom: 0;
+	      margin-bottom: 0;
+	      border-bottom: 0;
+	    }
+	    .mock-field label,
+	    .mock-card label {
+	      display: block;
+	      margin-bottom: 20px;
+	      color: #69717E;
+	      font-size: 25px;
+	      line-height: 1;
+	      letter-spacing: 6px;
+	      font-weight: 900;
+	    }
+	    .mock-field .accent,
+	    .mock-card .accent {
+	      color: var(--red);
+	    }
+	    .mock-field div {
+	      display: flex;
+	      align-items: baseline;
+	      justify-content: space-between;
+	      gap: 24px;
+	    }
+	    .mock-field strong {
+	      font-size: 64px;
+	      line-height: .95;
+	      font-weight: 700;
+	    }
+	    .mock-field span {
+	      color: var(--muted);
+	      font-size: 42px;
+	      font-weight: 800;
+	    }
+	    .mock-field em {
+	      display: block;
+	      margin-top: 18px;
+	      color: #7E8794;
+	      font-size: 25px;
+	      line-height: 1.2;
+	      font-style: normal;
+	      font-weight: 700;
+	    }
+	    .mock-result {
+	      display: flex;
+	      align-items: baseline;
+	      gap: 22px;
+	      margin-top: 16px;
+	    }
+	    .mock-result strong {
+	      color: var(--red);
+	      font-family: Georgia, "Times New Roman", serif;
+	      font-size: 94px;
+	      line-height: .95;
+	    }
+	    .mock-result span {
+	      color: var(--muted);
+	      font-family: Georgia, "Times New Roman", serif;
+	      font-size: 40px;
+	      font-weight: 800;
+	    }
+	    .mock-grid {
+	      display: grid;
+	      grid-template-columns: 1fr 1fr;
+	      gap: 34px;
+	      margin-top: 44px;
+	      padding-top: 32px;
+	      border-top: 1px solid rgba(15,27,45,.10);
+	    }
+	    .mock-grid label {
+	      font-size: 21px;
+	      letter-spacing: 4px;
+	      margin-bottom: 10px;
+	    }
+	    .mock-grid p {
+	      margin: 0;
+	      color: var(--ink);
+	      font-size: 31px;
+	      line-height: 1.15;
+	      font-weight: 900;
+	    }
+	    .mock-note {
+	      margin-top: 36px;
+	      padding: 28px;
+	      border-radius: 18px;
+	      border: 1px solid rgba(15,27,45,.10);
+	      background: #FFFDF8;
+	      color: var(--muted);
+	      font-size: 27px;
+	      line-height: 1.25;
+	      font-weight: 700;
+	    }
+	    .device::after {
+	      content: "";
       position: absolute;
       inset: 0;
       border-radius: inherit;
@@ -258,10 +490,10 @@ function slideHtml(slide, device) {
       <strong>Made for repeat routines.</strong>
       <p>Clear logs, calm charts, and less context switching.</p>
     </section>
-    <div class="device">
-      <img src="${shotUrl}" alt="">
-    </div>
-  </main>
+	    <div class="device">
+	      ${deviceContent(slide, shotUrl)}
+	    </div>
+	  </main>
 </body>
 </html>`;
 }
@@ -341,12 +573,12 @@ async function renderDevice(device) {
   }
 }
 
-for (const file of Object.values(real)) {
-  await fs.access(path.join(REAL, file));
+for (const slide of slides) {
+  if (slide.image) await fs.access(path.join(REAL, slide.image));
 }
 
 for (const device of devices) {
   await renderDevice(device);
 }
 
-console.log(`Rendered ${slides.length * devices.length} real-screenshot App Store images to ${path.join(OUT, 'screenshots')}`);
+console.log(`Rendered ${slides.length * devices.length} App Store images to ${path.join(OUT, 'screenshots')}`);

@@ -145,7 +145,7 @@ export default function ProfileScreen() {
                 <Text variant="smallStrong">For information only.</Text>
               </View>
               <Text variant="caption" color={colors.inkMuted}>
-                A logging tool, not medical advice. Confirm doses with a clinician.
+                A private logging tool. The app does not provide clinical guidance or administration instructions.
               </Text>
             </View>
           </Card>
