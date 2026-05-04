@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { X } from 'lucide-react-native';
 
 import { Text } from './Text';
@@ -21,7 +21,10 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
       onRequestClose={onClose}
       presentationStyle="overFullScreen"
     >
-      <View style={styles.root}>
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.grabber} />
@@ -33,7 +36,7 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
           </View>
           {children}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

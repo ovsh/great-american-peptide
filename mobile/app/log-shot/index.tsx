@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, Platform } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Check, X, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -246,7 +246,10 @@ export default function LogShotScreen() {
   const minuteDisplay = minuteDraft ?? timeParts.minute;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <Header
         title="Log Shot"
         leading={
@@ -261,7 +264,11 @@ export default function LogShotScreen() {
         }
       />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: spacing.hero }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ paddingHorizontal: spacing.screen }}>
           <Field label="Medication">
             <Pressable
@@ -487,7 +494,7 @@ export default function LogShotScreen() {
           </Button>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

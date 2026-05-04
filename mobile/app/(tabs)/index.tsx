@@ -295,6 +295,7 @@ export default function TodayScreen() {
               ? `${weightDelta >= 0 ? '+' : ''}${weightDelta.toFixed(1)} vs first`
               : undefined}
             deltaTone={weightDelta < 0 ? 'success' : weightDelta > 0 ? 'danger' : 'neutral'}
+            action="Log weight"
             onPress={() => setActiveSheet('weight')}
           />
           <MiniStat
@@ -303,8 +304,9 @@ export default function TodayScreen() {
             unit={goalWeight != null ? (weightUnit === 'kg' ? 'kg' : 'lbs') : undefined}
             delta={remainingToGoal != null
               ? `${Math.abs(remainingToGoal).toFixed(1)} ${weightUnit === 'kg' ? 'kg' : 'lbs'} ${remainingToGoal >= 0 ? 'left' : 'past'}`
-              : 'Set goal'}
+              : undefined}
             deltaTone={remainingToGoal != null && remainingToGoal <= 0 ? 'success' : 'neutral'}
+            action="Set goal"
             onPress={() => setActiveSheet('goal')}
           />
           <MiniStat
@@ -394,44 +396,17 @@ export default function TodayScreen() {
         <View style={{ height: spacing.hero }} />
       </ScrollView>
 
-      <BottomSheet visible={activeSheet === 'weight'} title="Weight" onClose={() => setActiveSheet(null)}>
-        <ScrollView keyboardShouldPersistTaps="handled">
-          <View style={styles.sheetStats}>
-            <SheetMetric
-              label="Current"
-              value={weightDisplay != null ? weightDisplay.toFixed(1) : '—'}
-              unit={weightUnit === 'kg' ? 'kg' : 'lbs'}
-            />
-            <SheetMetric
-              label="Baseline"
-              value={baselineWeight != null ? baselineWeight.toFixed(1) : '—'}
-              unit={baselineWeight != null ? (weightUnit === 'kg' ? 'kg' : 'lbs') : undefined}
-              caption={baselineAt ? fmtDate(baselineAt) : undefined}
-            />
-          </View>
-          <View style={styles.sheetStats}>
-            <SheetMetric
-              label="Total Change"
-              value={totalWeightChange != null ? signedWeight(totalWeightChange, weightUnit) : '—'}
-              tone={totalWeightChange != null && totalWeightChange < 0 ? 'success' : totalWeightChange && totalWeightChange > 0 ? 'danger' : 'neutral'}
-            />
-            <SheetMetric
-              label="Percent Change"
-              value={percentWeightChange != null ? `${percentWeightChange >= 0 ? '+' : ''}${percentWeightChange.toFixed(1)}%` : '—'}
-              tone={percentWeightChange != null && percentWeightChange < 0 ? 'success' : percentWeightChange && percentWeightChange > 0 ? 'danger' : 'neutral'}
-            />
-          </View>
-
-          <View style={{ height: spacing.lg }} />
-          <Text variant="caption" color={colors.inkMuted} style={styles.sheetLabel}>WEIGHT</Text>
-          <View style={styles.inputRow}>
+      <BottomSheet visible={activeSheet === 'weight'} title="Log Weight" onClose={() => setActiveSheet(null)}>
+        <View>
+          <View style={styles.weightInputBlock}>
             <TextInput
               value={weightValue}
               onChangeText={setWeightValue}
               keyboardType="decimal-pad"
               placeholder="0.0"
               placeholderTextColor={colors.inkSubtle}
-              style={styles.sheetInput}
+              style={styles.weightHeroInput}
+              autoFocus
             />
             <TimeRangeToggle
               options={['lb', 'kg'] as const}
@@ -439,27 +414,33 @@ export default function TodayScreen() {
               onChange={(v) => setSelectedWeightUnit(v)}
             />
           </View>
-          <View style={{ height: spacing.md }} />
-          <TimeRangeToggle
-            options={['update', 'add'] as const}
-            value={weightSaveMode}
-            onChange={(v) => setWeightSaveMode(v)}
-            getLabel={(v) => v === 'update' ? 'Update latest' : 'Add new'}
-          />
-          {weightSaveMode === 'update' && latestWeight?.source !== 'manual' ? (
+          {weightDisplay != null && (
             <Text variant="caption" color={colors.inkMuted} style={{ marginTop: spacing.sm }}>
-              Latest weight is not manual, so this will add a new log.
+              Current: {weightDisplay.toFixed(1)} {weightUnit === 'kg' ? 'kg' : 'lbs'}
+              {totalWeightChange != null ? ` · ${signedWeight(totalWeightChange, weightUnit)} total` : ''}
             </Text>
-          ) : latestWeight && weightSaveMode === 'update' ? (
-            <Text variant="caption" color={colors.inkMuted} style={{ marginTop: spacing.sm }}>
-              Updating {fmtDateTime(latestWeight.taken_at)}
-            </Text>
-          ) : null}
+          )}
           <View style={{ height: spacing.lg }} />
+          {latestWeight?.source === 'manual' && (
+            <>
+              <TimeRangeToggle
+                options={['update', 'add'] as const}
+                value={weightSaveMode}
+                onChange={(v) => setWeightSaveMode(v)}
+                getLabel={(v) => v === 'update' ? 'Update latest' : 'Add new'}
+              />
+              {weightSaveMode === 'update' && latestWeight ? (
+                <Text variant="caption" color={colors.inkMuted} style={{ marginTop: spacing.xs }}>
+                  Updating {fmtDateTime(latestWeight.taken_at)}
+                </Text>
+              ) : null}
+              <View style={{ height: spacing.lg }} />
+            </>
+          )}
           <Button onPress={saveWeightFromSheet} disabled={savingSheet}>
             Save weight
           </Button>
-        </ScrollView>
+        </View>
       </BottomSheet>
 
       <BottomSheet visible={activeSheet === 'goal'} title="Goal" onClose={() => setActiveSheet(null)}>
@@ -482,14 +463,16 @@ export default function TodayScreen() {
           <Text variant="caption" color={colors.inkMuted} style={styles.sheetLabel}>
             GOAL WEIGHT ({weightUnit === 'kg' ? 'KG' : 'LBS'})
           </Text>
-          <TextInput
-            value={goalValue}
-            onChangeText={setGoalValue}
-            keyboardType="decimal-pad"
-            placeholder="0.0"
-            placeholderTextColor={colors.inkSubtle}
-            style={styles.sheetInput}
-          />
+          <View style={styles.weightInputBlock}>
+            <TextInput
+              value={goalValue}
+              onChangeText={setGoalValue}
+              keyboardType="decimal-pad"
+              placeholder="0.0"
+              placeholderTextColor={colors.inkSubtle}
+              style={styles.weightHeroInput}
+            />
+          </View>
           <View style={{ height: spacing.lg }} />
           <Button onPress={saveGoalFromSheet} disabled={savingSheet}>
             Save goal
@@ -610,6 +593,7 @@ function MiniStat({
   unit,
   delta,
   deltaTone = 'neutral',
+  action,
   onPress,
 }: {
   label: string;
@@ -617,26 +601,39 @@ function MiniStat({
   unit?: string;
   delta?: string;
   deltaTone?: 'success' | 'danger' | 'neutral';
+  action?: string;
   onPress?: (() => void) | null;
 }) {
   const deltaColor =
     deltaTone === 'success' ? colors.successDeep :
     deltaTone === 'danger' ? colors.redDeep :
     colors.inkMuted;
+  const isEmpty = value === '—';
   const Wrap: any = onPress ? Pressable : View;
   return (
     <Wrap onPress={onPress ?? undefined} style={onPress
       ? ({ pressed }: { pressed: boolean }) => [styles.mini, pressed && { opacity: 0.7 }]
       : styles.mini
     }>
-      <Text variant="caption" color={colors.inkMuted} style={{ letterSpacing: 1.2, textTransform: 'uppercase' }}>
-        {label}
-      </Text>
-      <View style={styles.miniValueRow}>
-        <Text variant="h2">{value}</Text>
-        {unit ? <Text variant="caption" color={colors.inkMuted}>{unit}</Text> : null}
+      <View style={styles.miniHeader}>
+        <Text variant="caption" color={colors.inkMuted} style={{ letterSpacing: 1.2, textTransform: 'uppercase' }}>
+          {label}
+        </Text>
+        {onPress && !isEmpty ? <ChevronRight size={12} color={colors.inkSubtle} /> : null}
       </View>
-      {delta ? <Text variant="caption" color={deltaColor}>{delta}</Text> : null}
+      {isEmpty && action ? (
+        <Text variant="smallStrong" color={colors.red} style={{ marginTop: spacing.xs }}>
+          {action}
+        </Text>
+      ) : (
+        <>
+          <View style={styles.miniValueRow}>
+            <Text variant="h2">{value}</Text>
+            {unit ? <Text variant="caption" color={colors.inkMuted}>{unit}</Text> : null}
+          </View>
+          {delta ? <Text variant="caption" color={deltaColor}>{delta}</Text> : null}
+        </>
+      )}
     </Wrap>
   );
 }
@@ -731,6 +728,11 @@ const styles = StyleSheet.create({
     gap: 4,
     minHeight: 92,
   },
+  miniHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   miniValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -785,15 +787,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  inputRow: {
+  weightInputBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  sheetInput: {
+  weightHeroInput: {
     flex: 1,
-    fontFamily: fonts.sansMedium,
-    fontSize: 32,
+    fontFamily: fonts.serif,
+    fontSize: 36,
+    lineHeight: 44,
     color: colors.ink,
     paddingVertical: spacing.xs,
   },

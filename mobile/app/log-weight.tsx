@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, TextInput, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 
 import { Header } from '@/components/Header';
@@ -54,7 +54,10 @@ export default function LogWeightScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <Header
         title="Log Weight"
         leading={
@@ -68,7 +71,11 @@ export default function LogWeightScreen() {
           </Pressable>
         }
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero, paddingHorizontal: spacing.screen }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: spacing.hero, paddingHorizontal: spacing.screen }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         <Card padding="lg">
           <Eyebrow>NOW</Eyebrow>
           <Text variant="caption" color={colors.inkMuted} style={{ marginTop: 2 }}>{fmtDateTime(Date.now())}</Text>
@@ -95,7 +102,7 @@ export default function LogWeightScreen() {
           </View>
         </Field>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

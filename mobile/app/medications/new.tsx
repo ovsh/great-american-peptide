@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 
@@ -98,7 +98,10 @@ export default function AddMedicationScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <Header
         title={step === 'pick' ? 'Add Medication' : 'Configure'}
         leading={
@@ -153,7 +156,11 @@ export default function AddMedicationScreen() {
           </Section>
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero, paddingHorizontal: spacing.screen }}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: spacing.hero, paddingHorizontal: spacing.screen }}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+        >
           <Field label="Name">
             <Input value={name} onChangeText={setName} placeholder="e.g. Tirzepatide" size="lg" />
           </Field>
@@ -246,7 +253,7 @@ export default function AddMedicationScreen() {
           </Button>
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

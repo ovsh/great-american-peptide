@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, TextInput, useWindowDimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { X, AlertTriangle } from 'lucide-react-native';
 
 import { Header } from '@/components/Header';
@@ -31,7 +31,10 @@ export default function CalculatorScreen() {
   const vizCapacityMl = Math.max(1, Math.ceil(result.aliquotVolumeMl ?? 1));
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <Header
         title="Reconstitution"
         leading={
@@ -41,7 +44,11 @@ export default function CalculatorScreen() {
         }
       />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: spacing.hero }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ paddingHorizontal: spacing.screen }}>
           <View style={styles.titleRow}>
             <Text variant="hero">Lab Calc</Text>
@@ -181,7 +188,7 @@ export default function CalculatorScreen() {
           </Card>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
