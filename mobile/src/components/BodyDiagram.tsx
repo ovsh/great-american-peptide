@@ -74,7 +74,6 @@ const BODY_OUTLINE = `
 const FRONT_DETAILS = `
   M 38 33 C 44 31 56 31 62 33
   M 50 36 L 50 78
-  M 50 96 m -1.2 0 a 1.2 1.6 0 1 0 2.4 0 a 1.2 1.6 0 1 0 -2.4 0
   M 41 152 C 43 154 47 154 49 152
   M 51 152 C 53 154 57 154 59 152
 `;
@@ -144,6 +143,9 @@ export function BodyDiagram({
           strokeLinecap="round"
           fill="none"
         />
+        {view === 'front' ? (
+          <Circle cx={50} cy={96} r={1.35} fill={colors.inkMuted} opacity={0.46} />
+        ) : null}
 
         {/* injection-site dots */}
         <G>

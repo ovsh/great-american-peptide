@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { Flame, Target } from 'lucide-react-native';
+import { ChevronRight, Flame, Target } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
+import { BottomSheet } from '@/components/BottomSheet';
 import { Card } from '@/components/Card';
 import { LineChart } from '@/components/LineChart';
 import { Text } from '@/components/Text';
@@ -15,32 +16,29 @@ import type {
   MeasurementRow,
   MedicationRow,
   PreferencesRow,
-  SideEffectKind,
-  SideEffectLogRow,
 } from '@/db/types';
-import { deriveScheduleStreak, frequencyHours, nextDoseAt, type ScheduleStreak } from '@/domain/scheduling';
+import {
+  sameSideEffect,
+  sideEffectLabel,
+  sideEffectStorageKey,
+  type SideEffect,
+} from '@/domain/sideEffects';
+import {
+  computeMedicationScheduleStreak,
+  type ScheduleStreak,
+} from '@/domain/streaks';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
 import { listMeasurements } from '@/repositories/measurements';
 import { listMedications } from '@/repositories/medications';
 import { getPreferences } from '@/repositories/preferences';
-import { listSideEffects } from '@/repositories/sideEffects';
+import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGES = ['7d', '30d', '90d'] as const;
 type ProgressRange = typeof RANGES[number];
-
-const EFFECT_LABELS: Record<SideEffectKind, string> = {
-  nausea: 'Nausea',
-  fatigue: 'Fatigue',
-  constipation: 'Constipation',
-  headache: 'Headache',
-  injection_site: 'Injection site',
-  appetite_loss: 'Appetite loss',
-  other: 'Other',
-};
 
 interface WeightPoint {
   t: number;
@@ -62,7 +60,8 @@ export default function ProgressScreen() {
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
   const [medications, setMedications] = useState<MedicationRow[]>([]);
   const [injections, setInjections] = useState<InjectionRow[]>([]);
-  const [sideEffects, setSideEffects] = useState<SideEffectLogRow[]>([]);
+  const [sideEffects, setSideEffects] = useState<SideEffectLog[]>([]);
+  const [selectedEffect, setSelectedEffect] = useState<SideEffect | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -70,7 +69,7 @@ export default function ProgressScreen() {
       getPreferences(),
       listMedications(),
       listInjections({ limit: 1000 }),
-      listSideEffects({ limit: 1000 }),
+      listSideEffects({ fromMs: sideEffectWindowStart(Date.now()) }),
     ]).then(([weightRows, preferenceRow, medicationRows, injectionRows, sideEffectRows]) => {
       setWeights(weightRows);
       setPreferences(preferenceRow);
@@ -89,11 +88,28 @@ export default function ProgressScreen() {
     () => goalProgress(weights, preferences),
     [preferences, weights],
   );
-  const streak = useMemo(
-    () => heroStreak({ medications, injections, preferences, now: Date.now() }),
-    [injections, medications, preferences],
-  );
+  const streak = useMemo(() => computeMedicationScheduleStreak({
+    medications: medications.map((row) => ({
+      id: row.id,
+      frequencyKind: row.frequency_kind,
+      frequencyValue: row.frequency_value,
+      createdAt: row.created_at,
+    })),
+    injections: injections.map((row) => ({
+      id: row.id,
+      medicationId: row.medication_id,
+      takenAt: row.taken_at,
+    })),
+    reminderTime: preferences?.reminder_time ?? '09:00',
+    now: Date.now(),
+  }) ?? { current: 0, best: 0, weeks: [] }, [injections, medications, preferences?.reminder_time]);
   const effectCounts = useMemo(() => countEffects(sideEffects), [sideEffects]);
+  const selectedEffectLogs = useMemo(
+    () => selectedEffect
+      ? sideEffects.filter((log) => sameSideEffect(log.effect, selectedEffect))
+      : [],
+    [selectedEffect, sideEffects],
+  );
   const chartWidth = Math.max(220, Math.min(width, 600) - spacing.screen * 2 - spacing.xl * 2);
   const latest = points[points.length - 1];
 
@@ -138,17 +154,56 @@ export default function ProgressScreen() {
 
         {effectCounts.length > 0 ? (
           <Card style={styles.effectsCard}>
-            <Text variant="h2">Side-effect frequency</Text>
-            {effectCounts.map(({ effect, count }) => (
-              <View key={effect} style={styles.effectRow}>
-                <View style={styles.effectDot} />
-                <Text style={styles.effectLabel}>{EFFECT_LABELS[effect]}</Text>
-                <Text variant="smallStrong">{count}</Text>
-              </View>
-            ))}
+            <View style={styles.effectsHead}>
+              <Text variant="h2">Side effects</Text>
+              <Text variant="small" color={colors.inkMuted}>Last 14 days</Text>
+            </View>
+            {effectCounts.map(({ effect, count }) => {
+              const maximum = effectCounts[0]?.count ?? 1;
+              return (
+                <Pressable
+                  key={sideEffectStorageKey(effect)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${sideEffectLabel(effect)}, ${count} ${count === 1 ? 'log' : 'logs'} in the last 14 days`}
+                  onPress={() => setSelectedEffect(effect)}
+                  style={({ pressed }) => [styles.effectRow, pressed && styles.pressed]}
+                >
+                  <View style={styles.effectCopy}>
+                    <Text variant="smallStrong" style={styles.effectLabel}>{sideEffectLabel(effect)}</Text>
+                    <View style={styles.effectTrack}>
+                      <View style={[styles.effectFill, { flex: count }]} />
+                      <View style={{ flex: Math.max(maximum - count, 0.001) }} />
+                    </View>
+                  </View>
+                  <Text variant="smallStrong" color={colors.violet}>{count}</Text>
+                  <ChevronRight size={17} color={colors.inkSubtle} />
+                </Pressable>
+              );
+            })}
           </Card>
         ) : null}
       </ScrollView>
+
+      <BottomSheet
+        visible={selectedEffect !== null}
+        title={selectedEffect ? sideEffectLabel(selectedEffect) : 'Side effect'}
+        onClose={() => setSelectedEffect(null)}
+      >
+        <ScrollView contentContainerStyle={styles.filteredList}>
+          {selectedEffectLogs.map((log) => (
+            <View key={log.id} style={styles.filteredRow}>
+              <View style={styles.filteredDate}>
+                <Text variant="smallStrong">{format(log.taken_at, 'MMM d')}</Text>
+                <Text variant="caption" color={colors.inkMuted}>{format(log.taken_at, 'h:mm a')}</Text>
+              </View>
+              <View style={styles.filteredCopy}>
+                <Text variant="smallStrong" color={colors.violet}>Severity {log.severity}/10</Text>
+                {log.notes ? <Text variant="small" color={colors.inkMuted}>{log.notes}</Text> : null}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </BottomSheet>
     </View>
   );
 }
@@ -236,50 +291,22 @@ function goalProgress(weights: readonly MeasurementRow[], preferences: Preferenc
   };
 }
 
-function heroStreak({
-  medications,
-  injections,
-  preferences,
-  now,
-}: {
-  medications: readonly MedicationRow[];
-  injections: readonly InjectionRow[];
-  preferences: PreferencesRow | null;
-  now: number;
-}): ScheduleStreak {
-  const reminderTime = preferences?.reminder_time ?? '09:00';
-  const summaries = medications.map((medication) => {
-    const shots = injections.filter((injection) => injection.medication_id === medication.id);
-    return {
-      medication,
-      shots,
-      nextAt: nextDoseAt({
-        frequencyKind: medication.frequency_kind,
-        frequencyValue: medication.frequency_value,
-        lastTakenAt: shots[0]?.taken_at ?? null,
-        createdAt: medication.created_at,
-        reminderTime,
-        now,
-      }),
-    };
-  }).sort((a, b) => a.nextAt - b.nextAt);
-  const hero = summaries[0];
-  return hero
-    ? deriveScheduleStreak(
-        hero.shots.map((shot) => shot.taken_at),
-        frequencyHours(hero.medication.frequency_kind, hero.medication.frequency_value),
-        now,
-      )
-    : { current: 0, best: 0 };
+function countEffects(sideEffects: readonly SideEffectLog[]): { effect: SideEffect; count: number }[] {
+  const counts = new Map<string, { effect: SideEffect; count: number }>();
+  for (const sideEffect of sideEffects) {
+    const key = sideEffectStorageKey(sideEffect.effect);
+    const current = counts.get(key);
+    counts.set(key, { effect: current?.effect ?? sideEffect.effect, count: (current?.count ?? 0) + 1 });
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count);
 }
 
-function countEffects(sideEffects: readonly SideEffectLogRow[]): { effect: SideEffectKind; count: number }[] {
-  const counts = new Map<SideEffectKind, number>();
-  for (const sideEffect of sideEffects) {
-    counts.set(sideEffect.effect, (counts.get(sideEffect.effect) ?? 0) + 1);
-  }
-  return Array.from(counts, ([effect, count]) => ({ effect, count }))
-    .sort((a, b) => b.count - a.count);
+function sideEffectWindowStart(now: number): number {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - 13);
+  return date.getTime();
 }
 
 function convertWeight(value: number, fromUnit: string | null, toUnit: WeightUnit): number {
@@ -391,19 +418,57 @@ const styles = StyleSheet.create({
   effectsCard: {
     gap: spacing.md,
   },
+  effectsHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
   effectRow: {
-    minHeight: 40,
+    minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  effectDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  effectCopy: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  effectTrack: {
+    height: 8,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(139,123,216,0.14)',
+  },
+  effectFill: {
+    borderRadius: radius.pill,
     backgroundColor: colors.violet,
   },
   effectLabel: {
     flex: 1,
+  },
+  pressed: {
+    opacity: 0.68,
+  },
+  filteredList: {
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  filteredRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  filteredDate: {
+    width: 64,
+    gap: 2,
+  },
+  filteredCopy: {
+    flex: 1,
+    gap: spacing.xs,
   },
 });

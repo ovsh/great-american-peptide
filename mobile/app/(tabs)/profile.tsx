@@ -31,6 +31,7 @@ export default function ProfileScreen() {
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const load = useCallback(async () => {
     const row = await getPreferences();
@@ -180,15 +181,12 @@ export default function ProfileScreen() {
         </SettingsSection>
 
         <SettingsSection label="About">
-          <Card style={styles.aboutCard}>
-            <View style={styles.aboutHead}>
-              <Info size={20} color={colors.inkMuted} />
-              <Text variant="bodyStrong">Poke</Text>
-            </View>
-            <Text variant="small" color={colors.inkMuted}>
-              Poke is a private logging tool. It does not provide clinical guidance, dosing advice, or administration instructions.
-            </Text>
-          </Card>
+          <SettingsRow
+            icon={<Info size={20} color={colors.inkMuted} />}
+            label="About Poke"
+            detail="Privacy and medical disclaimer"
+            onPress={() => setAboutOpen(true)}
+          />
         </SettingsSection>
       </ScrollView>
 
@@ -204,6 +202,25 @@ export default function ProfileScreen() {
           />
           <Text variant="small" color={colors.inkMuted}>{preferences?.weight_unit ?? 'lb'}</Text>
           <Button disabled={savingGoal} onPress={saveGoal}>{savingGoal ? 'Saving' : 'Save goal'}</Button>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet visible={aboutOpen} title="About Poke" onClose={() => setAboutOpen(false)}>
+        <View style={styles.aboutSheet}>
+          <View style={styles.aboutHead}>
+            <View style={styles.aboutIcon}><Info size={22} color={colors.accent} /></View>
+            <View style={styles.aboutTitle}>
+              <Text variant="h2">Poke</Text>
+              <Text variant="small" color={colors.inkMuted}>A private log for your routine.</Text>
+            </View>
+          </View>
+          <View style={styles.disclaimer}>
+            <Text variant="bodyStrong">Medical disclaimer</Text>
+            <Text color={colors.inkMuted}>
+              Poke is for personal record keeping only. It does not provide medical advice, diagnosis, treatment guidance, dosage recommendations, administration instructions, or emergency support.
+            </Text>
+            <Text variant="small" color={colors.inkMuted}>For medical questions, contact a licensed clinician.</Text>
+          </View>
         </View>
       </BottomSheet>
     </View>
@@ -300,13 +317,32 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
   },
-  aboutCard: {
-    gap: spacing.md,
+  aboutSheet: {
+    gap: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   aboutHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  aboutIcon: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 23,
+    backgroundColor: colors.accentSoft,
+  },
+  aboutTitle: {
+    flex: 1,
+    gap: 2,
+  },
+  disclaimer: {
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceMuted,
   },
   goalSheet: {
     gap: spacing.md,

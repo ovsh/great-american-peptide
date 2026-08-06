@@ -47,7 +47,7 @@ const INITIAL_DRAFT: LogShotDraft = {
 
 export default function LogShotScreen() {
   const params = useLocalSearchParams<{ medicationId?: string }>();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [medications, setMedications] = useState<MedicationRow[]>([]);
   const [injections, setInjections] = useState<InjectionRow[]>([]);
@@ -92,7 +92,13 @@ export default function LogShotScreen() {
     () => injections.flatMap((injection) => injection.site_id ? [injection.site_id] : []).slice(0, 4),
     [injections],
   );
-  const diagramWidth = Math.min(190, width - spacing.screen * 2 - spacing.xl * 2);
+  const siteCardMaxHeight = Math.min(390, Math.floor(height * 0.46));
+  const diagramHeight = Math.max(170, siteCardMaxHeight - 152);
+  const diagramWidth = Math.min(
+    190,
+    width - spacing.screen * 2 - spacing.xl * 2,
+    diagramHeight / 2,
+  );
 
   const selectSite = (site: BodySite) => {
     setDraft((current) => ({ ...current, selectedSiteId: site.id }));
@@ -180,7 +186,7 @@ export default function LogShotScreen() {
             </View>
 
             {selectedMedication ? (
-              <Card style={styles.siteCard}>
+              <Card style={[styles.siteCard, { maxHeight: siteCardMaxHeight }]}>
                 <View style={styles.sectionHead}>
                   <View style={styles.siteTitle}>
                     <MapPin size={18} color={colors.accent} />
@@ -191,7 +197,7 @@ export default function LogShotScreen() {
                 <View style={styles.diagram}>
                   <BodyDiagram
                     width={diagramWidth}
-                    height={diagramWidth * 2}
+                    height={diagramHeight}
                     view={view}
                     route={selectedMedication.default_route}
                     selectedId={draft.selectedSiteId}
@@ -291,7 +297,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 600,
     alignSelf: 'center',
-    gap: spacing.xxl,
+    gap: spacing.lg,
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.hero,
   },
@@ -327,7 +333,6 @@ const styles = StyleSheet.create({
   },
   diagram: {
     alignItems: 'center',
-    maxHeight: 390,
     overflow: 'hidden',
   },
   detailsButton: {

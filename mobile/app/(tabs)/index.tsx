@@ -14,18 +14,21 @@ import type {
   MeasurementRow,
   MedicationRow,
   PreferencesRow,
-  SideEffectKind,
-  SideEffectLogRow,
 } from '@/db/types';
 import { estimatedLevelAt, tmaxOrDefault } from '@/domain/pk';
-import { deriveScheduleStreak, frequencyHours, nextDoseAt, type ScheduleStreak } from '@/domain/scheduling';
+import { sideEffectLabel } from '@/domain/sideEffects';
+import { medicationScheduleFromStored, nextScheduledDoses } from '@/domain/scheduling';
+import {
+  computeMedicationScheduleStreak,
+  type ScheduleStreak,
+} from '@/domain/streaks';
 import { getBodySite } from '@/domain/bodySites';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
 import { listMeasurements } from '@/repositories/measurements';
 import { listMedications } from '@/repositories/medications';
 import { getPreferences } from '@/repositories/preferences';
-import { listSideEffects } from '@/repositories/sideEffects';
+import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
 import { endOfDay, fmtTime, startOfDay } from '@/utils/date';
@@ -43,7 +46,6 @@ interface MedicationSummary {
   nextAt: number;
   level: number | null;
   weekLevels: number[];
-  streak: ScheduleStreak;
 }
 
 interface TodayDashboard {
@@ -51,19 +53,10 @@ interface TodayDashboard {
   weight: MeasurementRow | null;
   weightSeries: number[];
   weightUnit: WeightUnit;
-  sideEffect: SideEffectLogRow | null;
+  sideEffect: SideEffectLog | null;
   action: TodayDoseAction;
+  streak: ScheduleStreak;
 }
-
-const EFFECT_LABELS: Record<SideEffectKind, string> = {
-  nausea: 'Nausea',
-  fatigue: 'Fatigue',
-  constipation: 'Constipation',
-  headache: 'Headache',
-  injection_site: 'Injection site',
-  appetite_loss: 'Appetite loss',
-  other: 'Other',
-};
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
@@ -72,7 +65,7 @@ export default function TodayScreen() {
   const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
-  const [sideEffects, setSideEffects] = useState<SideEffectLogRow[]>([]);
+  const [sideEffects, setSideEffects] = useState<SideEffectLog[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -121,7 +114,7 @@ export default function TodayScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
       >
-        <TodayHeader streak={dashboard.medication?.streak.current ?? 0} />
+        <TodayHeader streak={dashboard.streak.current} />
 
         {dashboard.medication ? (
           <>
@@ -153,7 +146,7 @@ function buildDashboard({
   injections: Record<string, InjectionRow[]>;
   weights: MeasurementRow[];
   preferences: PreferencesRow | null;
-  sideEffects: SideEffectLogRow[];
+  sideEffects: SideEffectLog[];
   now: number;
 }): TodayDashboard {
   const reminderTime = preferences?.reminder_time ?? '09:00';
@@ -168,25 +161,19 @@ function buildDashboard({
           estimatedLevelAt(doses, halfLife, tmax, now - (6 - index) * DAY_MS)
         ))
       : [];
-    const lastTakenAt = medicationInjections[0]?.taken_at ?? null;
+    const schedule = medicationScheduleFromStored({
+      medicationId: medication.id,
+      frequencyKind: medication.frequency_kind,
+      frequencyValue: medication.frequency_value,
+      createdAt: medication.created_at,
+      reminderTime,
+    });
     return {
       medication,
       injections: medicationInjections,
-      nextAt: nextDoseAt({
-        frequencyKind: medication.frequency_kind,
-        frequencyValue: medication.frequency_value,
-        lastTakenAt,
-        createdAt: medication.created_at,
-        reminderTime,
-        now,
-      }),
+      nextAt: schedule ? nextScheduledDoses(schedule, now, 1)[0]?.scheduledAt ?? now : now,
       level,
       weekLevels,
-      streak: deriveScheduleStreak(
-        medicationInjections.map((injection) => injection.taken_at),
-        frequencyHours(medication.frequency_kind, medication.frequency_value),
-        now,
-      ),
     };
   }).sort((a, b) => a.nextAt - b.nextAt);
 
@@ -202,6 +189,21 @@ function buildDashboard({
     .slice()
     .reverse()
     .map((weight) => convertWeight(weight.value, weight.unit, weightUnit));
+  const streak = computeMedicationScheduleStreak({
+    medications: medications.map((row) => ({
+      id: row.id,
+      frequencyKind: row.frequency_kind,
+      frequencyValue: row.frequency_value,
+      createdAt: row.created_at,
+    })),
+    injections: Object.values(injections).flatMap((rows) => rows.map((row) => ({
+      id: row.id,
+      medicationId: row.medication_id,
+      takenAt: row.taken_at,
+    }))),
+    reminderTime,
+    now,
+  }) ?? { current: 0, best: 0, weeks: [] };
 
   return {
     medication,
@@ -210,6 +212,7 @@ function buildDashboard({
     weightUnit,
     sideEffect: sideEffects[0] ?? null,
     action,
+    streak,
   };
 }
 
@@ -221,7 +224,7 @@ function TodayHeader({ streak }: { streak: number }) {
         <Text variant="small" color={colors.inkMuted}>{format(new Date(), 'EEEE, MMMM d')}</Text>
       </View>
       {streak >= 2 ? (
-        <View style={styles.streakChip}>
+        <View accessible accessibilityLabel={`${streak}-week streak`} style={styles.streakChip}>
           <Flame size={17} fill={colors.accent} color={colors.accent} />
           <Text variant="smallStrong" color={colors.accent}>{streak}</Text>
         </View>
@@ -347,6 +350,8 @@ function WeightTile({ dashboard }: { dashboard: TodayDashboard }) {
         </View>
         {dashboard.weightSeries.length >= 2 ? (
           <Sparkline data={dashboard.weightSeries} width={84} height={34} color={colors.amber} />
+        ) : dashboard.weight ? (
+          <Text variant="small" color={colors.inkMuted}>First weight logged.</Text>
         ) : (
           <Text variant="small" color={colors.inkMuted}>No weight logged yet.</Text>
         )}
@@ -356,7 +361,7 @@ function WeightTile({ dashboard }: { dashboard: TodayDashboard }) {
   );
 }
 
-function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLogRow | null }) {
+function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLog | null }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -372,7 +377,7 @@ function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLogRow | null })
         <Text variant="h2">How are you feeling?</Text>
         <Text variant="small" color={colors.inkMuted}>
           {sideEffect
-            ? `Last: ${EFFECT_LABELS[sideEffect.effect]} · ${sideEffect.severity}/10`
+            ? `Last: ${sideEffectLabel(sideEffect.effect)} · ${sideEffect.severity}/10`
             : 'Add a quick check-in.'}
         </Text>
         <Text variant="smallStrong" color={colors.violet}>Quick add</Text>

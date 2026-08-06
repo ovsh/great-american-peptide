@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Poke app icon</title>
+  <rect width="1024" height="1024" rx="228" fill="#2FB47C"/>
+  <g transform="translate(512 512) rotate(-45)" fill="#FFFFFF">
+    <rect x="-116" y="-262" width="232" height="38" rx="19"/>
+    <rect x="-24" y="-238" width="48" height="68" rx="18"/>
+    <rect x="-92" y="-184" width="184" height="310" rx="46"/>
+    <path d="M-58 120H58L38 178H-38Z"/>
+    <rect x="-11" y="166" width="22" height="126" rx="11"/>
+    <path d="M-11 286H11L0 326Z"/>
+    <rect x="-142" y="-126" width="52" height="16" rx="8"/>
+    <rect x="-142" y="-68" width="36" height="16" rx="8"/>
+    <rect x="-142" y="-10" width="52" height="16" rx="8"/>
+    <rect x="-142" y="48" width="36" height="16" rx="8"/>
+  </g>
+</svg>

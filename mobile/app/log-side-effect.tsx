@@ -1,36 +1,48 @@
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { X } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Check, X } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 import { Button } from '@/components/Button';
 import { Header } from '@/components/Header';
 import { Input } from '@/components/Input';
+import { SeveritySlider } from '@/components/SeveritySlider';
 import { Text } from '@/components/Text';
-import type { SideEffectKind } from '@/db/types';
+import {
+  SIDE_EFFECT_PRESETS,
+  makeCustomSideEffect,
+  type SideEffect,
+  type SideEffectPresetId,
+} from '@/domain/sideEffects';
 import { createSideEffect } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
 
-const EFFECTS: readonly { id: SideEffectKind; label: string }[] = [
-  { id: 'nausea', label: 'Nausea' },
-  { id: 'fatigue', label: 'Fatigue' },
-  { id: 'constipation', label: 'Constipation' },
-  { id: 'headache', label: 'Headache' },
-  { id: 'injection_site', label: 'Injection site' },
-  { id: 'appetite_loss', label: 'Appetite loss' },
-  { id: 'other', label: 'Other' },
-];
+type EffectChoice =
+  | { kind: 'preset'; id: SideEffectPresetId }
+  | { kind: 'custom' };
 
 export default function LogSideEffectScreen() {
   const bumpVersion = useAppStore((state) => state.bumpVersion);
-  const [effect, setEffect] = useState<SideEffectKind>('nausea');
+  const [choice, setChoice] = useState<EffectChoice>({ kind: 'preset', id: 'nausea' });
+  const [customEffect, setCustomEffect] = useState('');
   const [severity, setSeverity] = useState(3);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+  }, []);
+
+  const effect: SideEffect | null = choice.kind === 'preset'
+    ? { kind: 'preset', id: choice.id }
+    : makeCustomSideEffect(customEffect);
 
   const save = async () => {
-    if (saving) return;
+    if (saving || !effect) return;
     setSaving(true);
     try {
       await createSideEffect({
@@ -40,7 +52,11 @@ export default function LogSideEffectScreen() {
         notes: notes.trim() || null,
       });
       bumpVersion();
-      safeBack('/');
+      setSaved(true);
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      returnTimer.current = setTimeout(() => safeBack('/'), 650);
     } catch (error: unknown) {
       Alert.alert('Could not save side effect', error instanceof Error ? error.message : 'Try again.');
       setSaving(false);
@@ -57,54 +73,76 @@ export default function LogSideEffectScreen() {
           </Pressable>
         )}
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
           <Text variant="smallStrong">What are you feeling?</Text>
           <View style={styles.wrap}>
-            {EFFECTS.map((item) => {
-              const selected = effect === item.id;
+            {SIDE_EFFECT_PRESETS.map((item) => {
+              const selected = choice.kind === 'preset' && choice.id === item.id;
               return (
                 <Pressable
                   key={item.id}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
-                  onPress={() => setEffect(item.id)}
+                  onPress={() => setChoice({ kind: 'preset', id: item.id })}
                   style={[styles.pill, selected && styles.pillSelected]}
                 >
                   <Text variant="smallStrong" color={selected ? colors.inkInverse : colors.ink}>{item.label}</Text>
                 </Pressable>
               );
             })}
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected: choice.kind === 'custom' }}
+              onPress={() => setChoice({ kind: 'custom' })}
+              style={[styles.pill, choice.kind === 'custom' && styles.pillSelected]}
+            >
+              <Text variant="smallStrong" color={choice.kind === 'custom' ? colors.inkInverse : colors.ink}>
+                Custom
+              </Text>
+            </Pressable>
           </View>
+          {choice.kind === 'custom' ? (
+            <Input
+              autoFocus
+              value={customEffect}
+              onChangeText={setCustomEffect}
+              placeholder="Name the side effect"
+              accessibilityLabel="Custom side effect"
+              maxLength={60}
+            />
+          ) : null}
         </View>
 
         <View style={styles.section}>
           <View style={styles.severityHead}>
-            <Text variant="smallStrong">Intensity</Text>
-            <Text variant="bodyStrong" color={colors.violet}>{severity} / 10</Text>
+            <View style={styles.severityCopy}>
+              <Text variant="smallStrong">Severity</Text>
+              <Text variant="small" color={colors.inkMuted}>Drag to set 0 through 10.</Text>
+            </View>
+            <Text accessibilityLiveRegion="polite" style={styles.severityValue}>{severity}</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scale}>
-            {Array.from({ length: 11 }, (_, value) => (
-              <Pressable
-                key={value}
-                accessibilityRole="radio"
-                accessibilityLabel={`Intensity ${value} of 10`}
-                accessibilityState={{ selected: severity === value }}
-                onPress={() => setSeverity(value)}
-                style={[styles.scalePoint, severity === value && styles.scalePointSelected]}
-              >
-                <Text variant="smallStrong" color={severity === value ? colors.inkInverse : colors.inkMuted}>{value}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <SeveritySlider value={severity} onChange={setSeverity} />
         </View>
 
         <View style={styles.section}>
-          <Text variant="smallStrong">Notes</Text>
-          <Input value={notes} onChangeText={setNotes} placeholder="Anything else?" />
+          <Text variant="smallStrong">Note <Text variant="small" color={colors.inkMuted}>(optional)</Text></Text>
+          <Input
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Anything else?"
+            accessibilityLabel="Optional note"
+            maxLength={240}
+          />
         </View>
 
-        <Button disabled={saving} onPress={save}>{saving ? 'Saving' : 'Log side effect'}</Button>
+        {saved ? (
+          <View accessibilityLiveRegion="polite" style={styles.saved}>
+            <Check size={18} strokeWidth={2.5} color={colors.accent} />
+            <Text variant="smallStrong" color={colors.accent}>Saved</Text>
+          </View>
+        ) : null}
+        <Button disabled={saving || !effect} onPress={save}>{saving ? 'Saving' : 'Log side effect'}</Button>
       </ScrollView>
     </View>
   );
@@ -152,18 +190,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  scale: {
-    gap: spacing.sm,
+  severityCopy: {
+    gap: 2,
   },
-  scalePoint: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  severityValue: {
+    minWidth: 44,
+    fontSize: 40,
+    lineHeight: 46,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    color: colors.violet,
+    textAlign: 'right',
+  },
+  saved: {
+    minHeight: 32,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  scalePointSelected: {
-    backgroundColor: colors.violet,
+    gap: spacing.sm,
   },
 });

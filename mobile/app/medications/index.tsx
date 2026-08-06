@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Plus, Pause, Play, Archive } from 'lucide-react-native';
+import { Archive, Pause, Pencil, Play, Plus } from 'lucide-react-native';
 
 import { Header } from '@/components/Header';
 import { Section } from '@/components/Section';
@@ -11,7 +11,8 @@ import { Text } from '@/components/Text';
 import { Button } from '@/components/Button';
 import { Pill } from '@/components/Pill';
 import { MedVialIcon } from '@/components/MedVialIcon';
-import { listMedications, setMedicationStatus } from '@/repositories/medications';
+import { listMedications } from '@/repositories/medications';
+import { setMedicationStatusAndRefresh } from '@/services/medicationMutations';
 import type { MedicationRow } from '@/db/types';
 import { useAppStore } from '@/stores/app';
 import { formatDose } from '@/domain/units';
@@ -40,7 +41,7 @@ export default function MedicationsScreen() {
 
   const togglePause = async (m: MedicationRow) => {
     const next = m.status === 'paused' ? 'active' : 'paused';
-    await setMedicationStatus(m.id, next);
+    await setMedicationStatusAndRefresh(m.id, next);
     bumpVersion();
   };
 
@@ -50,7 +51,7 @@ export default function MedicationsScreen() {
       `${m.name} will stop appearing in active lists. History stays.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', style: 'destructive', onPress: async () => { await setMedicationStatus(m.id, 'archived'); bumpVersion(); } },
+        { text: 'Archive', style: 'destructive', onPress: async () => { await setMedicationStatusAndRefresh(m.id, 'archived'); bumpVersion(); } },
       ],
     );
   };
@@ -98,6 +99,14 @@ export default function MedicationsScreen() {
                 </View>
                 {m.status !== 'archived' && (
                   <View style={styles.actions}>
+                    <Pressable
+                      onPress={() => router.push({ pathname: '/medications/new', params: { medicationId: m.id } })}
+                      hitSlop={6}
+                      style={styles.action}
+                    >
+                      <Pencil size={16} color={colors.ink} />
+                      <Text variant="caption" color={colors.ink}>Edit</Text>
+                    </Pressable>
                     <Pressable onPress={() => togglePause(m)} hitSlop={6} style={styles.action}>
                       {m.status === 'paused'
                         ? <Play size={16} color={colors.ink} />

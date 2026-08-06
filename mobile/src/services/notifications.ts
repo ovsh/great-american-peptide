@@ -1,8 +1,7 @@
 import { Platform } from 'react-native';
 import { listMedications } from '../repositories/medications';
-import { lastInjectionFor } from '../repositories/injections';
 import { getPreferences } from '../repositories/preferences';
-import { frequencyHours } from '../domain/scheduling';
+import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
 
 type ExpoNotifications = typeof import('expo-notifications');
 
@@ -39,32 +38,6 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return req.status === 'granted';
 }
 
-function parseTime(hhmm: string): { hour: number; minute: number } {
-  const [h, m] = hhmm.split(':').map((s) => parseInt(s, 10));
-  return { hour: h ?? 9, minute: m ?? 0 };
-}
-
-function nextAnchoredAt(
-  weekday: number,
-  intervalMs: number,
-  hour: number,
-  minute: number,
-): number {
-  const now = Date.now();
-  const anchor = new Date(now);
-  anchor.setHours(hour, minute, 0, 0);
-  const daysSinceAnchor = (anchor.getDay() - weekday + 7) % 7;
-  anchor.setDate(anchor.getDate() - daysSinceAnchor);
-  if (anchor.getTime() > now) anchor.setDate(anchor.getDate() - 7);
-
-  for (let occurrence = 0; occurrence < 20; occurrence++) {
-    const candidate = new Date(anchor.getTime() + occurrence * intervalMs);
-    candidate.setHours(hour, minute, 0, 0);
-    if (candidate.getTime() > now) return candidate.getTime();
-  }
-  return now + intervalMs;
-}
-
 export async function refreshScheduledReminders(): Promise<void> {
   const Notifications = await getNotifications();
   if (!Notifications) return;
@@ -73,38 +46,30 @@ export async function refreshScheduledReminders(): Promise<void> {
   if (!prefs.notifications_enabled) return;
 
   const meds = await listMedications();
-  const { hour, minute } = parseTime(prefs.reminder_time);
+  const now = Date.now();
 
   for (const med of meds) {
     if (med.status !== 'active') continue;
-    const last = await lastInjectionFor(med.id);
-    const intervalMs = frequencyHours(med.frequency_kind, med.frequency_value) * 60 * 60 * 1000;
-    const weekdayAnchor = med.frequency_kind !== 'every_n_days'
-      && med.frequency_kind !== 'daily'
-      && med.frequency_value !== null
-      && Number.isInteger(med.frequency_value)
-      && med.frequency_value >= 0
-      && med.frequency_value <= 6
-        ? med.frequency_value
-        : null;
-    const lastTaken = last?.taken_at ?? Date.now() - intervalMs;
-    let next = weekdayAnchor !== null
-      ? nextAnchoredAt(weekdayAnchor, intervalMs, hour, minute)
-      : lastTaken + intervalMs;
-    const now = Date.now();
-    if (next < now) next = now + 60 * 1000;
+    const schedule = medicationScheduleFromStored({
+      medicationId: med.id,
+      frequencyKind: med.frequency_kind,
+      frequencyValue: med.frequency_value,
+      createdAt: med.created_at,
+      reminderTime: prefs.reminder_time,
+    });
+    if (!schedule) continue;
 
-    for (let i = 0; i < 6; i++) {
-      const fireDate = new Date(next + i * intervalMs);
-      fireDate.setHours(hour, minute, 0, 0);
-      if (fireDate.getTime() <= Date.now()) continue;
+    for (const dose of nextScheduledDoses(schedule, now, 6)) {
       try {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: med.name,
             body: `${med.default_dose} ${med.default_unit} · ${med.default_route.toUpperCase()}`,
           },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireDate },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: new Date(dose.scheduledAt),
+          },
         });
       } catch {
         // ignore individual scheduling failures

@@ -35,15 +35,6 @@ export type MeasurementKind = 'weight' | 'bmi' | 'height';
 
 export type GoalKind = 'weight_loss' | 'recovery' | 'longevity' | 'performance' | 'other';
 
-export type SideEffectKind =
-  | 'nausea'
-  | 'fatigue'
-  | 'constipation'
-  | 'headache'
-  | 'injection_site'
-  | 'appetite_loss'
-  | 'other';
-
 export interface MeasurementRow {
   id: string;
   kind: MeasurementKind;
@@ -59,7 +50,7 @@ export interface MeasurementRow {
 
 export interface SideEffectLogRow {
   id: string;
-  effect: SideEffectKind;
+  effect: string;
   severity: number;
   taken_at: number;
   notes: string | null;

@@ -18,4 +18,5 @@ export { SyringeViz } from './SyringeViz';
 export { BottomSheet } from './BottomSheet';
 export { InlineTimePicker } from './InlineTimePicker';
 export { LogActionSheet } from './LogActionSheet';
+export { SeveritySlider } from './SeveritySlider';
 export { MonthGrid } from './MonthGrid';

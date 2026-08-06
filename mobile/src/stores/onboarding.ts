@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type { GoalKind } from '../db/types';
 import { getPreset, type Route, type Unit } from '../domain/peptides';
+import { WEEKDAY_OPTIONS, type Weekday } from '../domain/scheduling';
 import type { WeightUnit } from '../domain/units';
 
 export const ONBOARDING_PRESET_IDS = [
@@ -17,7 +18,7 @@ export type OnboardingPresetId = (typeof ONBOARDING_PRESET_IDS)[number];
 export type OnboardingMedicationId = OnboardingPresetId | 'custom';
 export type OnboardingFrequency = 'daily' | 'twice_weekly' | 'weekly';
 export type SideEffectConcern = 'nausea' | 'fatigue' | 'constipation' | 'injection_site' | 'none';
-export type ShotDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type ShotDay = Weekday;
 
 export const GOAL_OPTIONS: readonly { id: GoalKind; label: string; description: string }[] = [
   { id: 'weight_loss', label: 'Weight loss', description: 'Keep your shot routine and weight goal together.' },
@@ -34,15 +35,7 @@ export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[
   { id: 'none', label: 'None right now' },
 ];
 
-export const SHOT_DAY_OPTIONS = [
-  { value: 1, shortLabel: 'Mon', label: 'Monday' },
-  { value: 2, shortLabel: 'Tue', label: 'Tuesday' },
-  { value: 3, shortLabel: 'Wed', label: 'Wednesday' },
-  { value: 4, shortLabel: 'Thu', label: 'Thursday' },
-  { value: 5, shortLabel: 'Fri', label: 'Friday' },
-  { value: 6, shortLabel: 'Sat', label: 'Saturday' },
-  { value: 0, shortLabel: 'Sun', label: 'Sunday' },
-] as const satisfies readonly { value: ShotDay; shortLabel: string; label: string }[];
+export const SHOT_DAY_OPTIONS = WEEKDAY_OPTIONS;
 
 export type OnboardingGate =
   | { kind: 'checking' }

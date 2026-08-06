@@ -22,7 +22,7 @@
       "package": "industries.peptide.tracker",
       "playStoreUrl": "https://play.google.com/store/apps/details?id=industries.peptide.tracker",
       "adaptiveIcon": {
-        "backgroundColor": "#F2E9D8",
+        "backgroundColor": "#2FB47C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -49,16 +49,16 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#F2E9D8"
+          "backgroundColor": "#2FB47C"
         }
       ],
       "expo-sqlite",
       [
         "expo-notifications",
         {
-          "color": "#B0202E"
+          "color": "#2FB47C"
         }
       ]
     ],

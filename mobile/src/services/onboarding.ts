@@ -7,6 +7,7 @@ import {
   createMedication,
   listMedications,
   nextColorIndex,
+  setMedicationStatus,
   updateMedicationDefaults,
 } from '../repositories/medications';
 import { updatePreferences } from '../repositories/preferences';
@@ -97,6 +98,7 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
     });
     if (existing) {
       await updateMedicationDefaults(existing.id, seed.medication);
+      if (existing.status !== 'active') await setMedicationStatus(existing.id, 'active');
       continue;
     }
     const colorIndex = await nextColorIndex();

@@ -71,7 +71,7 @@ export async function updateMedicationDefaults(
     `UPDATE medications SET
       name = ?, preset_id = ?, default_dose = ?, default_unit = ?, default_route = ?,
       frequency_kind = ?, frequency_value = ?, half_life_hours = ?, tmax_hours = ?,
-      status = 'active', updated_at = ?
+      updated_at = ?
      WHERE id = ?`,
     [
       input.name,
