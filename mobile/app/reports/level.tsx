@@ -4,11 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 
 import { Header } from '@/components/Header';
-import { TitleBlock } from '@/components/TitleBlock';
 import { Section } from '@/components/Section';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
-import { Eyebrow } from '@/components/Eyebrow';
 import { Pill } from '@/components/Pill';
 import { LineChart } from '@/components/LineChart';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
@@ -22,13 +20,13 @@ import { fmtTime } from '@/utils/date';
 import { useAppStore } from '@/stores/app';
 import { colors, spacing } from '@/theme';
 
-const RANGES = ['7D', '14D', '30D'] as const;
+const RANGES = ['7d', '14d', '30d'] as const;
 type Range = typeof RANGES[number];
 const DAY = 24 * 60 * 60 * 1000;
 
 function rangeMs(r: Range): number {
-  if (r === '7D') return 7 * DAY;
-  if (r === '14D') return 14 * DAY;
+  if (r === '7d') return 7 * DAY;
+  if (r === '14d') return 14 * DAY;
   return 30 * DAY;
 }
 
@@ -39,7 +37,7 @@ export default function LevelReportScreen() {
   const dataVersion = useAppStore((s) => s.dataVersion);
   const [meds, setMeds] = useState<MedicationRow[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [range, setRange] = useState<Range>('14D');
+  const [range, setRange] = useState<Range>('14d');
   const [doses, setDoses] = useState<{ takenAt: number; dose: number }[]>([]);
 
   useEffect(() => {
@@ -85,16 +83,14 @@ export default function LevelReportScreen() {
   const data = trajectory.filter((p) => p.t <= Date.now()).map((p) => ({ t: p.t, v: p.level }));
   const proj = trajectory.filter((p) => p.t >= Date.now()).map((p) => ({ t: p.t, v: p.level }));
   const stats = peakTroughAvg(trajectory);
-  const trend = med ? trendLabel(doses, med.half_life_hours!, tmax, Date.now()) : 'steady';
+  const trend = med?.half_life_hours ? trendLabel(doses, med.half_life_hours, tmax, Date.now()) : 'steady';
 
-  const chartW = width - spacing.screen * 2;
+  const chartW = Math.min(width, 600) - spacing.screen * 2;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      <Header title="Medication Level" showBack />
+      <Header title="Medication level" showBack />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
-        <TitleBlock title="Levels" rightLabel="ESTIMATED" />
-
         {meds.length === 0 ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <Card padding="lg">
@@ -122,7 +118,7 @@ export default function LevelReportScreen() {
             <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.md }}>
               <View style={styles.headRow}>
                 <View>
-                  <Eyebrow>{med?.name}</Eyebrow>
+                  <Text variant="smallStrong" color={colors.inkMuted}>{med?.name}</Text>
                   <Text variant="hero" style={{ marginTop: 4 }}>
                     {med ? formatDose(stats.peak.level, med.default_unit) : '—'}
                   </Text>
@@ -159,15 +155,15 @@ export default function LevelReportScreen() {
               <View style={{ height: spacing.lg }} />
 
               <View style={styles.statRow}>
-                <Stat label="PEAK" value={med ? formatDose(stats.peak.level, med.default_unit) : '—'} hint={fmtTime(stats.peak.t)} />
-                <Stat label="TROUGH" value={med ? formatDose(stats.trough.level, med.default_unit) : '—'} hint={fmtTime(stats.trough.t)} />
-                <Stat label="AVG" value={med ? formatDose(stats.avg, med.default_unit) : '—'} hint="window" />
+                <Stat label="Peak" value={med ? formatDose(stats.peak.level, med.default_unit) : '—'} hint={fmtTime(stats.peak.t)} />
+                <Stat label="Trough" value={med ? formatDose(stats.trough.level, med.default_unit) : '—'} hint={fmtTime(stats.trough.t)} />
+                <Stat label="Average" value={med ? formatDose(stats.avg, med.default_unit) : '—'} hint="window" />
               </View>
 
               <View style={{ height: spacing.xl }} />
 
               <Text variant="caption" color={colors.inkSubtle}>
-                Half-life load estimate from logged shots only. Trend only — not for dosing.
+                Half-life load estimate from logged shots only. This trend is not for dosing.
               </Text>
             </View>
           </>
@@ -180,7 +176,7 @@ export default function LevelReportScreen() {
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <View style={{ flex: 1, gap: 2 }}>
-      <Eyebrow>{label}</Eyebrow>
+      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
       <Text variant="bodyStrong">{value}</Text>
       {hint ? <Text variant="caption" color={colors.inkSubtle}>{hint}</Text> : null}
     </View>
@@ -190,7 +186,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 const styles = StyleSheet.create({
   chipRow: { paddingHorizontal: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xs },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   headRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

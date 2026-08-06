@@ -5,22 +5,23 @@ import { Check, X } from 'lucide-react-native';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
-import { Eyebrow } from '@/components/Eyebrow';
 import { Field } from '@/components/Field';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 
 import { createMeasurement, latestMeasurement } from '@/repositories/measurements';
 import { getPreferences, updatePreferences } from '@/repositories/preferences';
+import type { PreferencesRow } from '@/db/types';
 import { useAppStore } from '@/stores/app';
 import { colors, spacing } from '@/theme';
 import { fmtDateTime } from '@/utils/date';
 import { safeBack } from '@/utils/nav';
-import type { WeightUnit } from '@/domain/units';
+import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 
 export default function LogWeightScreen() {
   const bumpVersion = useAppStore((s) => s.bumpVersion);
   const [value, setValue] = useState('');
   const [unit, setUnit] = useState<WeightUnit>('lb');
+  const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function LogWeightScreen() {
         latestMeasurement('weight'),
       ]);
       setUnit(prefs.weight_unit);
+      setPreferences(prefs);
       if (last) setValue(last.value.toFixed(1));
     })();
   }, []);
@@ -43,11 +45,19 @@ export default function LogWeightScreen() {
     try {
       await createMeasurement({ kind: 'weight', value: v, unit, takenAt: Date.now() });
       // remember unit preference
-      await updatePreferences({ weight_unit: unit });
+      await updatePreferences({
+        weight_unit: unit,
+        start_weight: preferences?.start_weight === null || preferences?.start_weight === undefined
+          ? null
+          : convertWeight(preferences.start_weight, preferences.weight_unit, unit),
+        goal_weight: preferences?.goal_weight === null || preferences?.goal_weight === undefined
+          ? null
+          : convertWeight(preferences.goal_weight, preferences.weight_unit, unit),
+      });
       bumpVersion();
       safeBack('/');
-    } catch (err: any) {
-      Alert.alert('Could not save', String(err?.message ?? err));
+    } catch (error: unknown) {
+      Alert.alert('Could not save', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -59,7 +69,7 @@ export default function LogWeightScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Header
-        title="Log Weight"
+        title="Log weight"
         leading={
           <Pressable onPress={() => safeBack('/')} hitSlop={10} style={styles.iconBtn}>
             <X size={22} color={colors.ink} />
@@ -67,7 +77,7 @@ export default function LogWeightScreen() {
         }
         trailing={
           <Pressable onPress={onSave} hitSlop={10} disabled={submitting}>
-            <Check size={22} color={colors.red} />
+            <Check size={22} color={colors.accent} />
           </Pressable>
         }
       />
@@ -77,7 +87,7 @@ export default function LogWeightScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Card padding="lg">
-          <Eyebrow>NOW</Eyebrow>
+          <Text variant="smallStrong" color={colors.inkMuted}>Now</Text>
           <Text variant="caption" color={colors.inkMuted} style={{ marginTop: 2 }}>{fmtDateTime(Date.now())}</Text>
         </Card>
         <View style={{ height: spacing.lg }} />
@@ -97,7 +107,7 @@ export default function LogWeightScreen() {
             <TimeRangeToggle
               options={['lb', 'kg'] as const}
               value={unit}
-              onChange={(v) => setUnit(v as WeightUnit)}
+              onChange={setUnit}
             />
           </View>
         </Field>
@@ -117,3 +127,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
 });
+
+function convertWeight(value: number, from: WeightUnit, to: WeightUnit): number {
+  if (from === to) return value;
+  return from === 'kg' ? kgToLb(value) : lbToKg(value);
+}

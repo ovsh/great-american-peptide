@@ -1,239 +1,132 @@
-import { useEffect, useState } from 'react';
-import { View, Pressable, StyleSheet, Platform } from 'react-native';
-import { router, usePathname } from 'expo-router';
-import { CalendarDays, Clock3, House, UserRound } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Tabs } from 'expo-router';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { ChartLine, Clock3, House, Plus, UserRound } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BrandSeal } from '@/components/BrandSeal';
+import { LogActionSheet } from '@/components/LogActionSheet';
 import { Text } from '@/components/Text';
-import { colors, fonts, spacing } from '@/theme';
+import { colors, elevation, fonts, spacing } from '@/theme';
 
-import TodayScreen from './index';
-import CalendarScreen from './calendar';
-import HistoryScreen from './history';
-import ProfileScreen from './profile';
-
-const ICON_SIZE = 22;
-
-type TabId = 'index' | 'calendar' | 'history' | 'profile';
-
-const TABS: {
-  id: TabId;
-  href: string;
-  title: string;
-  icon: (color: string) => React.ReactNode;
-  render: () => React.ReactNode;
-}[] = [
-  {
-    id: 'index',
-    href: '/',
-    title: 'Home',
-    icon: (color) => <House size={ICON_SIZE} color={color} strokeWidth={1.5} />,
-    render: () => <TodayScreen />,
-  },
-  {
-    id: 'calendar',
-    href: '/calendar',
-    title: 'Calendar',
-    icon: (color) => <CalendarDays size={ICON_SIZE} color={color} strokeWidth={1.5} />,
-    render: () => <CalendarScreen />,
-  },
-  {
-    id: 'history',
-    href: '/history',
-    title: 'History',
-    icon: (color) => <Clock3 size={ICON_SIZE} color={color} strokeWidth={1.5} />,
-    render: () => <HistoryScreen />,
-  },
-  {
-    id: 'profile',
-    href: '/profile',
-    title: 'Profile',
-    icon: (color) => <UserRound size={ICON_SIZE} color={color} strokeWidth={1.5} />,
-    render: () => <ProfileScreen />,
-  },
+const TAB_ITEMS: readonly { name: string; label: string; icon: LucideIcon }[] = [
+  { name: 'index', label: 'Today', icon: House },
+  { name: 'progress', label: 'Progress', icon: ChartLine },
+  { name: 'history', label: 'History', icon: Clock3 },
+  { name: 'profile', label: 'Profile', icon: UserRound },
 ];
 
-function tabForPath(pathname: string): TabId {
-  if (pathname.startsWith('/calendar')) return 'calendar';
-  if (pathname.startsWith('/history')) return 'history';
-  if (pathname.startsWith('/profile')) return 'profile';
-  return 'index';
-}
-
-function tap() {
-  if (Platform.OS !== 'web') {
-    Haptics.selectionAsync().catch(() => {});
-  }
-}
-
 export default function TabLayout() {
-  const pathname = usePathname();
-  const [active, setActive] = useState<TabId>(() => tabForPath(pathname));
-
-  useEffect(() => {
-    setActive(tabForPath(pathname));
-  }, [pathname]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const onPopState = () => setActive(tabForPath(window.location.pathname));
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  const switchTab = (id: TabId, href: string) => {
-    tap();
-    setActive(id);
-    if (Platform.OS === 'web') {
-      window.history.pushState(null, '', href);
-      return;
-    }
-    router.replace(href as any);
-  };
-
   return (
-    <View style={styles.root}>
-      <View style={styles.sceneWrap}>
-        {TABS.map((tab) => (
-          <View key={tab.id} style={[styles.scene, active !== tab.id && styles.hiddenScene]}>
-            {tab.render()}
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.bar}>
-        <TabButton
-          title="Home"
-          active={active === 'index'}
-          icon={TABS[0]!.icon}
-          onPress={() => switchTab('index', '/')}
-        />
-        <TabButton
-          title="Calendar"
-          active={active === 'calendar'}
-          icon={TABS[1]!.icon}
-          onPress={() => switchTab('calendar', '/calendar')}
-        />
-        <SealButton />
-        <TabButton
-          title="History"
-          active={active === 'history'}
-          icon={TABS[2]!.icon}
-          onPress={() => switchTab('history', '/history')}
-        />
-        <TabButton
-          title="Profile"
-          active={active === 'profile'}
-          icon={TABS[3]!.icon}
-          onPress={() => switchTab('profile', '/profile')}
-        />
-      </View>
-    </View>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <PokeTabBar {...props} />}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Today' }} />
+      <Tabs.Screen name="progress" options={{ title: 'Progress' }} />
+      <Tabs.Screen name="history" options={{ title: 'History' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+    </Tabs>
   );
 }
 
-function TabButton({
-  title,
-  active,
-  icon,
-  onPress,
-}: {
-  title: string;
-  active: boolean;
-  icon: (color: string) => React.ReactNode;
-  onPress: () => void;
-}) {
-  const color = active ? colors.red : colors.inkSubtle;
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityLabel={title}
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={styles.item}
-    >
-      {icon(color)}
-      <Text variant="caption" color={color} style={styles.label}>{title}</Text>
-    </Pressable>
-  );
-}
+function PokeTabBar({ state, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-function SealButton() {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Log shot"
-      onPress={() => {
-        tap();
-        router.push('/log-shot');
-      }}
-      style={styles.sealBtn}
-      hitSlop={8}
-    >
-      <View style={styles.sealCircle}>
-        <BrandSeal size={52} variant="cream" />
+    <>
+      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}> 
+        {TAB_ITEMS.map((item, index) => {
+          const route = state.routes.find((candidate) => candidate.name === item.name);
+          if (!route) return null;
+          const routeIndex = state.routes.indexOf(route);
+          const active = state.index === routeIndex;
+          const Icon = item.icon;
+          return (
+            <View key={item.name} style={styles.slot}>
+              {index === 2 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open log menu"
+                  onPress={() => setSheetOpen(true)}
+                  style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+                >
+                  <Plus size={28} strokeWidth={2.4} color={colors.inkInverse} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  const event = navigation.emit({
+                    type: 'tabPress',
+                    target: route.key,
+                    canPreventDefault: true,
+                  });
+                  if (!active && !event.defaultPrevented) navigation.navigate(route.name);
+                }}
+                style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
+              >
+                <Icon size={24} strokeWidth={1.8} color={active ? colors.accent : colors.inkSubtle} />
+                <Text
+                  color={active ? colors.accent : colors.inkSubtle}
+                  style={styles.label}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
       </View>
-    </Pressable>
+      <LogActionSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  sceneWrap: {
-    flex: 1,
-  },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.background,
-  },
-  hiddenScene: {
-    display: 'none',
-  },
   bar: {
+    minHeight: 72,
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderStrong,
-    height: 92,
+    alignItems: 'flex-start',
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xxl,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  item: {
+  slot: {
     flex: 1,
+    alignItems: 'center',
+  },
+  tab: {
+    minWidth: 56,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
+    gap: 2,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 10,
-    letterSpacing: 0.4,
-    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
   },
-  sealBtn: {
-    flex: 1,
+  addButton: {
+    ...elevation.raised,
+    position: 'absolute',
+    zIndex: 2,
+    top: -36,
+    left: -28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.accent,
   },
-  sealCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -28,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+  pressed: {
+    opacity: 0.72,
   },
 });

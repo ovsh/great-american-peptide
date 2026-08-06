@@ -9,16 +9,6 @@ export const colors = {
   inkSubtle: '#9AA1AA',
   inkInverse: '#FFFFFF',
 
-  navy: '#111418',
-  navyDeep: '#111418',
-
-  red: '#2FB47C',
-  redDeep: '#2FB47C',
-  redSoft: '#E7F6EF',
-
-  gold: '#E8A13C',
-  goldDeep: '#E8A13C',
-
   success: '#2FB47C',
   successDeep: '#2FB47C',
   successSoft: '#E7F6EF',

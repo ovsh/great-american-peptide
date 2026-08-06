@@ -15,7 +15,7 @@ const POST_EVENT_DELAY_MS = 1500;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const appVersion = (): string => {
-  const v = (Constants.expoConfig as any)?.version ?? Constants.nativeAppVersion ?? 'unknown';
+  const v = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? 'unknown';
   return String(v);
 };
 

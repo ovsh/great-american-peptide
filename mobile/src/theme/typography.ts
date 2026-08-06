@@ -1,8 +1,6 @@
 import type { TextStyle } from 'react-native';
 
 export const fonts = {
-  serif: 'Inter_700Bold',
-  serifRegular: 'Inter_700Bold',
   sans: 'Inter_400Regular',
   sansMedium: 'Inter_500Medium',
   sansSemiBold: 'Inter_600SemiBold',
@@ -11,27 +9,27 @@ export const fonts = {
 
 export const text = {
   display: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 28,
     lineHeight: 34,
   },
   h1: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 28,
     lineHeight: 34,
   },
   h2: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 20,
     lineHeight: 26,
   },
   h3: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 20,
     lineHeight: 26,
   },
   hero: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 28,
     lineHeight: 34,
   },
@@ -56,11 +54,6 @@ export const text = {
     lineHeight: 18,
   },
   caption: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  eyebrow: {
     fontFamily: fonts.sansMedium,
     fontSize: 13,
     lineHeight: 18,

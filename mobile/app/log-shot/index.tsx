@@ -1,633 +1,348 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { Check, X, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ChevronDown, ChevronUp, MapPin, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
-import { Header } from '@/components/Header';
-import { Section } from '@/components/Section';
-import { Card } from '@/components/Card';
-import { Text } from '@/components/Text';
-import { Button } from '@/components/Button';
-import { Stepper } from '@/components/Stepper';
-import { Field } from '@/components/Field';
 import { BodyDiagram } from '@/components/BodyDiagram';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Header } from '@/components/Header';
+import { InlineTimePicker } from '@/components/InlineTimePicker';
+import { Input } from '@/components/Input';
+import { Stepper } from '@/components/Stepper';
+import { Text } from '@/components/Text';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
-
-import { listMedications, createMedication, nextColorIndex } from '@/repositories/medications';
-import { createInjection } from '@/repositories/injections';
-import type { MedicationRow } from '@/db/types';
-import { getBodySite, type View as BodyView } from '@/domain/bodySites';
-import { peptidePresets, getPreset } from '@/domain/peptides';
+import type { InjectionRow, MedicationRow } from '@/db/types';
+import { getBodySite, type BodySite, type View as BodyView } from '@/domain/bodySites';
+import { recommendNextSite } from '@/domain/rotation';
+import { createInjection, listInjections } from '@/repositories/injections';
+import { listMedications } from '@/repositories/medications';
+import { maybePromptForReview, recordPositiveEvent } from '@/services/review';
+import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
-import { recordPositiveEvent, maybePromptForReview } from '@/services/review';
+import { colors, radius, spacing } from '@/theme';
+import { fmtTime } from '@/utils/date';
 import { safeBack } from '@/utils/nav';
-import { colors, spacing, radius, text as typo } from '@/theme';
 
-const haptic = (kind: 'select' | 'success' = 'select') => {
-  if (Platform.OS === 'web') return;
-  if (kind === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  else Haptics.selectionAsync();
-};
+interface LogShotDraft {
+  medicationId: string | null;
+  dose: number;
+  suggestedSiteId: string | null;
+  selectedSiteId: string | null;
+  takenAt: number;
+  notes: string;
+  detailsOpen: boolean;
+}
 
-const splitTime = (ts: number) => {
-  const d = new Date(ts);
-  let h = d.getHours();
-  const m = d.getMinutes();
-  const meridiem: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) h = 12;
-  return { hour: String(h), minute: String(m).padStart(2, '0'), meridiem };
-};
-
-const splitDate = (ts: number) => {
-  const d = new Date(ts);
-  return {
-    month: String(d.getMonth() + 1).padStart(2, '0'),
-    day: String(d.getDate()).padStart(2, '0'),
-    year: String(d.getFullYear()),
-  };
-};
-
-const composeDate = (base: number, month: string, day: string, year: string): number => {
-  const mo = parseInt(month, 10);
-  const da = parseInt(day, 10);
-  const yr = parseInt(year, 10);
-  if (isNaN(mo) || isNaN(da) || isNaN(yr) || mo < 1 || mo > 12 || da < 1 || yr < 1900 || yr > 2100) {
-    return base;
-  }
-  const d = new Date(base);
-  d.setFullYear(yr, mo - 1, da);
-  if (d.getFullYear() !== yr || d.getMonth() !== mo - 1 || d.getDate() !== da) return base;
-  return d.getTime();
-};
-
-const composeTime = (base: number, hour: string, minute: string, meridiem: 'AM' | 'PM'): number => {
-  let h = parseInt(hour, 10);
-  const m = parseInt(minute, 10);
-  if (isNaN(h) || isNaN(m) || h < 1 || h > 12 || m < 0 || m > 59) return base;
-  if (meridiem === 'PM' && h < 12) h += 12;
-  if (meridiem === 'AM' && h === 12) h = 0;
-  const d = new Date(base);
-  d.setHours(h, m, 0, 0);
-  return d.getTime();
-};
-
-const presetCategoryLabel: Record<string, string> = {
-  glp1: 'GLP-1',
-  recovery: 'Recovery',
-  longevity: 'Longevity',
-  growth: 'Growth',
-  other: 'Other',
+const INITIAL_DRAFT: LogShotDraft = {
+  medicationId: null,
+  dose: 0,
+  suggestedSiteId: null,
+  selectedSiteId: null,
+  takenAt: Date.now(),
+  notes: '',
+  detailsOpen: false,
 };
 
 export default function LogShotScreen() {
   const params = useLocalSearchParams<{ medicationId?: string }>();
-  const bumpVersion = useAppStore((s) => s.bumpVersion);
-
-  const [meds, setMeds] = useState<MedicationRow[]>([]);
-  const [medicationId, setMedicationId] = useState<string | null>(null);
-  const [medOpen, setMedOpen] = useState(false);
-  const [creatingFromPreset, setCreatingFromPreset] = useState<string | null>(null);
-  const [dose, setDose] = useState<number>(0.25);
+  const { width } = useWindowDimensions();
+  const bumpVersion = useAppStore((state) => state.bumpVersion);
+  const [medications, setMedications] = useState<MedicationRow[]>([]);
+  const [injections, setInjections] = useState<InjectionRow[]>([]);
+  const [draft, setDraft] = useState<LogShotDraft>(INITIAL_DRAFT);
   const [view, setView] = useState<BodyView>('front');
-  const [siteId, setSiteId] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [takenAt, setTakenAt] = useState<number>(() => Date.now());
+  const [saving, setSaving] = useState(false);
 
-  const timeParts = splitTime(takenAt);
-  const dateParts = splitDate(takenAt);
-  const [monthDraft, setMonthDraft] = useState<string | null>(null);
-  const [dayDraft, setDayDraft] = useState<string | null>(null);
-  const [yearDraft, setYearDraft] = useState<string | null>(null);
-  const [hourDraft, setHourDraft] = useState<string | null>(null);
-  const [minuteDraft, setMinuteDraft] = useState<string | null>(null);
-  const monthRef = useRef<TextInput>(null);
-  const dayRef = useRef<TextInput>(null);
-  const yearRef = useRef<TextInput>(null);
-  const hourRef = useRef<TextInput>(null);
-  const minuteRef = useRef<TextInput>(null);
-
-  const commitMonth = () => {
-    if (monthDraft === null) return;
-    const next = composeDate(takenAt, monthDraft, dateParts.day, dateParts.year);
-    setTakenAt(next);
-    setMonthDraft(null);
-  };
-  const commitDay = () => {
-    if (dayDraft === null) return;
-    const next = composeDate(takenAt, dateParts.month, dayDraft, dateParts.year);
-    setTakenAt(next);
-    setDayDraft(null);
-  };
-  const commitYear = () => {
-    if (yearDraft === null) return;
-    const next = composeDate(takenAt, dateParts.month, dateParts.day, yearDraft);
-    setTakenAt(next);
-    setYearDraft(null);
-  };
-  const commitHour = () => {
-    if (hourDraft === null) return;
-    const next = composeTime(takenAt, hourDraft, timeParts.minute, timeParts.meridiem);
-    setTakenAt(next);
-    setHourDraft(null);
-  };
-  const commitMinute = () => {
-    if (minuteDraft === null) return;
-    const next = composeTime(takenAt, timeParts.hour, minuteDraft, timeParts.meridiem);
-    setTakenAt(next);
-    setMinuteDraft(null);
-  };
-  const setMeridiem = (m: 'AM' | 'PM') => {
-    if (m === timeParts.meridiem) return;
-    haptic();
-    setTakenAt(composeTime(takenAt, timeParts.hour, timeParts.minute, m));
-  };
+  const selectMedication = useCallback((medication: MedicationRow, history: InjectionRow[]) => {
+    const rotationHistory = history.flatMap((injection) => (
+      injection.site_id ? [{ siteId: injection.site_id, takenAt: injection.taken_at }] : []
+    ));
+    const suggested = recommendNextSite(rotationHistory, medication.default_route);
+    setDraft((current) => ({
+      ...current,
+      medicationId: medication.id,
+      dose: medication.default_dose,
+      suggestedSiteId: suggested?.id ?? null,
+      selectedSiteId: suggested?.id ?? null,
+    }));
+    if (suggested) setView(suggested.view);
+    selectionHaptic();
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      const all = await listMedications();
-      const active = all.filter((m) => m.status !== 'archived');
-      setMeds(active);
-      const initial = params.medicationId ?? active[0]?.id ?? null;
-      const initialMed = initial ? active.find((m) => m.id === initial) : null;
-      if (initialMed) {
-        setMedicationId(initialMed.id);
-        setDose(initialMed.default_dose);
-      }
-    })();
-  }, [params.medicationId]);
+    Promise.all([listMedications(), listInjections({ limit: 500 })])
+      .then(([medicationRows, injectionRows]) => {
+        const active = medicationRows.filter((medication) => medication.status === 'active');
+        const requested = params.medicationId
+          ? active.find((medication) => medication.id === params.medicationId)
+          : undefined;
+        const initial = requested ?? active[0];
+        setMedications(active);
+        setInjections(injectionRows);
+        if (initial) selectMedication(initial, injectionRows);
+      })
+      .catch(() => {});
+  }, [params.medicationId, selectMedication]);
 
-  const selectMed = (id: string) => {
-    const m = meds.find((x) => x.id === id);
-    if (!m) return;
-    setMedicationId(id);
-    setDose(m.default_dose);
+  const selectedMedication = medications.find((medication) => medication.id === draft.medicationId) ?? null;
+  const selectedSite = draft.selectedSiteId ? getBodySite(draft.selectedSiteId) : undefined;
+  const recentSiteIds = useMemo(
+    () => injections.flatMap((injection) => injection.site_id ? [injection.site_id] : []).slice(0, 4),
+    [injections],
+  );
+  const diagramWidth = Math.min(190, width - spacing.screen * 2 - spacing.xl * 2);
+
+  const selectSite = (site: BodySite) => {
+    setDraft((current) => ({ ...current, selectedSiteId: site.id }));
+    selectionHaptic();
   };
 
-  const onPickSavedMed = (id: string) => {
-    if (id !== medicationId) haptic();
-    selectMed(id);
-    setMedOpen(false);
-  };
-
-  const onPickPreset = async (presetId: string) => {
-    const preset = getPreset(presetId);
-    if (!preset) return;
-    setCreatingFromPreset(presetId);
-    haptic();
-    try {
-      const colorIdx = await nextColorIndex();
-      const created = await createMedication({
-        name: preset.name,
-        presetId: preset.id,
-        defaultDose: preset.defaultDose,
-        defaultUnit: preset.unit,
-        defaultRoute: preset.defaultRoute,
-        frequencyKind: preset.defaultFrequency.kind,
-        frequencyValue: preset.defaultFrequency.value ?? null,
-        halfLifeHours: preset.halfLifeHours,
-        tmaxHours: preset.tmaxHours,
-        colorIndex: colorIdx,
-      });
-      const newMeds = [...meds, created].sort((a, b) => a.name.localeCompare(b.name));
-      setMeds(newMeds);
-      setMedicationId(created.id);
-      setDose(created.default_dose);
-      setMedOpen(false);
-      bumpVersion();
-    } catch (err: any) {
-      Alert.alert('Could not add medication', String(err?.message ?? err));
-    } finally {
-      setCreatingFromPreset(null);
-    }
-  };
-
-  const med = meds.find((m) => m.id === medicationId) ?? null;
-  const selectedSite = siteId ? getBodySite(siteId) : null;
-
-  const presetItems = useMemo(() => {
-    const savedPresetIds = new Set(meds.map((m) => m.preset_id).filter(Boolean) as string[]);
-    return peptidePresets.filter((p) => !savedPresetIds.has(p.id));
-  }, [meds]);
-
-  const onSubmit = async () => {
-    if (!med) {
-      Alert.alert('Pick a medication first.');
-      return;
-    }
-    if (dose <= 0) {
-      Alert.alert('Enter a dose greater than zero.');
-      return;
-    }
-    setSubmitting(true);
+  const save = async () => {
+    if (!selectedMedication || draft.dose <= 0 || saving) return;
+    setSaving(true);
     try {
       await createInjection({
-        medicationId: med.id,
-        dose,
-        unit: med.default_unit,
-        route: med.default_route,
-        siteId,
-        takenAt,
+        medicationId: selectedMedication.id,
+        dose: draft.dose,
+        unit: selectedMedication.default_unit,
+        route: selectedMedication.default_route,
+        siteId: draft.selectedSiteId,
+        takenAt: draft.takenAt,
+        notes: draft.notes.trim() || null,
       });
       bumpVersion();
-      haptic('success');
+      await refreshScheduledReminders().catch(() => {});
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
       safeBack('/');
-      recordPositiveEvent()
-        .then(() => maybePromptForReview())
-        .catch(() => {});
-    } catch (err: any) {
-      Alert.alert('Could not save', String(err?.message ?? err));
-    } finally {
-      setSubmitting(false);
+      recordPositiveEvent().then(() => maybePromptForReview()).catch(() => {});
+    } catch (error: unknown) {
+      Alert.alert('Could not log shot', error instanceof Error ? error.message : 'Try again.');
+      setSaving(false);
     }
   };
 
-  const monthDisplay = monthDraft ?? dateParts.month;
-  const dayDisplay = dayDraft ?? dateParts.day;
-  const yearDisplay = yearDraft ?? dateParts.year;
-  const hourDisplay = hourDraft ?? timeParts.hour;
-  const minuteDisplay = minuteDraft ?? timeParts.minute;
-
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.root}>
       <Header
-        title="Log Shot"
-        leading={
-          <Pressable onPress={() => safeBack('/')} hitSlop={10} style={styles.closeBtn}>
+        title="Log shot"
+        leading={(
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => safeBack('/')} style={styles.close}>
             <X size={22} color={colors.ink} />
           </Pressable>
-        }
-        trailing={
-          <Pressable onPress={onSubmit} hitSlop={10} disabled={submitting || !med}>
-            <Check size={22} color={!med ? colors.inkSubtle : colors.red} />
-          </Pressable>
-        }
+        )}
       />
-
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: spacing.hero }}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ paddingHorizontal: spacing.screen }}>
-          <Field label="Medication">
-            <Pressable
-              onPress={() => {
-                haptic();
-                setMedOpen((v) => !v);
-              }}
-              style={styles.dropdownTrigger}
-            >
-              <Text variant="bodyStrong" color={med ? colors.ink : colors.inkMuted}>
-                {med?.name ?? 'Choose a peptide'}
-              </Text>
-              {medOpen ? (
-                <ChevronUp size={20} color={colors.inkMuted} />
-              ) : (
-                <ChevronDown size={20} color={colors.inkMuted} />
-              )}
-            </Pressable>
-            {medOpen && (
-              <View style={styles.dropdownPanel}>
-                <ScrollView style={{ maxHeight: 360 }} nestedScrollEnabled>
-                  {meds.length > 0 && (
-                    <>
-                      <Text variant="caption" color={colors.inkMuted} style={styles.dropdownGroupLabel}>
-                        Your meds
-                      </Text>
-                      {meds.map((m) => {
-                        const active = m.id === medicationId;
-                        return (
-                          <Pressable
-                            key={m.id}
-                            onPress={() => onPickSavedMed(m.id)}
-                            style={[styles.dropdownRow, active && styles.dropdownRowActive]}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text variant="bodyStrong" color={active ? colors.red : colors.ink}>
-                                {m.name}
-                              </Text>
-                              <Text variant="caption" color={colors.inkMuted}>
-                                {m.default_dose} {m.default_unit} · {m.default_route === 'sc' ? 'Subcutaneous' : 'Intramuscular'}
-                              </Text>
-                            </View>
-                            {active && <View style={styles.activeDot} />}
-                          </Pressable>
-                        );
-                      })}
-                    </>
-                  )}
-                  {presetItems.length > 0 && (
-                    <>
-                      <Text variant="caption" color={colors.inkMuted} style={styles.dropdownGroupLabel}>
-                        Add from library
-                      </Text>
-                      {presetItems.map((p) => {
-                        const isCreating = creatingFromPreset === p.id;
-                        return (
-                          <Pressable
-                            key={p.id}
-                            onPress={() => onPickPreset(p.id)}
-                            disabled={isCreating}
-                            style={[styles.dropdownRow, isCreating && { opacity: 0.5 }]}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text variant="bodyStrong" color={colors.ink}>
-                                {p.name}
-                              </Text>
-                              <Text variant="caption" color={colors.inkMuted}>
-                                {presetCategoryLabel[p.category]} · {p.defaultDose} {p.unit}
-                              </Text>
-                            </View>
-                            <Text variant="caption" color={colors.red}>
-                              {isCreating ? 'Adding…' : 'Add +'}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </>
-                  )}
-                </ScrollView>
-              </View>
-            )}
-          </Field>
-
-          <Field label="Dose">
-            <Stepper
-              value={dose}
-              onChange={setDose}
-              step={med?.default_unit === 'mcg' ? 25 : 0.1}
-              min={0}
-              format={(v) => (v < 1 ? v.toFixed(2) : v.toFixed(1))}
-              unit={med?.default_unit ?? ''}
-            />
-          </Field>
-
-          <Field label="Date & Time">
-            <View style={styles.dateTimeControl}>
-              <View style={styles.dateRow}>
-                <TextInput
-                  ref={monthRef}
-                  value={monthDisplay}
-                  onFocus={() => setMonthDraft(dateParts.month)}
-                  onChangeText={setMonthDraft}
-                  onBlur={commitMonth}
-                  onSubmitEditing={() => dayRef.current?.focus()}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={2}
-                  selectTextOnFocus
-                  style={styles.dateNumInput}
-                />
-                <Text variant="bodyStrong" color={colors.inkMuted}>/</Text>
-                <TextInput
-                  ref={dayRef}
-                  value={dayDisplay}
-                  onFocus={() => setDayDraft(dateParts.day)}
-                  onChangeText={setDayDraft}
-                  onBlur={commitDay}
-                  onSubmitEditing={() => yearRef.current?.focus()}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={2}
-                  selectTextOnFocus
-                  style={styles.dateNumInput}
-                />
-                <Text variant="bodyStrong" color={colors.inkMuted}>/</Text>
-                <TextInput
-                  ref={yearRef}
-                  value={yearDisplay}
-                  onFocus={() => setYearDraft(dateParts.year)}
-                  onChangeText={setYearDraft}
-                  onBlur={commitYear}
-                  onSubmitEditing={() => yearRef.current?.blur()}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={4}
-                  selectTextOnFocus
-                  style={styles.yearInput}
-                />
-              </View>
-              <View style={styles.timeRow}>
-                <TextInput
-                  ref={hourRef}
-                  value={hourDisplay}
-                  onFocus={() => setHourDraft(timeParts.hour)}
-                  onChangeText={setHourDraft}
-                  onBlur={commitHour}
-                  onSubmitEditing={() => minuteRef.current?.focus()}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={2}
-                  selectTextOnFocus
-                  style={styles.timeNumInput}
-                />
-                <Text variant="h3" color={colors.inkMuted}>:</Text>
-                <TextInput
-                  ref={minuteRef}
-                  value={minuteDisplay}
-                  onFocus={() => setMinuteDraft(timeParts.minute)}
-                  onChangeText={setMinuteDraft}
-                  onBlur={commitMinute}
-                  onSubmitEditing={() => minuteRef.current?.blur()}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={2}
-                  selectTextOnFocus
-                  style={styles.timeNumInput}
-                />
-                <View style={styles.meridiemGroup}>
-                  {(['AM', 'PM'] as const).map((m) => {
-                    const active = m === timeParts.meridiem;
-                    return (
-                      <Pressable
-                        key={m}
-                        onPress={() => setMeridiem(m)}
-                        style={[styles.meridiemBtn, active && styles.meridiemBtnActive]}
-                      >
-                        <Text variant="smallStrong" color={active ? colors.inkInverse : colors.inkMuted}>
-                          {m}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            </View>
-          </Field>
-        </View>
-
-        <Section eyebrow="Site" gap="sm">
-          <View style={styles.viewToggleWrap}>
-            <TimeRangeToggle
-              options={['front', 'back'] as const}
-              value={view}
-              onChange={(v) => {
-                haptic();
-                setView(v as BodyView);
-              }}
-              getLabel={(o) => (o === 'front' ? 'Front' : 'Back')}
-            />
-          </View>
-          <Card padding="md" style={{ alignItems: 'center' }}>
-            <BodyDiagram
-              view={view}
-              selectedId={siteId}
-              onSelect={(s) => {
-                haptic();
-                setSiteId(s.id);
-              }}
-            />
-            <View style={styles.siteLabelRow}>
-              {selectedSite ? (
-                <Text variant="bodyStrong">{selectedSite.label}</Text>
-              ) : (
-                <Text variant="small" color={colors.inkMuted}>Tap a site (optional)</Text>
-              )}
-            </View>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {medications.length === 0 ? (
+          <Card style={styles.empty}>
+            <Text variant="h2">Add a medication first.</Text>
+            <Text color={colors.inkMuted}>Poke needs a dose and route before it can log your shot.</Text>
+            <Button onPress={() => router.push('/medications/new')}>Add medication</Button>
           </Card>
-        </Section>
+        ) : (
+          <>
+            <View style={styles.section}>
+              <Text variant="smallStrong">Medication</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {medications.map((medication) => {
+                  const selected = medication.id === draft.medicationId;
+                  return (
+                    <Pressable
+                      key={medication.id}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      onPress={() => selectMedication(medication, injections)}
+                      style={[styles.chip, selected && styles.chipSelected]}
+                    >
+                      <Text variant="smallStrong" color={selected ? colors.inkInverse : colors.ink}>{medication.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-        <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.lg }}>
-          <Button onPress={onSubmit} disabled={submitting || !med} trailingChevron>
-            {submitting ? 'Saving…' : 'Save shot'}
-          </Button>
-        </View>
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text variant="smallStrong">Dose</Text>
+                <Text variant="small" color={colors.inkMuted}>Your usual dose</Text>
+              </View>
+              <Stepper
+                value={draft.dose}
+                onChange={(dose) => setDraft((current) => ({ ...current, dose }))}
+                step={selectedMedication?.default_unit === 'mcg' ? 25 : draft.dose < 1 ? 0.05 : 0.1}
+                min={0}
+                format={(value) => value < 1 ? value.toFixed(2) : value.toFixed(1)}
+                unit={selectedMedication?.default_unit ?? ''}
+              />
+            </View>
+
+            {selectedMedication ? (
+              <Card style={styles.siteCard}>
+                <View style={styles.sectionHead}>
+                  <View style={styles.siteTitle}>
+                    <MapPin size={18} color={colors.accent} />
+                    <Text variant="smallStrong">Injection site</Text>
+                  </View>
+                  <TimeRangeToggle options={['front', 'back'] as const} value={view} onChange={setView} size="sm" />
+                </View>
+                <View style={styles.diagram}>
+                  <BodyDiagram
+                    width={diagramWidth}
+                    height={diagramWidth * 2}
+                    view={view}
+                    route={selectedMedication.default_route}
+                    selectedId={draft.selectedSiteId}
+                    suggestedId={draft.suggestedSiteId}
+                    recentSiteIds={recentSiteIds}
+                    onSelect={selectSite}
+                  />
+                </View>
+                <Text variant="smallStrong" align="center">
+                  {selectedSite?.label ?? 'Tap a site to choose it'}
+                </Text>
+                <Text variant="caption" color={colors.inkMuted} align="center">
+                  Tap the diagram to override the suggestion.
+                </Text>
+              </Card>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={draft.detailsOpen ? 'Hide details' : 'Show details'}
+              accessibilityState={{ expanded: draft.detailsOpen }}
+              onPress={() => setDraft((current) => ({ ...current, detailsOpen: !current.detailsOpen }))}
+              style={styles.detailsButton}
+            >
+              <View>
+                <Text variant="bodyStrong">Details</Text>
+                <Text variant="caption" color={colors.inkMuted}>{fmtTime(draft.takenAt)} · notes</Text>
+              </View>
+              {draft.detailsOpen
+                ? <ChevronUp size={20} color={colors.inkMuted} />
+                : <ChevronDown size={20} color={colors.inkMuted} />}
+            </Pressable>
+
+            {draft.detailsOpen ? (
+              <Card style={styles.details}>
+                <View style={styles.section}>
+                  <Text variant="smallStrong">Exact time</Text>
+                  <InlineTimePicker
+                    value={timeValue(draft.takenAt)}
+                    onChange={(value) => setDraft((current) => ({ ...current, takenAt: withTime(current.takenAt, value) }))}
+                    label="Shot time"
+                  />
+                </View>
+                <View style={styles.section}>
+                  <Text variant="smallStrong">Notes</Text>
+                  <Input
+                    value={draft.notes}
+                    onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
+                    placeholder="Optional note"
+                  />
+                </View>
+              </Card>
+            ) : null}
+
+            <Button disabled={saving || !selectedMedication} onPress={save}>
+              {saving ? 'Logging shot' : 'Log shot'}
+            </Button>
+          </>
+        )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
+function timeValue(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function withTime(timestamp: number, value: string): number {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return timestamp;
+  const hour = Number.parseInt(match[1] ?? '', 10);
+  const minute = Number.parseInt(match[2] ?? '', 10);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return timestamp;
+  const date = new Date(timestamp);
+  date.setHours(hour, minute, 0, 0);
+  return date.getTime();
+}
+
+function selectionHaptic() {
+  if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+}
+
 const styles = StyleSheet.create({
-  closeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
-  dropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    minHeight: 56,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  dropdownPanel: {
-    marginTop: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  dropdownGroupLabel: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  dropdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minHeight: 56,
-    gap: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
-  },
-  dropdownRowActive: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.red,
-  },
-  dateTimeControl: {
-    width: '100%',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    gap: spacing.sm,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-    gap: 6,
-  },
-  dateNumInput: {
-    ...typo.bodyStrong,
-    color: colors.ink,
-    textAlign: 'center',
-    width: 42,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  yearInput: {
-    ...typo.bodyStrong,
-    color: colors.ink,
-    textAlign: 'center',
-    width: 62,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 56,
-    gap: 6,
-  },
-  timeNumInput: {
-    ...typo.h3,
-    color: colors.ink,
-    textAlign: 'center',
-    width: 44,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  meridiemGroup: {
-    flexDirection: 'row',
-    gap: 4,
-    marginLeft: 6,
-  },
-  meridiemBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minHeight: 36,
-    minWidth: 40,
+  close: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  meridiemBtnActive: {
-    backgroundColor: colors.surfaceInverse,
-    borderColor: colors.surfaceInverse,
+  content: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    gap: spacing.xxl,
+    paddingHorizontal: spacing.screen,
+    paddingBottom: spacing.hero,
   },
-  viewToggleWrap: {
-    alignItems: 'center',
+  section: {
+    gap: spacing.md,
   },
-  siteLabelRow: {
-    marginTop: spacing.sm,
-    minHeight: 22,
+  sectionHead: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  chips: {
+    gap: spacing.sm,
+  },
+  chip: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+  },
+  chipSelected: {
+    backgroundColor: colors.accent,
+  },
+  siteCard: {
+    gap: spacing.md,
+  },
+  siteTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  diagram: {
+    alignItems: 'center',
+    maxHeight: 390,
+    overflow: 'hidden',
+  },
+  detailsButton: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+  },
+  details: {
+    gap: spacing.xl,
+  },
+  empty: {
+    gap: spacing.lg,
   },
 });

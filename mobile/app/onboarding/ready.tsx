@@ -25,13 +25,14 @@ export default function ReadyScreen() {
   const goalKind = useOnboardingStore((state) => state.goalKind);
   const concerns = useOnboardingStore((state) => state.concerns);
   const reminder = useOnboardingStore((state) => state.reminder);
+  const weight = useOnboardingStore((state) => state.weight);
   const setGate = useOnboardingStore((state) => state.setGate);
   const resetDraft = useOnboardingStore((state) => state.resetDraft);
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
+  const scale = useRef(new Animated.Value(0.98)).current;
 
   useEffect(() => {
     let active = true;
@@ -41,24 +42,30 @@ export default function ReadyScreen() {
         if (!active) return;
         if (reducedMotion) {
           opacity.setValue(1);
-          translateY.setValue(0);
+          scale.setValue(1);
           return;
         }
         animation = Animated.parallel([
-          Animated.timing(opacity, { toValue: 1, duration: 320, useNativeDriver: false }),
-          Animated.timing(translateY, { toValue: 0, duration: 320, useNativeDriver: false }),
+          Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: false }),
+          Animated.spring(scale, {
+            toValue: 1,
+            damping: 18,
+            stiffness: 180,
+            mass: 0.7,
+            useNativeDriver: false,
+          }),
         ]);
         animation.start();
       })
       .catch(() => {
         opacity.setValue(1);
-        translateY.setValue(0);
+        scale.setValue(1);
       });
     return () => {
       active = false;
       animation?.stop();
     };
-  }, [opacity, translateY]);
+  }, [opacity, scale]);
 
   const primaryId = medicationIds[0];
   const primaryName = primaryId === 'custom'
@@ -124,12 +131,18 @@ export default function ReadyScreen() {
         </View>
       )}
     >
-      <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      <Animated.View style={{ opacity, transform: [{ scale }] }}>
         <Card padding="xl" style={styles.planCard}>
           <PlanRow label="Medication" value={medicationIds.length > 1 ? `${primaryName} + ${medicationIds.length - 1} more` : primaryName} />
           <PlanRow label="Dose" value={`${schedule.doseText} ${schedule.unit}`} />
           <PlanRow label="Shot day" value={scheduleLabel} />
           <PlanRow label="Goal" value={goalLabel} />
+          {weight.kind === 'entered' ? (
+            <PlanRow
+              label="Weight"
+              value={`${weight.currentText.trim()} ${weight.unit} now · goal ${weight.goalText.trim()} ${weight.unit}`}
+            />
+          ) : null}
           {concernLabels.length > 0 ? (
             <Text color={colors.inkMuted} style={styles.concernLine}>
               {"We'll keep "}{concernLabels.join(', ')} on your watch list.

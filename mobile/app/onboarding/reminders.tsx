@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
+import { InlineTimePicker } from '@/components/InlineTimePicker';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
 import { ensureNotificationPermission } from '@/services/notifications';
@@ -17,13 +17,12 @@ export default function RemindersScreen() {
   const setReminderEnabled = useOnboardingStore((state) => state.setReminderEnabled);
   const [requesting, setRequesting] = useState(false);
   const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
-  const timeIsValid = /^([01]\d|2[0-3]):[0-5]\d$/.test(reminder.time);
   const dayLabel = schedule.kind === 'ready' && schedule.frequencyKind !== 'daily'
     ? SHOT_DAY_OPTIONS.find((day) => day.value === schedule.shotDay)?.label ?? 'shot day'
     : 'each day';
 
   const accept = async () => {
-    if (!timeIsValid || requesting) return;
+    if (requesting) return;
     setRequesting(true);
     setPermissionMessage(null);
     try {
@@ -47,7 +46,7 @@ export default function RemindersScreen() {
       subtitle={`Poke can remind you at your usual time on ${dayLabel}.`}
       footer={(
         <View style={styles.actions}>
-          <Button disabled={!timeIsValid || requesting} onPress={accept}>
+          <Button disabled={requesting} onPress={accept}>
             {requesting ? 'Checking permission' : 'Turn on reminders'}
           </Button>
           <Button
@@ -65,18 +64,10 @@ export default function RemindersScreen() {
     >
       <View style={styles.timeCard}>
         <Text variant="smallStrong">Reminder time</Text>
-        <Input
+        <InlineTimePicker
           value={reminder.time}
-          onChangeText={setReminderTime}
-          placeholder="09:00"
-          inputMode="text"
-          maxLength={5}
-          autoCapitalize="none"
-          autoCorrect={false}
+          onChange={setReminderTime}
         />
-        <Text variant="small" color={timeIsValid ? colors.inkMuted : colors.danger}>
-          {timeIsValid ? 'Use 24-hour time.' : 'Enter a time like 09:00.'}
-        </Text>
         {permissionMessage ? <Text selectable variant="small" color={colors.danger}>{permissionMessage}</Text> : null}
       </View>
     </OnboardingScreen>

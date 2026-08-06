@@ -10,7 +10,7 @@ export default function WelcomeScreen() {
   return (
     <OnboardingScreen
       step={0}
-      contentStyle={styles.content}
+      bodyStyle={styles.hero}
       footer={<Button onPress={() => router.push('/onboarding/taking')}>Get started</Button>}
     >
       <View style={styles.wordmarkRow}>
@@ -26,7 +26,8 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  hero: {
+    flex: 1,
     justifyContent: 'center',
   },
   wordmarkRow: {

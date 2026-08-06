@@ -9,6 +9,7 @@ import { colors, fonts, radius, spacing } from '../theme';
 interface ButtonProps {
   onPress?: () => void;
   children: string;
+  accessibilityLabel?: string;
   variant?: 'primary' | 'secondary' | 'ghost' | 'outline';
   size?: 'md' | 'sm';
   trailingChevron?: boolean;
@@ -21,6 +22,7 @@ interface ButtonProps {
 export function Button({
   onPress, children, variant = 'primary', size = 'md',
   trailingChevron = false, leadingIcon, disabled = false, style, fullWidth = true,
+  accessibilityLabel = children,
 }: ButtonProps) {
   const [pressed, setPressed] = useState(false);
   const palette = paletteFor(variant, disabled);
@@ -29,6 +31,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       onPress={onPress}
       onPressIn={() => {

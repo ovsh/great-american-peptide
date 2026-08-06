@@ -90,8 +90,8 @@ export default function AddMedicationScreen() {
       });
       bumpVersion();
       safeBack('/medications');
-    } catch (err: any) {
-      Alert.alert('Could not save', String(err?.message ?? err));
+    } catch (err: unknown) {
+      Alert.alert('Could not save', err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +118,7 @@ export default function AddMedicationScreen() {
         }
         trailing={step === 'config' ? (
           <Pressable onPress={onSave} hitSlop={10} disabled={submitting}>
-            <Check size={22} color={colors.red} />
+            <Check size={22} color={colors.accent} />
           </Pressable>
         ) : null}
       />

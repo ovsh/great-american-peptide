@@ -1,809 +1,549 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Alert, TextInput, View, ScrollView, StyleSheet, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronRight, Clock3 } from 'lucide-react-native';
+import { Check, ChevronRight, Flame, Plus, Syringe } from 'lucide-react-native';
+import { format, isSameDay } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MastHead } from '@/components/MastHead';
-import { TitleBlock } from '@/components/TitleBlock';
-import { Section } from '@/components/Section';
-import { Card } from '@/components/Card';
-import { Text } from '@/components/Text';
-import { Eyebrow } from '@/components/Eyebrow';
-import { Pill } from '@/components/Pill';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Sparkline } from '@/components/Sparkline';
-import { LineChart } from '@/components/LineChart';
-import { MedVialIcon } from '@/components/MedVialIcon';
-import { BottomSheet } from '@/components/BottomSheet';
-import { TimeRangeToggle } from '@/components/TimeRangeToggle';
-
-import { listMedications } from '@/repositories/medications';
+import { Text } from '@/components/Text';
+import type {
+  InjectionRow,
+  MeasurementRow,
+  MedicationRow,
+  PreferencesRow,
+  SideEffectKind,
+  SideEffectLogRow,
+} from '@/db/types';
+import { estimatedLevelAt, tmaxOrDefault } from '@/domain/pk';
+import { deriveScheduleStreak, frequencyHours, nextDoseAt, type ScheduleStreak } from '@/domain/scheduling';
+import { getBodySite } from '@/domain/bodySites';
+import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
-import {
-  createMeasurement,
-  earliestMeasurement,
-  latestMeasurement,
-  listMeasurements,
-  updateManualMeasurement,
-} from '@/repositories/measurements';
-import { getPreferences, updateGoalWeight, updatePreferences } from '@/repositories/preferences';
-import type { MedicationRow, InjectionRow, MeasurementRow, PreferencesRow } from '@/db/types';
-import { estimatedLevelAt, levelTrajectory, trendLabel, tmaxOrDefault } from '@/domain/pk';
-import { frequencyHours } from '@/domain/scheduling';
-import { fmtDate, fmtDateTime } from '@/utils/date';
-import { formatDose, kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
+import { listMeasurements } from '@/repositories/measurements';
+import { listMedications } from '@/repositories/medications';
+import { getPreferences } from '@/repositories/preferences';
+import { listSideEffects } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
-import { colors, fonts, radius, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
+import { endOfDay, fmtTime, startOfDay } from '@/utils/date';
 
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-interface NextStep {
-  med: MedicationRow;
-  fireAt: number;
-  overdue: boolean;
+type TodayDoseAction =
+  | { kind: 'none' }
+  | { kind: 'due'; medicationId: string }
+  | { kind: 'logged'; injection: InjectionRow };
+
+interface MedicationSummary {
+  medication: MedicationRow;
+  injections: InjectionRow[];
+  nextAt: number;
+  level: number | null;
+  weekLevels: number[];
+  streak: ScheduleStreak;
 }
 
-function nextStepFor(med: MedicationRow, lastTakenAt: number | null, reminderTimeHHMM: string): NextStep {
-  const intervalH = frequencyHours(med.frequency_kind, med.frequency_value);
-  const intervalMs = intervalH * HOUR;
-  const [hour, minute] = reminderTimeHHMM.split(':').map((n) => parseInt(n, 10));
-  let fire = (lastTakenAt ?? Date.now() - intervalMs) + intervalMs;
-  const d = new Date(fire);
-  d.setHours(hour ?? 9, minute ?? 0, 0, 0);
-  fire = d.getTime();
-  if (fire < Date.now() - 12 * HOUR && lastTakenAt == null) {
-    const today = new Date();
-    today.setHours(hour ?? 9, minute ?? 0, 0, 0);
-    fire = today.getTime();
-    if (fire < Date.now()) fire += DAY;
+interface TodayDashboard {
+  medication: MedicationSummary | null;
+  weight: MeasurementRow | null;
+  weightSeries: number[];
+  weightUnit: WeightUnit;
+  sideEffect: SideEffectLogRow | null;
+  action: TodayDoseAction;
+}
+
+const EFFECT_LABELS: Record<SideEffectKind, string> = {
+  nausea: 'Nausea',
+  fatigue: 'Fatigue',
+  constipation: 'Constipation',
+  headache: 'Headache',
+  injection_site: 'Injection site',
+  appetite_loss: 'Appetite loss',
+  other: 'Other',
+};
+
+export default function TodayScreen() {
+  const insets = useSafeAreaInsets();
+  const dataVersion = useAppStore((state) => state.dataVersion);
+  const [medications, setMedications] = useState<MedicationRow[]>([]);
+  const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
+  const [weights, setWeights] = useState<MeasurementRow[]>([]);
+  const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
+  const [sideEffects, setSideEffects] = useState<SideEffectLogRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    const [medicationRows, weightRows, preferenceRow, effectRows] = await Promise.all([
+      listMedications(),
+      listMeasurements('weight', { limit: 30 }),
+      getPreferences(),
+      listSideEffects({ limit: 1 }),
+    ]);
+    const active = medicationRows.filter((medication) => medication.status === 'active');
+    const shotLists = await Promise.all(
+      active.map((medication) => listInjections({ medicationId: medication.id, limit: 500 })),
+    );
+    const byMedication: Record<string, InjectionRow[]> = {};
+    active.forEach((medication, index) => {
+      byMedication[medication.id] = shotLists[index] ?? [];
+    });
+    setMedications(active);
+    setInjections(byMedication);
+    setWeights(weightRows);
+    setPreferences(preferenceRow);
+    setSideEffects(effectRows);
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [dataVersion, load]);
+
+  const dashboard = useMemo(
+    () => buildDashboard({ medications, injections, weights, preferences, sideEffects, now: Date.now() }),
+    [injections, medications, preferences, sideEffects, weights],
+  );
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
+      >
+        <TodayHeader streak={dashboard.medication?.streak.current ?? 0} />
+
+        {dashboard.medication ? (
+          <>
+            <MedicationCard summary={dashboard.medication} />
+            <DoseAction action={dashboard.action} />
+          </>
+        ) : (
+          <EmptyMedication />
+        )}
+
+        <View style={styles.tiles}>
+          <WeightTile dashboard={dashboard} />
+          <SideEffectTile sideEffect={dashboard.sideEffect} />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function buildDashboard({
+  medications,
+  injections,
+  weights,
+  preferences,
+  sideEffects,
+  now,
+}: {
+  medications: MedicationRow[];
+  injections: Record<string, InjectionRow[]>;
+  weights: MeasurementRow[];
+  preferences: PreferencesRow | null;
+  sideEffects: SideEffectLogRow[];
+  now: number;
+}): TodayDashboard {
+  const reminderTime = preferences?.reminder_time ?? '09:00';
+  const summaries = medications.map((medication): MedicationSummary => {
+    const medicationInjections = injections[medication.id] ?? [];
+    const doses = medicationInjections.map((injection) => ({ takenAt: injection.taken_at, dose: injection.dose }));
+    const halfLife = medication.half_life_hours;
+    const tmax = halfLife ? tmaxOrDefault(halfLife, medication.tmax_hours) : 0;
+    const level = halfLife ? estimatedLevelAt(doses, halfLife, tmax, now) : null;
+    const weekLevels = halfLife
+      ? Array.from({ length: 7 }, (_, index) => (
+          estimatedLevelAt(doses, halfLife, tmax, now - (6 - index) * DAY_MS)
+        ))
+      : [];
+    const lastTakenAt = medicationInjections[0]?.taken_at ?? null;
+    return {
+      medication,
+      injections: medicationInjections,
+      nextAt: nextDoseAt({
+        frequencyKind: medication.frequency_kind,
+        frequencyValue: medication.frequency_value,
+        lastTakenAt,
+        createdAt: medication.created_at,
+        reminderTime,
+        now,
+      }),
+      level,
+      weekLevels,
+      streak: deriveScheduleStreak(
+        medicationInjections.map((injection) => injection.taken_at),
+        frequencyHours(medication.frequency_kind, medication.frequency_value),
+        now,
+      ),
+    };
+  }).sort((a, b) => a.nextAt - b.nextAt);
+
+  const medication = summaries[0] ?? null;
+  const latestShot = medication?.injections[0];
+  const action: TodayDoseAction = latestShot && isSameDay(latestShot.taken_at, now)
+    ? { kind: 'logged', injection: latestShot }
+    : medication && medication.nextAt <= endOfDay(now)
+      ? { kind: 'due', medicationId: medication.medication.id }
+      : { kind: 'none' };
+  const weightUnit = preferences?.weight_unit ?? 'lb';
+  const weightSeries = weights
+    .slice()
+    .reverse()
+    .map((weight) => convertWeight(weight.value, weight.unit, weightUnit));
+
+  return {
+    medication,
+    weight: weights[0] ?? null,
+    weightSeries,
+    weightUnit,
+    sideEffect: sideEffects[0] ?? null,
+    action,
+  };
+}
+
+function TodayHeader({ streak }: { streak: number }) {
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerCopy}>
+        <Text variant="display">Today</Text>
+        <Text variant="small" color={colors.inkMuted}>{format(new Date(), 'EEEE, MMMM d')}</Text>
+      </View>
+      {streak >= 2 ? (
+        <View style={styles.streakChip}>
+          <Flame size={17} fill={colors.accent} color={colors.accent} />
+          <Text variant="smallStrong" color={colors.accent}>{streak}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function MedicationCard({ summary }: { summary: MedicationSummary }) {
+  const { medication, level, weekLevels, nextAt } = summary;
+  return (
+    <Card style={styles.medicationCard}>
+      <View style={styles.medicationHead}>
+        <Text variant="small" color={colors.inkMuted}>Estimated current level</Text>
+        <View style={styles.medicationChip}>
+          <Text variant="caption" color={colors.accent}>{medication.name}</Text>
+        </View>
+      </View>
+      <View style={styles.levelRow}>
+        <Text style={styles.levelValue}>{level === null ? '—' : formatLevel(level, medication.default_unit)}</Text>
+        <Text variant="bodyStrong" color={colors.inkMuted}>{level === null ? 'No estimate' : medication.default_unit}</Text>
+      </View>
+      {weekLevels.length === 7 ? <WeekBars levels={weekLevels} /> : null}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={`View ${medication.name} level details`}
+        onPress={() => router.push({ pathname: '/reports/level', params: { medicationId: medication.id } })}
+        style={styles.nextDose}
+      >
+        <View style={styles.nextDoseCopy}>
+          <Text variant="smallStrong">Shot day is {format(nextAt, 'EEEE')} · {countdownLabel(nextAt)}</Text>
+          <Text variant="caption" color={colors.inkMuted}>{medication.default_dose} {medication.default_unit}</Text>
+        </View>
+        <ChevronRight size={18} color={colors.inkSubtle} />
+      </Pressable>
+    </Card>
+  );
+}
+
+function WeekBars({ levels }: { levels: number[] }) {
+  const maximum = Math.max(...levels, 0.001);
+  return (
+    <View style={styles.weekBars}>
+      {levels.map((level, index) => {
+        const date = Date.now() - (6 - index) * DAY_MS;
+        const today = index === levels.length - 1;
+        return (
+          <View key={date} style={styles.dayBarWrap}>
+            <View
+              style={[
+                styles.dayBar,
+                {
+                  height: 8 + (level / maximum) * 28,
+                  backgroundColor: today ? colors.accent : colors.accentSoft,
+                },
+              ]}
+            />
+            <Text variant="caption" color={today ? colors.accent : colors.inkSubtle}>
+              {format(date, 'EEEEE')}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function DoseAction({ action }: { action: TodayDoseAction }) {
+  if (action.kind === 'none') return null;
+  if (action.kind === 'due') {
+    return (
+      <Button
+        leadingIcon={<Syringe size={21} color={colors.inkInverse} />}
+        onPress={() => router.push({ pathname: '/log-shot', params: { medicationId: action.medicationId } })}
+      >
+        Log shot
+      </Button>
+    );
   }
-  return { med, fireAt: fire, overdue: fire < Date.now() };
+  const site = action.injection.site_id ? getBodySite(action.injection.site_id) : undefined;
+  return (
+    <View style={styles.loggedRow}>
+      <View style={styles.loggedIcon}>
+        <Check size={18} strokeWidth={2.5} color={colors.accent} />
+      </View>
+      <Text variant="smallStrong" style={styles.loggedText}>
+        Logged {fmtTime(action.injection.taken_at).toLocaleLowerCase()}
+        {site ? ` · ${site.label.toLocaleLowerCase()}` : ''}
+      </Text>
+    </View>
+  );
 }
 
-type HomeSheet = 'weight' | 'goal' | 'level' | null;
-type WeightSaveMode = 'update' | 'add';
+function EmptyMedication() {
+  return (
+    <Card style={styles.emptyCard}>
+      <Text variant="h2">Add your medication.</Text>
+      <Text color={colors.inkMuted}>Poke will put your next shot and estimated level here.</Text>
+      <Button onPress={() => router.push('/medications/new')}>Add medication</Button>
+    </Card>
+  );
+}
 
-function convertWeight(value: number, fromUnit: string | null | undefined, toUnit: WeightUnit): number {
+function WeightTile({ dashboard }: { dashboard: TodayDashboard }) {
+  const value = dashboard.weight
+    ? convertWeight(dashboard.weight.value, dashboard.weight.unit, dashboard.weightUnit).toFixed(1)
+    : '—';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Log weight"
+      onPress={() => router.push('/log-weight')}
+      style={({ pressed }) => [styles.tilePressable, pressed && styles.pressed]}
+    >
+      <Card style={styles.tile}>
+        <View style={styles.tileHead}>
+          <Text variant="smallStrong">Weight</Text>
+          <Plus size={17} color={colors.amber} />
+        </View>
+        <View style={styles.tileValueRow}>
+          <Text style={styles.tileValue}>{value}</Text>
+          {dashboard.weight ? <Text variant="caption" color={colors.inkMuted}>{dashboard.weightUnit}</Text> : null}
+        </View>
+        {dashboard.weightSeries.length >= 2 ? (
+          <Sparkline data={dashboard.weightSeries} width={84} height={34} color={colors.amber} />
+        ) : (
+          <Text variant="small" color={colors.inkMuted}>No weight logged yet.</Text>
+        )}
+        <Text variant="smallStrong" color={colors.amber}>+ log</Text>
+      </Card>
+    </Pressable>
+  );
+}
+
+function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLogRow | null }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Log side effect"
+      onPress={() => router.push('/log-side-effect')}
+      style={({ pressed }) => [styles.tilePressable, pressed && styles.pressed]}
+    >
+      <Card style={styles.tile}>
+        <View style={styles.tileHead}>
+          <Text variant="smallStrong">Side effect</Text>
+          <Plus size={17} color={colors.violet} />
+        </View>
+        <Text variant="h2">How are you feeling?</Text>
+        <Text variant="small" color={colors.inkMuted}>
+          {sideEffect
+            ? `Last: ${EFFECT_LABELS[sideEffect.effect]} · ${sideEffect.severity}/10`
+            : 'Add a quick check-in.'}
+        </Text>
+        <Text variant="smallStrong" color={colors.violet}>Quick add</Text>
+      </Card>
+    </Pressable>
+  );
+}
+
+function countdownLabel(timestamp: number): string {
+  const days = Math.round((startOfDay(timestamp) - startOfDay(Date.now())) / DAY_MS);
+  if (days < -1) return `${Math.abs(days)} days overdue`;
+  if (days === -1) return '1 day overdue';
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  return `${days} days`;
+}
+
+function formatLevel(value: number, unit: MedicationRow['default_unit']): string {
+  if (unit === 'mg') return value.toFixed(value < 1 ? 2 : 1);
+  if (unit === 'mcg') return String(Math.round(value));
+  return value.toFixed(value < 1 ? 2 : 1);
+}
+
+function convertWeight(value: number, fromUnit: string | null, toUnit: WeightUnit): number {
   if (fromUnit === 'kg' && toUnit === 'lb') return kgToLb(value);
   if (fromUnit === 'lb' && toUnit === 'kg') return lbToKg(value);
   return value;
 }
 
-function signedWeight(value: number, unit: WeightUnit): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)} ${unit === 'kg' ? 'kg' : 'lbs'}`;
-}
-
-export default function TodayScreen() {
-  const insets = useSafeAreaInsets();
-  const dataVersion = useAppStore((s) => s.dataVersion);
-  const bumpVersion = useAppStore((s) => s.bumpVersion);
-  const [meds, setMeds] = useState<MedicationRow[]>([]);
-  const [injectionsByMed, setInjectionsByMed] = useState<Record<string, InjectionRow[]>>({});
-  const [latestWeight, setLatestWeight] = useState<MeasurementRow | null>(null);
-  const [earliestWeight, setEarliestWeight] = useState<MeasurementRow | null>(null);
-  const [weightHistory, setWeightHistory] = useState<MeasurementRow[]>([]);
-  const [prefs, setPrefs] = useState<PreferencesRow | null>(null);
-  const [nextStep, setNextStep] = useState<NextStep | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeSheet, setActiveSheet] = useState<HomeSheet>(null);
-  const [weightValue, setWeightValue] = useState('');
-  const [selectedWeightUnit, setSelectedWeightUnit] = useState<WeightUnit>('lb');
-  const [weightSaveMode, setWeightSaveMode] = useState<WeightSaveMode>('update');
-  const [goalValue, setGoalValue] = useState('');
-  const [savingSheet, setSavingSheet] = useState(false);
-
-  const load = useCallback(async () => {
-    const [m, w, ew, wh, p] = await Promise.all([
-      listMedications(),
-      latestMeasurement('weight'),
-      earliestMeasurement('weight'),
-      listMeasurements('weight', { limit: 30 }),
-      getPreferences(),
-    ]);
-    const active = m.filter((x) => x.status === 'active');
-    setMeds(active);
-    setLatestWeight(w);
-    setEarliestWeight(ew);
-    setWeightHistory(wh);
-    setPrefs(p);
-
-    const lists = await Promise.all(
-      active.map((med) => listInjections({ medicationId: med.id, fromMs: Date.now() - 30 * DAY })),
-    );
-    const byMed: Record<string, InjectionRow[]> = {};
-    active.forEach((med, i) => { byMed[med.id] = lists[i] ?? []; });
-    setInjectionsByMed(byMed);
-
-    let bestStep: NextStep | null = null;
-    for (const med of active) {
-      const last = byMed[med.id]?.[0]?.taken_at ?? null;
-      const step = nextStepFor(med, last, p.reminder_time);
-      if (!bestStep || step.fireAt < bestStep.fireAt) bestStep = step;
-    }
-    setNextStep(bestStep);
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load, dataVersion]);
-
-  useEffect(() => {
-    const unit = prefs?.weight_unit ?? 'lb';
-    setSelectedWeightUnit(unit);
-    if (latestWeight) {
-      setWeightValue(convertWeight(latestWeight.value, latestWeight.unit, unit).toFixed(1));
-    } else {
-      setWeightValue('');
-    }
-    setGoalValue(prefs?.goal_weight != null ? prefs.goal_weight.toFixed(1) : '');
-    setWeightSaveMode(latestWeight?.source === 'manual' ? 'update' : 'add');
-  }, [latestWeight, prefs]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
-  };
-
-  const weightUnit = prefs?.weight_unit ?? 'lb';
-  const weightSeries = weightHistory.slice().reverse().map((m) => {
-    return convertWeight(m.value, m.unit, weightUnit);
-  });
-  const weightDelta = weightSeries.length >= 2
-    ? weightSeries[weightSeries.length - 1]! - weightSeries[0]!
-    : 0;
-
-  const weightDisplay = latestWeight
-    ? convertWeight(latestWeight.value, latestWeight.unit, weightUnit)
-    : null;
-
-  const baselineWeight = prefs?.start_weight != null
-    ? prefs.start_weight
-    : earliestWeight
-      ? convertWeight(earliestWeight.value, earliestWeight.unit, weightUnit)
-      : null;
-  const baselineAt = prefs?.start_weight_at ?? earliestWeight?.taken_at ?? null;
-  const totalWeightChange = weightDisplay != null && baselineWeight != null
-    ? weightDisplay - baselineWeight
-    : null;
-  const percentWeightChange = totalWeightChange != null && baselineWeight
-    ? (totalWeightChange / baselineWeight) * 100
-    : null;
-  const goalWeight = prefs?.goal_weight ?? null;
-  const remainingToGoal = weightDisplay != null && goalWeight != null
-    ? weightDisplay - goalWeight
-    : null;
-
-  const headerMed = nextStep?.med ?? meds[0];
-  const headerInjections = headerMed ? injectionsByMed[headerMed.id] ?? [] : [];
-  const headerDoses = headerInjections.map((i) => ({ takenAt: i.taken_at, dose: i.dose }));
-  const headerHL = headerMed?.half_life_hours ?? null;
-  const headerTmax = headerHL ? tmaxOrDefault(headerHL, headerMed?.tmax_hours) : 0;
-  const headerLevel = headerHL
-    ? estimatedLevelAt(headerDoses, headerHL, headerTmax, Date.now())
-    : null;
-  const headerTrend = headerHL
-    ? trendLabel(headerDoses, headerHL, headerTmax, Date.now())
-    : null;
-  const headerForecastEnd = headerHL
-    ? Date.now() + Math.max(2 * DAY, headerHL * HOUR * 2)
-    : Date.now();
-  const headerTraj = headerHL
-    ? levelTrajectory(headerDoses, headerHL, headerTmax, Date.now() - 7 * DAY, headerForecastEnd, 80)
-    : null;
-
-  const { width: screenWidth } = useWindowDimensions();
-  const chartWidth = screenWidth - spacing.screen * 2 - spacing.lg * 2;
-  const sheetChartWidth = screenWidth - spacing.screen * 2;
-
-  const saveWeightFromSheet = async () => {
-    const v = parseFloat(weightValue);
-    if (!Number.isFinite(v) || v <= 0) {
-      Alert.alert('Enter a valid weight');
-      return;
-    }
-    setSavingSheet(true);
-    try {
-      if (weightSaveMode === 'update' && latestWeight?.source === 'manual') {
-        await updateManualMeasurement(latestWeight.id, {
-          value: v,
-          unit: selectedWeightUnit,
-          takenAt: latestWeight.taken_at,
-        });
-      } else {
-        await createMeasurement({ kind: 'weight', value: v, unit: selectedWeightUnit, takenAt: Date.now() });
-      }
-
-      const patch: Partial<Omit<PreferencesRow, 'id' | 'updated_at'>> = {
-        weight_unit: selectedWeightUnit,
-      };
-      if (prefs && prefs.weight_unit !== selectedWeightUnit) {
-        if (prefs.start_weight != null) {
-          patch.start_weight = convertWeight(prefs.start_weight, prefs.weight_unit, selectedWeightUnit);
-        }
-        if (prefs.goal_weight != null) {
-          patch.goal_weight = convertWeight(prefs.goal_weight, prefs.weight_unit, selectedWeightUnit);
-        }
-      }
-
-      if (prefs?.start_weight == null) {
-        const first = await earliestMeasurement('weight');
-        if (first) {
-          patch.start_weight = convertWeight(first.value, first.unit, selectedWeightUnit);
-          patch.start_weight_at = first.taken_at;
-        }
-      }
-
-      await updatePreferences(patch);
-      bumpVersion();
-      await load();
-      setActiveSheet(null);
-    } catch (err: any) {
-      Alert.alert('Could not save weight', String(err?.message ?? err));
-    } finally {
-      setSavingSheet(false);
-    }
-  };
-
-  const saveGoalFromSheet = async () => {
-    const v = parseFloat(goalValue);
-    if (!Number.isFinite(v) || v <= 0) {
-      Alert.alert('Enter a valid goal weight');
-      return;
-    }
-    setSavingSheet(true);
-    try {
-      await updateGoalWeight(v);
-      bumpVersion();
-      await load();
-      setActiveSheet(null);
-    } catch (err: any) {
-      Alert.alert('Could not save goal', String(err?.message ?? err));
-    } finally {
-      setSavingSheet(false);
-    }
-  };
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: spacing.hero + 80 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink} />}
-      >
-        <MastHead />
-        <TitleBlock title="Today" rightLabel={fmtDate(Date.now())} />
-
-        <View style={{ paddingHorizontal: spacing.screen }}>
-          {nextStep ? (
-            <NextStepCard step={nextStep} />
-          ) : meds.length === 0 ? (
-            <EmptyMedsCard />
-          ) : (
-            <NoSchedCard />
-          )}
-        </View>
-
-        <View style={{ height: spacing.lg }} />
-
-        <View style={[styles.statRow, { paddingHorizontal: spacing.screen }]}>
-          <MiniStat
-            label="Weight"
-            value={weightDisplay != null ? weightDisplay.toFixed(1) : '—'}
-            unit={weightUnit === 'kg' ? 'kg' : 'lbs'}
-            delta={weightHistory.length >= 2
-              ? `${weightDelta >= 0 ? '+' : ''}${weightDelta.toFixed(1)} vs first`
-              : undefined}
-            deltaTone={weightDelta < 0 ? 'success' : weightDelta > 0 ? 'danger' : 'neutral'}
-            action="Log weight"
-            onPress={() => setActiveSheet('weight')}
-          />
-          <MiniStat
-            label="Goal"
-            value={goalWeight != null ? goalWeight.toFixed(1) : '—'}
-            unit={goalWeight != null ? (weightUnit === 'kg' ? 'kg' : 'lbs') : undefined}
-            delta={remainingToGoal != null
-              ? `${Math.abs(remainingToGoal).toFixed(1)} ${weightUnit === 'kg' ? 'kg' : 'lbs'} ${remainingToGoal >= 0 ? 'left' : 'past'}`
-              : undefined}
-            deltaTone={remainingToGoal != null && remainingToGoal <= 0 ? 'success' : 'neutral'}
-            action="Set goal"
-            onPress={() => setActiveSheet('goal')}
-          />
-          <MiniStat
-            label="Est. Level"
-            value={headerLevel != null ? formatDose(headerLevel, headerMed?.default_unit ?? 'mg').split(' ')[0] : '—'}
-            unit={headerMed?.default_unit}
-            delta={headerTrend ?? (meds.length === 0 ? 'Add med' : 'No data')}
-            deltaTone={headerTrend === 'steady' ? 'success' : headerTrend ? 'neutral' : 'neutral'}
-            onPress={() => headerMed ? setActiveSheet('level') : null}
-          />
-        </View>
-
-        <View style={{ height: spacing.xl }} />
-
-        {headerMed && headerTraj && headerTraj.length >= 2 && headerLevel != null && (
-          <View style={{ paddingHorizontal: spacing.screen }}>
-            <Card padding="lg">
-              <View style={styles.levelHead}>
-                <Eyebrow>Medication Level</Eyebrow>
-                <Pressable onPress={() => router.push({ pathname: '/reports/level' as any, params: { medicationId: headerMed.id } })} hitSlop={8}>
-                  <View style={styles.linkRow}>
-                    <Text variant="caption" color={colors.inkMuted}>7 DAYS</Text>
-                    <ChevronRight size={14} color={colors.inkMuted} />
-                  </View>
-                </Pressable>
-              </View>
-              <View style={styles.levelValueRow}>
-                <Text variant="hero">{formatDose(headerLevel, headerMed.default_unit).split(' ')[0]}</Text>
-                <Text variant="bodyStrong" color={colors.inkMuted}>{headerMed.default_unit}</Text>
-                {headerTrend ? (
-                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Pill tone={headerTrend === 'rising' ? 'success' : headerTrend === 'falling' ? 'warning' : 'neutral'}>
-                      {`• ${headerTrend}`}
-                    </Pill>
-                  </View>
-                ) : null}
-              </View>
-              <Text variant="small" color={colors.inkMuted} style={{ marginTop: 2 }}>
-                {headerMed.name} · today
-              </Text>
-              <View style={{ height: spacing.md }} />
-              <LineChart
-                data={headerTraj.filter((p) => p.t <= Date.now()).map((p) => ({ t: p.t, v: p.level }))}
-                projection={headerTraj.filter((p) => p.t >= Date.now()).map((p) => ({ t: p.t, v: p.level }))}
-                width={chartWidth}
-                height={140}
-                yLabel={(v) => v.toFixed(v >= 1 ? 1 : 2)}
-                xLabel={(t) => {
-                  const d = new Date(t);
-                  return `${d.getMonth() + 1}/${d.getDate()}`;
-                }}
-                xTickCount={5}
-                yTickCount={3}
-              />
-            </Card>
-          </View>
-        )}
-
-        {meds.length > 1 && (
-          <>
-            <View style={{ height: spacing.xl }} />
-            <Section
-              eyebrow="Other Medications"
-              trailing={
-                <Pressable onPress={() => router.push('/medications')} hitSlop={8}>
-                  <View style={styles.linkRow}>
-                    <Text variant="caption" color={colors.inkMuted}>MANAGE</Text>
-                    <ChevronRight size={14} color={colors.inkMuted} />
-                  </View>
-                </Pressable>
-              }
-            >
-              <Card padding="md">
-                {meds.filter((m) => m.id !== headerMed?.id).slice(0, 3).map((med, idx, arr) => (
-                  <MedLevelRow
-                    key={med.id}
-                    med={med}
-                    injections={injectionsByMed[med.id] ?? []}
-                    isLast={idx === arr.length - 1}
-                  />
-                ))}
-              </Card>
-            </Section>
-          </>
-        )}
-
-        <View style={{ height: spacing.hero }} />
-      </ScrollView>
-
-      <BottomSheet visible={activeSheet === 'weight'} title="Log Weight" onClose={() => setActiveSheet(null)}>
-        <View>
-          <View style={styles.weightInputBlock}>
-            <TextInput
-              value={weightValue}
-              onChangeText={setWeightValue}
-              keyboardType="decimal-pad"
-              placeholder="0.0"
-              placeholderTextColor={colors.inkSubtle}
-              style={styles.weightHeroInput}
-              autoFocus
-            />
-            <TimeRangeToggle
-              options={['lb', 'kg'] as const}
-              value={selectedWeightUnit}
-              onChange={(v) => setSelectedWeightUnit(v)}
-            />
-          </View>
-          {weightDisplay != null && (
-            <Text variant="caption" color={colors.inkMuted} style={{ marginTop: spacing.sm }}>
-              Current: {weightDisplay.toFixed(1)} {weightUnit === 'kg' ? 'kg' : 'lbs'}
-              {totalWeightChange != null ? ` · ${signedWeight(totalWeightChange, weightUnit)} total` : ''}
-            </Text>
-          )}
-          <View style={{ height: spacing.lg }} />
-          {latestWeight?.source === 'manual' && (
-            <>
-              <TimeRangeToggle
-                options={['update', 'add'] as const}
-                value={weightSaveMode}
-                onChange={(v) => setWeightSaveMode(v)}
-                getLabel={(v) => v === 'update' ? 'Update latest' : 'Add new'}
-              />
-              {weightSaveMode === 'update' && latestWeight ? (
-                <Text variant="caption" color={colors.inkMuted} style={{ marginTop: spacing.xs }}>
-                  Updating {fmtDateTime(latestWeight.taken_at)}
-                </Text>
-              ) : null}
-              <View style={{ height: spacing.lg }} />
-            </>
-          )}
-          <Button onPress={saveWeightFromSheet} disabled={savingSheet}>
-            Save weight
-          </Button>
-        </View>
-      </BottomSheet>
-
-      <BottomSheet visible={activeSheet === 'goal'} title="Goal" onClose={() => setActiveSheet(null)}>
-        <ScrollView keyboardShouldPersistTaps="handled">
-          <View style={styles.sheetStats}>
-            <SheetMetric
-              label="Current"
-              value={weightDisplay != null ? weightDisplay.toFixed(1) : '—'}
-              unit={weightUnit === 'kg' ? 'kg' : 'lbs'}
-            />
-            <SheetMetric
-              label="Remaining"
-              value={remainingToGoal != null ? Math.abs(remainingToGoal).toFixed(1) : '—'}
-              unit={remainingToGoal != null ? (weightUnit === 'kg' ? 'kg' : 'lbs') : undefined}
-              caption={remainingToGoal != null ? (remainingToGoal >= 0 ? 'to goal' : 'past goal') : undefined}
-              tone={remainingToGoal != null && remainingToGoal <= 0 ? 'success' : 'neutral'}
-            />
-          </View>
-          <View style={{ height: spacing.lg }} />
-          <Text variant="caption" color={colors.inkMuted} style={styles.sheetLabel}>
-            GOAL WEIGHT ({weightUnit === 'kg' ? 'KG' : 'LBS'})
-          </Text>
-          <View style={styles.weightInputBlock}>
-            <TextInput
-              value={goalValue}
-              onChangeText={setGoalValue}
-              keyboardType="decimal-pad"
-              placeholder="0.0"
-              placeholderTextColor={colors.inkSubtle}
-              style={styles.weightHeroInput}
-            />
-          </View>
-          <View style={{ height: spacing.lg }} />
-          <Button onPress={saveGoalFromSheet} disabled={savingSheet}>
-            Save goal
-          </Button>
-        </ScrollView>
-      </BottomSheet>
-
-      <BottomSheet visible={activeSheet === 'level'} title="Estimated Level" onClose={() => setActiveSheet(null)}>
-        <ScrollView>
-          {headerMed && headerLevel != null ? (
-            <>
-              <View style={styles.levelValueRow}>
-                <Text variant="hero">{formatDose(headerLevel, headerMed.default_unit).split(' ')[0]}</Text>
-                <Text variant="bodyStrong" color={colors.inkMuted}>{headerMed.default_unit}</Text>
-                {headerTrend ? (
-                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Pill tone={headerTrend === 'rising' ? 'success' : headerTrend === 'falling' ? 'warning' : 'neutral'}>
-                      {`• ${headerTrend}`}
-                    </Pill>
-                  </View>
-                ) : null}
-              </View>
-              <Text variant="small" color={colors.inkMuted} style={{ marginTop: 2 }}>
-                {headerMed.name} · selected medication
-              </Text>
-              <View style={{ height: spacing.lg }} />
-              {headerTraj && headerTraj.length >= 2 ? (
-                <LineChart
-                  data={headerTraj.filter((p) => p.t <= Date.now()).map((p) => ({ t: p.t, v: p.level }))}
-                  projection={headerTraj.filter((p) => p.t >= Date.now()).map((p) => ({ t: p.t, v: p.level }))}
-                  width={sheetChartWidth}
-                  height={128}
-                  yLabel={(v) => v.toFixed(v >= 1 ? 1 : 2)}
-                  xLabel={(t) => {
-                    const d = new Date(t);
-                    return `${d.getMonth() + 1}/${d.getDate()}`;
-                  }}
-                  xTickCount={4}
-                  yTickCount={3}
-                />
-              ) : null}
-            </>
-          ) : (
-            <Text variant="body" color={colors.inkMuted}>No medication level data yet.</Text>
-          )}
-        </ScrollView>
-      </BottomSheet>
-    </View>
-  );
-}
-
-function NextStepCard({ step }: { step: NextStep }) {
-  return (
-    <View style={styles.heroCard}>
-      <Eyebrow tone="accent">Today&apos;s Next Step</Eyebrow>
-      <View style={{ height: 6 }} />
-      <View style={styles.heroRow}>
-        <View style={{ flex: 1 }}>
-          <Text variant="h2">{step.overdue ? "Take today's shot" : "Log today's shot"}</Text>
-          <View style={styles.heroMeta}>
-            <Clock3 size={14} color={colors.inkMuted} />
-            <Text variant="small" color={colors.inkMuted}>
-              {step.med.name} · {formatDose(step.med.default_dose, step.med.default_unit)}
-            </Text>
-          </View>
-        </View>
-        <MedVialIcon size={56} colorIndex={step.med.color_index} />
-      </View>
-      <View style={{ height: spacing.md }} />
-      <Button
-        onPress={() => router.push({ pathname: '/log-shot', params: { medicationId: step.med.id } })}
-        trailingChevron
-      >
-        Log shot
-      </Button>
-    </View>
-  );
-}
-
-function NoSchedCard() {
-  return (
-    <View style={styles.heroCard}>
-      <Eyebrow tone="accent">Today&apos;s Next Step</Eyebrow>
-      <View style={{ height: 6 }} />
-      <Text variant="h2">All caught up.</Text>
-      <Text variant="small" color={colors.inkMuted} style={{ marginTop: 4 }}>
-        Nothing scheduled. Log a shot anytime.
-      </Text>
-
-      <View style={{ height: spacing.md }} />
-      <Button onPress={() => router.push('/log-shot')} trailingChevron>
-        Log shot
-      </Button>
-    </View>
-  );
-}
-
-function EmptyMedsCard() {
-  return (
-    <View style={styles.heroCard}>
-      <Eyebrow tone="accent">Get Started</Eyebrow>
-      <View style={{ height: 6 }} />
-      <Text variant="h2">Welcome.</Text>
-      <Text variant="small" color={colors.inkMuted} style={{ marginTop: 4 }}>
-        Pick a preset or add your own to start tracking.
-      </Text>
-      <View style={{ height: spacing.md }} />
-      <Button onPress={() => router.push('/medications/new')} trailingChevron>
-        Add medication
-      </Button>
-    </View>
-  );
-}
-
-function MiniStat({
-  label,
-  value,
-  unit,
-  delta,
-  deltaTone = 'neutral',
-  action,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  delta?: string;
-  deltaTone?: 'success' | 'danger' | 'neutral';
-  action?: string;
-  onPress?: (() => void) | null;
-}) {
-  const deltaColor =
-    deltaTone === 'success' ? colors.successDeep :
-    deltaTone === 'danger' ? colors.redDeep :
-    colors.inkMuted;
-  const isEmpty = value === '—';
-  const Wrap: any = onPress ? Pressable : View;
-  return (
-    <Wrap onPress={onPress ?? undefined} style={onPress
-      ? ({ pressed }: { pressed: boolean }) => [styles.mini, pressed && { opacity: 0.7 }]
-      : styles.mini
-    }>
-      <View style={styles.miniHeader}>
-        <Text variant="caption" color={colors.inkMuted} style={{ letterSpacing: 1.2, textTransform: 'uppercase' }}>
-          {label}
-        </Text>
-        {onPress && !isEmpty ? <ChevronRight size={12} color={colors.inkSubtle} /> : null}
-      </View>
-      {isEmpty && action ? (
-        <Text variant="smallStrong" color={colors.red} style={{ marginTop: spacing.xs }}>
-          {action}
-        </Text>
-      ) : (
-        <>
-          <View style={styles.miniValueRow}>
-            <Text variant="h2">{value}</Text>
-            {unit ? <Text variant="caption" color={colors.inkMuted}>{unit}</Text> : null}
-          </View>
-          {delta ? <Text variant="caption" color={deltaColor}>{delta}</Text> : null}
-        </>
-      )}
-    </Wrap>
-  );
-}
-
-function SheetMetric({
-  label,
-  value,
-  unit,
-  caption,
-  tone = 'neutral',
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  caption?: string;
-  tone?: 'success' | 'danger' | 'neutral';
-}) {
-  const color =
-    tone === 'success' ? colors.successDeep :
-    tone === 'danger' ? colors.redDeep :
-    colors.ink;
-  return (
-    <View style={styles.sheetMetric}>
-      <Text variant="caption" color={colors.inkMuted} style={{ letterSpacing: 1.2, textTransform: 'uppercase' }}>
-        {label}
-      </Text>
-      <View style={styles.miniValueRow}>
-        <Text variant="h2" color={color}>{value}</Text>
-        {unit ? <Text variant="caption" color={colors.inkMuted}>{unit}</Text> : null}
-      </View>
-      {caption ? <Text variant="caption" color={colors.inkMuted}>{caption}</Text> : null}
-    </View>
-  );
-}
-
-function MedLevelRow({ med, injections, isLast }: { med: MedicationRow; injections: InjectionRow[]; isLast: boolean }) {
-  if (!med.half_life_hours) return null;
-  const now = Date.now();
-  const doses = injections.map((i) => ({ takenAt: i.taken_at, dose: i.dose }));
-  const tmax = tmaxOrDefault(med.half_life_hours, med.tmax_hours);
-  const level = estimatedLevelAt(doses, med.half_life_hours, tmax, now);
-  const trend = trendLabel(doses, med.half_life_hours, tmax, now);
-  const traj = levelTrajectory(doses, med.half_life_hours, tmax, now - 7 * DAY, now, 40);
-  const series = traj.map((p) => p.level);
-  const accent = colors.med[med.color_index % colors.med.length] ?? colors.red;
-  return (
-    <View style={[styles.levelRow, isLast && { borderBottomWidth: 0 }]}>
-      <View style={[styles.medDot, { backgroundColor: accent }]} />
-      <View style={{ flex: 1 }}>
-        <Text variant="bodyStrong">{med.name}</Text>
-        <Text variant="caption" color={colors.inkMuted}>
-          {formatDose(level, med.default_unit)} · {trend}
-        </Text>
-      </View>
-      <Sparkline data={series} width={80} height={28} color={accent} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  heroCard: {
-    backgroundColor: colors.redSoft,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(176, 32, 46, 0.18)',
-    padding: spacing.lg,
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  heroRow: {
+  content: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.screen,
+    paddingBottom: 112,
+  },
+  header: {
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.md,
-    marginTop: 4,
-  },
-  heroMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-  },
-  statRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  mini: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    gap: 4,
-    minHeight: 92,
-  },
-  miniHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  miniValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    marginTop: 2,
-  },
-  levelHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  levelValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginTop: spacing.sm,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerCopy: {
     gap: 2,
+  },
+  streakChip: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+  },
+  medicationCard: {
+    gap: spacing.xl,
+  },
+  medicationHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  medicationChip: {
+    maxWidth: '58%',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
   },
   levelRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
-  },
-  medDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  sheetStats: {
-    flexDirection: 'row',
+    alignItems: 'baseline',
     gap: spacing.sm,
-    marginBottom: spacing.sm,
   },
-  sheetMetric: {
+  levelValue: {
+    fontSize: 48,
+    lineHeight: 54,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  weekBars: {
+    height: 58,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  dayBarWrap: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    minHeight: 92,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 4,
   },
-  sheetLabel: {
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  dayBar: {
+    width: '100%',
+    maxWidth: 24,
+    borderRadius: 6,
   },
-  weightInputBlock: {
+  nextDose: {
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.divider,
   },
-  weightHeroInput: {
+  nextDoseCopy: {
     flex: 1,
-    fontFamily: fonts.serif,
-    fontSize: 36,
-    lineHeight: 44,
+    gap: 2,
+  },
+  loggedRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+  },
+  loggedIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  loggedText: {
+    flex: 1,
+  },
+  emptyCard: {
+    gap: spacing.lg,
+  },
+  tiles: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  tilePressable: {
+    flex: 1,
+  },
+  tile: {
+    minHeight: 202,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  tileHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tileValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+  },
+  tileValue: {
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '600',
     color: colors.ink,
-    paddingVertical: spacing.xs,
+  },
+  pressed: {
+    opacity: 0.72,
   },
 });

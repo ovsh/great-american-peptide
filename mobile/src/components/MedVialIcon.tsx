@@ -8,7 +8,7 @@ interface MedVialIconProps {
 
 // Small vial illustration: cap + label + glass.
 export function MedVialIcon({ size = 56, colorIndex = 0 }: MedVialIconProps) {
-  const accent = colors.med[colorIndex % colors.med.length] ?? colors.red;
+  const accent = colors.med[colorIndex % colors.med.length] ?? colors.accent;
   return (
     <Svg width={size} height={size * 1.2} viewBox="0 0 56 68">
       <G>

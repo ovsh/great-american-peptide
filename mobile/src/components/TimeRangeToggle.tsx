@@ -18,11 +18,14 @@ export function TimeRangeToggle<T extends string>({ options, value, onChange, si
         return (
           <Pressable
             key={opt}
+            accessibilityRole="radio"
+            accessibilityLabel={getLabel ? getLabel(opt) : opt}
+            accessibilityState={{ selected: active }}
             onPress={() => onChange(opt)}
             style={[
               styles.btn,
               size === 'sm' && styles.btnSm,
-              active && { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+              active && { backgroundColor: colors.accent, borderColor: colors.accent },
             ]}
           >
             <Text
@@ -39,7 +42,14 @@ export function TimeRangeToggle<T extends string>({ options, value, onChange, si
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 4 },
+  row: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    padding: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+  },
   btn: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,

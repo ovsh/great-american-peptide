@@ -1,7 +1,6 @@
 import { ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from './Text';
-import { Eyebrow } from './Eyebrow';
 import { Card } from './Card';
 import { colors } from '../theme';
 
@@ -17,12 +16,12 @@ interface StatCardProps {
 export function StatCard({ label, value, unit, delta, deltaTone = 'neutral', trailing }: StatCardProps) {
   const deltaColor =
     deltaTone === 'success' ? colors.successDeep :
-    deltaTone === 'danger' ? colors.redDeep :
+    deltaTone === 'danger' ? colors.danger :
     colors.inkMuted;
   return (
     <Card padding="md" style={styles.card}>
       <View style={{ gap: 6, flex: 1 }}>
-        <Eyebrow>{label}</Eyebrow>
+        <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
         <View style={styles.valueRow}>
           <Text variant="hero" color={colors.ink}>{value}</Text>
           {unit ? <Text variant="caption" color={colors.inkMuted}>{unit}</Text> : null}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import type { ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { ChevronLeft, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,8 @@ interface OnboardingScreenProps {
   subtitle?: string;
   children: ReactNode;
   footer: ReactNode;
-  contentStyle?: ViewStyle;
+  contentStyle?: StyleProp<ViewStyle>;
+  bodyStyle?: StyleProp<ViewStyle>;
 }
 
 export function OnboardingScreen({
@@ -36,6 +37,7 @@ export function OnboardingScreen({
   children,
   footer,
   contentStyle,
+  bodyStyle,
 }: OnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   return (
@@ -82,7 +84,7 @@ export function OnboardingScreen({
         <View style={[styles.content, contentStyle]}>
           {title ? <Text variant="display">{title}</Text> : null}
           {subtitle ? <Text color={colors.inkMuted}>{subtitle}</Text> : null}
-          <View style={styles.body}>{children}</View>
+          <View style={[styles.body, bodyStyle]}>{children}</View>
           <View style={styles.footer}>{footer}</View>
         </View>
       </ScrollView>

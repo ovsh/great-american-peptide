@@ -1,163 +1,257 @@
-import { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { format, isSameDay } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Trash2 } from 'lucide-react-native';
-import { format } from 'date-fns';
 
-import { MastHead } from '@/components/MastHead';
-import { TitleBlock } from '@/components/TitleBlock';
-import { Section } from '@/components/Section';
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { MonthGrid } from '@/components/MonthGrid';
 import { Text } from '@/components/Text';
-import { TimeRangeToggle } from '@/components/TimeRangeToggle';
-
-import { listInjections, softDeleteInjection } from '@/repositories/injections';
-import { listMeasurements } from '@/repositories/measurements';
-import { listMedications } from '@/repositories/medications';
-import type { InjectionRow, MeasurementRow, MedicationRow } from '@/db/types';
-import { fmtTime } from '@/utils/date';
-import { formatDose, kgToLb, lbToKg } from '@/domain/units';
+import type { InjectionRow, MedicationRow } from '@/db/types';
 import { getBodySite } from '@/domain/bodySites';
+import { formatDose } from '@/domain/units';
+import { listInjections } from '@/repositories/injections';
+import { listMedications } from '@/repositories/medications';
 import { useAppStore } from '@/stores/app';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
+import { fmtDayLabel, fmtTime } from '@/utils/date';
 
-const KINDS = ['Shots', 'Weight'] as const;
-type Kind = typeof KINDS[number];
+type HistoryMode = 'list' | 'calendar';
 
-interface ShotEntry {
-  type: 'shot';
-  ts: number;
-  inj: InjectionRow;
+interface HistoryDay {
+  key: string;
+  label: string;
+  injections: InjectionRow[];
 }
-interface WeightEntry {
-  type: 'weight';
-  ts: number;
-  m: MeasurementRow;
-}
-type Entry = ShotEntry | WeightEntry;
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const dataVersion = useAppStore((s) => s.dataVersion);
-  const bumpVersion = useAppStore((s) => s.bumpVersion);
-  const [kind, setKind] = useState<Kind>('Shots');
-  const [meds, setMeds] = useState<Map<string, MedicationRow>>(new Map());
-  const [shots, setShots] = useState<InjectionRow[]>([]);
-  const [weights, setWeights] = useState<MeasurementRow[]>([]);
-  const [unit] = useState<'lb' | 'kg'>('lb');
+  const dataVersion = useAppStore((state) => state.dataVersion);
+  const [mode, setMode] = useState<HistoryMode>('list');
+  const [selected, setSelected] = useState(new Date());
+  const [injections, setInjections] = useState<InjectionRow[]>([]);
+  const [medications, setMedications] = useState<Record<string, MedicationRow>>({});
 
   const load = useCallback(async () => {
-    const [inj, w, ms] = await Promise.all([
-      listInjections({ limit: 200 }),
-      listMeasurements('weight', { limit: 200 }),
+    const [injectionRows, medicationRows] = await Promise.all([
+      listInjections({ limit: 500 }),
       listMedications(true),
     ]);
-    setShots(inj);
-    setWeights(w);
-    setMeds(new Map(ms.map((m) => [m.id, m])));
+    const byId: Record<string, MedicationRow> = {};
+    for (const medication of medicationRows) byId[medication.id] = medication;
+    setInjections(injectionRows);
+    setMedications(byId);
   }, []);
 
-  useEffect(() => { load(); }, [load, dataVersion]);
+  useEffect(() => {
+    load().catch(() => {});
+  }, [dataVersion, load]);
 
-  const entries: Entry[] = kind === 'Shots'
-    ? shots.map((i) => ({ type: 'shot', ts: i.taken_at, inj: i } as ShotEntry))
-    : weights.map((m) => ({ type: 'weight', ts: m.taken_at, m } as WeightEntry));
-
-  const grouped = entries.reduce<Record<string, Entry[]>>((acc, e) => {
-    const k = format(new Date(e.ts), 'MMMM yyyy').toUpperCase();
-    if (!acc[k]) acc[k] = [];
-    acc[k].push(e);
-    return acc;
-  }, {});
-
-  const onDelete = (e: ShotEntry) => {
-    Alert.alert('Delete shot?', 'This removes it from the level chart.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        await softDeleteInjection(e.inj.id);
-        bumpVersion();
-      } },
-    ]);
-  };
+  const grouped = useMemo(() => groupByDay(injections), [injections]);
+  const selectedInjections = useMemo(
+    () => injections.filter((injection) => isSameDay(injection.taken_at, selected)),
+    [injections, selected],
+  );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero + 80 }}>
-        <MastHead />
-        <TitleBlock title="History" />
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}> 
+        <Text variant="display">History</Text>
+        <SegmentedControl value={mode} onChange={setMode} />
 
-        <View style={{ paddingHorizontal: spacing.screen, marginBottom: spacing.md }}>
-          <TimeRangeToggle options={KINDS} value={kind} onChange={setKind} size="sm" />
-        </View>
-
-        {entries.length === 0 ? (
-          <View style={{ paddingHorizontal: spacing.screen }}>
-            <Card padding="lg" variant="muted">
-              <Text variant="small" color={colors.inkMuted}>
-                Nothing logged yet. Tap the brand seal to log a shot, or use the home screen.
-              </Text>
-            </Card>
-          </View>
-        ) : (
-          Object.entries(grouped).map(([month, items]) => (
-            <Section key={month} eyebrow={month} gap="sm">
-              {items.map((e) => (
-                e.type === 'shot' ? (
-                  <ShotRow key={e.inj.id} e={e} med={meds.get(e.inj.medication_id) ?? null} onDelete={() => onDelete(e)} />
-                ) : (
-                  <WeightRow key={e.m.id} e={e} unit={unit} />
-                )
-              ))}
-              <View style={{ height: spacing.md }} />
-            </Section>
+        {mode === 'calendar' ? (
+          <>
+            <MonthGrid
+              injections={injections}
+              medications={medications}
+              selected={selected}
+              onSelect={setSelected}
+            />
+            <HistoryGroup
+              label={format(selected, 'EEEE, MMMM d')}
+              injections={selectedInjections}
+              medications={medications}
+            />
+          </>
+        ) : grouped.length > 0 ? (
+          grouped.map((day) => (
+            <HistoryGroup
+              key={day.key}
+              label={day.label}
+              injections={day.injections}
+              medications={medications}
+            />
           ))
+        ) : (
+          <EmptyHistory />
         )}
       </ScrollView>
     </View>
   );
 }
 
-function ShotRow({ e, med, onDelete }: { e: ShotEntry; med: MedicationRow | null; onDelete: () => void }) {
-  const accent = med ? colors.med[med.color_index % colors.med.length] : colors.ink;
+function SegmentedControl({ value, onChange }: { value: HistoryMode; onChange: (mode: HistoryMode) => void }) {
   return (
-    <Card padding="md" style={styles.row}>
-      <View style={[styles.dot, { backgroundColor: accent }]} />
-      <View style={{ flex: 1 }}>
-        <Text variant="bodyStrong">{med?.name ?? 'Unknown'}</Text>
+    <View style={styles.segmented}>
+      {(['list', 'calendar'] as const).map((mode) => {
+        const selected = value === mode;
+        return (
+          <Pressable
+            key={mode}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => onChange(mode)}
+            style={[styles.segment, selected && styles.segmentSelected]}
+          >
+            <Text variant="smallStrong" color={selected ? colors.inkInverse : colors.inkMuted}>
+              {mode === 'list' ? 'List' : 'Calendar'}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function HistoryGroup({
+  label,
+  injections,
+  medications,
+}: {
+  label: string;
+  injections: readonly InjectionRow[];
+  medications: Readonly<Record<string, MedicationRow>>;
+}) {
+  return (
+    <View style={styles.group}>
+      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
+      {injections.length > 0 ? (
+        <Card padding="xs" style={styles.rows}>
+          {injections.map((injection, index) => (
+            <HistoryRow
+              key={injection.id}
+              injection={injection}
+              medication={medications[injection.medication_id] ?? null}
+              divider={index < injections.length - 1}
+            />
+          ))}
+        </Card>
+      ) : (
+        <Card style={styles.emptyDay}>
+          <Text color={colors.inkMuted}>No shots logged on this day.</Text>
+          <Button size="sm" onPress={() => router.push('/log-shot')}>Log shot</Button>
+        </Card>
+      )}
+    </View>
+  );
+}
+
+function HistoryRow({
+  injection,
+  medication,
+  divider,
+}: {
+  injection: InjectionRow;
+  medication: MedicationRow | null;
+  divider: boolean;
+}) {
+  const site = injection.site_id ? getBodySite(injection.site_id) : undefined;
+  const color = medication
+    ? colors.med[medication.color_index % colors.med.length] ?? colors.accent
+    : colors.inkSubtle;
+  return (
+    <View style={[styles.row, divider && styles.rowDivider]}>
+      <View style={[styles.medicationDot, { backgroundColor: color }]} />
+      <View style={styles.rowCopy}>
+        <Text variant="bodyStrong">{medication?.name ?? 'Medication'}</Text>
         <Text variant="small" color={colors.inkMuted}>
-          {formatDose(e.inj.dose, e.inj.unit)} · {e.inj.route.toUpperCase()}
-          {e.inj.site_id ? ` · ${getBodySite(e.inj.site_id)?.label ?? ''}` : ''}
-        </Text>
-        <Text variant="caption" color={colors.inkSubtle}>
-          {format(new Date(e.ts), 'EEE, MMM d')} · {fmtTime(e.ts)}
+          {fmtTime(injection.taken_at).toLocaleLowerCase()} · {site?.label ?? 'Site not recorded'}
         </Text>
       </View>
-      <Pressable onPress={onDelete} hitSlop={10} style={styles.iconBtn}>
-        <Trash2 size={16} color={colors.inkSubtle} />
-      </Pressable>
+      <Text variant="smallStrong">{formatDose(injection.dose, injection.unit)}</Text>
+    </View>
+  );
+}
+
+function EmptyHistory() {
+  return (
+    <Card style={styles.emptyDay}>
+      <Text variant="h2">No shots logged yet.</Text>
+      <Text color={colors.inkMuted}>Your shot history will appear here.</Text>
+      <Button onPress={() => router.push('/log-shot')}>Log shot</Button>
     </Card>
   );
 }
 
-function WeightRow({ e, unit }: { e: WeightEntry; unit: 'lb' | 'kg' }) {
-  const v = e.m.unit === 'kg' && unit === 'lb' ? kgToLb(e.m.value)
-         : e.m.unit === 'lb' && unit === 'kg' ? lbToKg(e.m.value)
-         : e.m.value;
-  return (
-    <Card padding="md" style={styles.row}>
-      <View style={[styles.dot, { backgroundColor: colors.gold }]} />
-      <View style={{ flex: 1 }}>
-        <Text variant="bodyStrong">{v.toFixed(1)} {e.m.unit ?? unit}</Text>
-        <Text variant="caption" color={colors.inkSubtle}>
-          {format(new Date(e.ts), 'EEE, MMM d · h:mm a')}
-        </Text>
-      </View>
-    </Card>
-  );
+function groupByDay(injections: readonly InjectionRow[]): HistoryDay[] {
+  const groups = new Map<string, HistoryDay>();
+  for (const injection of injections) {
+    const key = format(injection.taken_at, 'yyyy-MM-dd');
+    const existing = groups.get(key);
+    if (existing) existing.injections.push(injection);
+    else groups.set(key, { key, label: fmtDayLabel(injection.taken_at), injections: [injection] });
+  }
+  return Array.from(groups.values());
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  iconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    gap: spacing.xl,
+    paddingHorizontal: spacing.screen,
+    paddingBottom: 112,
+  },
+  segmented: {
+    height: 48,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: spacing.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+  },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+  },
+  segmentSelected: {
+    backgroundColor: colors.accent,
+  },
+  group: {
+    gap: spacing.sm,
+  },
+  rows: {
+    overflow: 'hidden',
+  },
+  row: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  rowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  medicationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  rowCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  emptyDay: {
+    gap: spacing.md,
+  },
 });

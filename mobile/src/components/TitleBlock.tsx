@@ -19,7 +19,7 @@ export function TitleBlock({ title, rightLabel, variant = 'page' }: TitleBlockPr
           ) : null}
         </View>
         <View style={styles.underlines}>
-          <View style={[styles.bar, { backgroundColor: colors.red, width: 24 }]} />
+          <View style={[styles.bar, { backgroundColor: colors.accent, width: 24 }]} />
           <View style={[styles.bar, { backgroundColor: colors.ink, width: 64 }]} />
         </View>
       </View>

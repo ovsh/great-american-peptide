@@ -61,7 +61,7 @@ export default function WeightScreen() {
             onChangeText={(value) => setWeightValue('current', value)}
             keyboardType="decimal-pad"
             inputMode="decimal"
-            placeholder="Current weight"
+            placeholder="198"
           />
         </View>
         <View style={styles.field}>
@@ -71,7 +71,7 @@ export default function WeightScreen() {
             onChangeText={(value) => setWeightValue('goal', value)}
             keyboardType="decimal-pad"
             inputMode="decimal"
-            placeholder="Goal weight"
+            placeholder="175"
           />
         </View>
       </View>

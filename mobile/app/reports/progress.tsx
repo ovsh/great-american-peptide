@@ -3,10 +3,8 @@ import { View, ScrollView, StyleSheet, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Header } from '@/components/Header';
-import { TitleBlock } from '@/components/TitleBlock';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
-import { Eyebrow } from '@/components/Eyebrow';
 import { LineChart } from '@/components/LineChart';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 
@@ -17,14 +15,14 @@ import { kgToLb, lbToKg } from '@/domain/units';
 import { useAppStore } from '@/stores/app';
 import { colors, spacing } from '@/theme';
 
-const RANGES = ['30D', '90D', '1Y', 'All'] as const;
+const RANGES = ['30d', '90d', '1y', 'All'] as const;
 type Range = typeof RANGES[number];
 const DAY = 24 * 60 * 60 * 1000;
 
 function rangeMs(r: Range): number | null {
-  if (r === '30D') return 30 * DAY;
-  if (r === '90D') return 90 * DAY;
-  if (r === '1Y') return 365 * DAY;
+  if (r === '30d') return 30 * DAY;
+  if (r === '90d') return 90 * DAY;
+  if (r === '1y') return 365 * DAY;
   return null;
 }
 
@@ -32,7 +30,7 @@ export default function ProgressReportScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const dataVersion = useAppStore((s) => s.dataVersion);
-  const [range, setRange] = useState<Range>('90D');
+  const [range, setRange] = useState<Range>('90d');
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [prefs, setPrefs] = useState<PreferencesRow | null>(null);
 
@@ -65,14 +63,12 @@ export default function ProgressReportScreen() {
   const goalWeight = prefs?.goal_weight ?? null;
   const remainingToGoal = last && goalWeight != null ? last.v - goalWeight : null;
 
-  const chartW = width - spacing.screen * 2 - spacing.lg * 2;
+  const chartW = Math.min(width, 600) - spacing.screen * 2 - spacing.lg * 2;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      <Header title="Progress" showBack />
+      <Header title="Weight progress" showBack />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
-        <TitleBlock title="Progress" rightLabel="WEIGHT" />
-
         <View style={{ paddingHorizontal: spacing.screen }}>
           <View style={{ marginBottom: spacing.md }}>
             <TimeRangeToggle options={RANGES} value={range} onChange={setRange} size="sm" />
@@ -80,19 +76,19 @@ export default function ProgressReportScreen() {
 
           <View style={styles.summaryRow}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Eyebrow>CURRENT</Eyebrow>
+              <Text variant="smallStrong" color={colors.inkMuted}>Current</Text>
               <Text variant="hero">{last ? last.v.toFixed(1) : '—'}</Text>
               <Text variant="caption" color={colors.inkMuted}>{wUnit}</Text>
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <Eyebrow>CHANGE</Eyebrow>
-              <Text variant="hero" color={delta < 0 ? colors.successDeep : delta > 0 ? colors.redDeep : colors.ink}>
+              <Text variant="smallStrong" color={colors.inkMuted}>Change</Text>
+              <Text variant="hero" color={delta < 0 ? colors.successDeep : colors.ink}>
                 {delta >= 0 ? '+' : ''}{delta.toFixed(1)}
               </Text>
               <Text variant="caption" color={colors.inkMuted}>over window</Text>
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <Eyebrow>GOAL</Eyebrow>
+              <Text variant="smallStrong" color={colors.inkMuted}>Goal</Text>
               <Text variant="hero">{goalWeight != null ? goalWeight.toFixed(1) : '—'}</Text>
               <Text variant="caption" color={colors.inkMuted}>
                 {remainingToGoal != null ? `${Math.abs(remainingToGoal).toFixed(1)} ${remainingToGoal >= 0 ? 'left' : 'past'}` : wUnit}
@@ -108,6 +104,9 @@ export default function ProgressReportScreen() {
                 data={data}
                 width={chartW}
                 height={200}
+                includeZero={false}
+                color={colors.amber}
+                fillColor="rgba(232,161,60,0.12)"
                 yLabel={(v) => v.toFixed(0)}
                 xLabel={(t) => {
                   const d = new Date(t);

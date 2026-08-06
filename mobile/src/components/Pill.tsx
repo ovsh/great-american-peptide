@@ -14,8 +14,8 @@ interface PillProps {
 const TONE: Record<PillTone, { bg: string; fg: string }> = {
   success: { bg: colors.successSoft, fg: colors.successDeep },
   warning: { bg: colors.warningSoft, fg: '#7A5616' },
-  danger: { bg: colors.dangerSoft, fg: colors.redDeep },
-  neutral: { bg: '#EDE5D0', fg: colors.inkMuted },
+  danger: { bg: colors.dangerSoft, fg: colors.danger },
+  neutral: { bg: colors.surfaceMuted, fg: colors.inkMuted },
   brand: { bg: colors.surfaceInverse, fg: colors.inkInverse },
 };
 

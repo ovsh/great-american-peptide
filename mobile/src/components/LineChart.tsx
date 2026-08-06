@@ -13,6 +13,8 @@ interface LineChartProps {
   yTickCount?: number;
   fillUnder?: boolean;
   color?: string;
+  fillColor?: string;
+  includeZero?: boolean;
 }
 
 export function LineChart({
@@ -26,6 +28,8 @@ export function LineChart({
   yTickCount = 4,
   fillUnder = true,
   color = colors.ink,
+  fillColor = colors.chartFill,
+  includeZero = true,
 }: LineChartProps) {
   const padL = 36;
   const padR = 12;
@@ -35,25 +39,37 @@ export function LineChart({
   const innerH = height - padT - padB;
 
   const all = projection ? [...data, ...projection] : data;
-  if (all.length < 2) return <View style={{ width, height }} />;
+  const firstDataPoint = data[0];
+  const lastDataPoint = data[data.length - 1];
+  if (all.length < 2 || !firstDataPoint || !lastDataPoint) {
+    return <View style={{ width, height }} />;
+  }
   const minT = Math.min(...all.map((p) => p.t));
   const maxT = Math.max(...all.map((p) => p.t));
-  const minV = 0;
-  const maxV = Math.max(0.0001, ...all.map((p) => p.v)) * 1.1;
+  const rawMin = Math.min(...all.map((point) => point.v));
+  const rawMax = Math.max(...all.map((point) => point.v));
+  const valueRange = Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.02, 0.0001);
+  const minV = includeZero ? 0 : Math.max(0, rawMin - valueRange * 0.15);
+  const maxV = rawMax + valueRange * 0.15;
 
   const xFor = (t: number) => padL + ((t - minT) / (maxT - minT || 1)) * innerW;
   const yFor = (v: number) => padT + innerH - ((v - minV) / (maxV - minV || 1)) * innerH;
 
   const pathFor = (pts: { t: number; v: number }[]) => {
-    let d = `M ${xFor(pts[0]!.t)} ${yFor(pts[0]!.v)}`;
-    for (let i = 1; i < pts.length; i++) d += ` L ${xFor(pts[i]!.t)} ${yFor(pts[i]!.v)}`;
+    const firstPoint = pts[0];
+    if (!firstPoint) return '';
+
+    let d = `M ${xFor(firstPoint.t)} ${yFor(firstPoint.v)}`;
+    for (const point of pts.slice(1)) {
+      d += ` L ${xFor(point.t)} ${yFor(point.v)}`;
+    }
     return d;
   };
 
   const fillPath = () => {
-    let d = `M ${xFor(data[0]!.t)} ${yFor(0)}`;
+    let d = `M ${xFor(firstDataPoint.t)} ${yFor(minV)}`;
     for (const p of data) d += ` L ${xFor(p.t)} ${yFor(p.v)}`;
-    d += ` L ${xFor(data[data.length - 1]!.t)} ${yFor(0)} Z`;
+    d += ` L ${xFor(lastDataPoint.t)} ${yFor(minV)} Z`;
     return d;
   };
 
@@ -67,8 +83,6 @@ export function LineChart({
     const t = minT + ((maxT - minT) / (xTickCount - 1)) * i;
     xTicks.push(t);
   }
-  const lastPoint = data[data.length - 1]!;
-
   return (
     <Svg width={width} height={height}>
       {yTicks.map((v, i) => (
@@ -109,7 +123,7 @@ export function LineChart({
         </SvgText>
       ))}
       {fillUnder && (
-        <Path d={fillPath()} fill={colors.chartFill} />
+        <Path d={fillPath()} fill={fillColor} />
       )}
       <Path
         d={pathFor(data)}
@@ -129,7 +143,12 @@ export function LineChart({
           strokeLinecap="round"
         />
       )}
-      <Circle cx={xFor(lastPoint.t)} cy={yFor(lastPoint.v)} r={3.5} fill={color} />
+      <Circle
+        cx={xFor(lastDataPoint.t)}
+        cy={yFor(lastDataPoint.v)}
+        r={3.5}
+        fill={color}
+      />
     </Svg>
   );
 }

@@ -163,11 +163,10 @@ const styles = StyleSheet.create({
   },
   dayRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   dayPill: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.md,
+    flex: 1,
+    paddingHorizontal: 0,
   },
 });

@@ -128,6 +128,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="log-shot" options={{ presentation: 'modal' }} />
           <Stack.Screen name="log-weight" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="log-side-effect" options={{ presentation: 'modal' }} />
           <Stack.Screen name="medications" options={{ presentation: 'card' }} />
           <Stack.Screen name="reports" options={{ presentation: 'card' }} />
           <Stack.Screen name="calculator" options={{ presentation: 'modal' }} />
