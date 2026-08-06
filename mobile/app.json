@@ -12,12 +12,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "industries.peptide.tracker",
+      "appStoreUrl": "https://apps.apple.com/us/app/the-great-peptide-tracker/id6764757185",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "industries.peptide.tracker",
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=industries.peptide.tracker",
       "adaptiveIcon": {
         "backgroundColor": "#F2E9D8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

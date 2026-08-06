@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Switch, Pressable, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronRight, Calculator, BarChart3, Pill as PillIcon, Info, Activity } from 'lucide-react-native';
+import { ChevronRight, Calculator, BarChart3, Pill as PillIcon, Info, Activity, Star } from 'lucide-react-native';
 
 import { MastHead } from '@/components/MastHead';
 import { TitleBlock } from '@/components/TitleBlock';
@@ -15,6 +15,7 @@ import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 import { getPreferences, updatePreferences } from '@/repositories/preferences';
 import type { PreferencesRow } from '@/db/types';
 import { ensureNotificationPermission, refreshScheduledReminders } from '@/services/notifications';
+import { maybePromptForReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
 import { colors, spacing } from '@/theme';
 
@@ -88,6 +89,11 @@ export default function ProfileScreen() {
             icon={<Calculator size={18} color={colors.ink} />}
             label="Reconstitution Calculator"
             onPress={() => router.push('/calculator')}
+          />
+          <NavRow
+            icon={<Star size={18} color={colors.ink} />}
+            label="Rate the app"
+            onPress={() => { maybePromptForReview({ manual: true }).catch(() => {}); }}
           />
         </Section>
 

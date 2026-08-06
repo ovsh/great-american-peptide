@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Variants — The Great American Peptide Company</title>
+<style>
+  :root {
+    --bg: #0B0D12;
+    --card: #14171F;
+    --fg: #E9E4D4;
+    --fg-dim: rgba(233,228,212,0.55);
+    --gold: #B08A3E;
+    --rule: rgba(233,228,212,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+  header {
+    padding: 32px 40px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  header h1 {
+    margin: 0;
+    font-family: Georgia, "Playfair Display", serif;
+    font-weight: 400;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+  }
+  header .tag {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .lede {
+    padding: 40px 40px 24px;
+    max-width: 720px;
+    color: var(--fg-dim);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .lede b { color: var(--fg); font-weight: 600; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    padding: 16px 40px 60px;
+  }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+  .tile {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .tile .head {
+    padding: 20px 24px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .letter {
+    font-family: Georgia, serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--gold);
+    letter-spacing: 0.06em;
+  }
+  .tile .title {
+    font-family: Georgia, serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--fg);
+  }
+  .tile .note {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+  .tile .desc {
+    padding: 14px 24px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .desc em { color: var(--gold); font-style: normal; }
+
+  .frame-wrap {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: #0E1016;
+    overflow: hidden;
+  }
+  .frame-wrap iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1440px; height: 900px;
+    transform: scale(calc(var(--tile-w, 640) / 1440));
+    transform-origin: top left;
+    border: 0;
+  }
+
+  .actions {
+    padding: 14px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--rule);
+  }
+  .actions a {
+    color: var(--gold);
+    font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(176,138,62,0.35);
+    padding-bottom: 2px;
+  }
+  .actions a:hover { border-color: var(--gold); }
+  .actions .pick {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Great American Peptide — Design Variants</h1>
+  <div class="tag">Four directions · Pick one</div>
+</header>
+
+<div class="lede">
+  Four takes on a premium, American analytical lab. All restrained, all scrubbed of
+  costume patriotism. <b>Open each at full size, then tell me a letter.</b>
+  I'll iterate on your pick.
+</div>
+
+<div class="grid">
+  <article class="tile">
+    <div class="head">
+      <div><span class="letter">A ·</span> <span class="title">The Editorial</span></div>
+      <div class="note">WSJ × Monocle</div>
+    </div>
+    <div class="desc">
+      Magazine gravitas. Massive Playfair serif headline, hand-set three-column grid,
+      one thin gold rule as the only ornament. <em>The luxury is restraint.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="a-editorial.html" loading="lazy" style="--tile-w: 640;"></iframe>
+    </div>
+    <div class="actions">
+      <a href="a-editorial.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "A"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div><span class="letter">B ·</span> <span class="title">The Quiet Vault</span></div>
+      <div class="note">Patek × Stripe</div>
+    </div>
+    <div class="desc">
+      Near-black background, thin serif wordmark, a single coin-sized gold seal as the
+      authentication mark. <em>Whispered, not shouted.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="b-vault.html" loading="lazy" style="--tile-w: 640;"></iframe>
+    </div>
+    <div class="actions">
+      <a href="b-vault.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "B"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div><span class="letter">C ·</span> <span class="title">The Heritage</span></div>
+      <div class="note">Ralph Lauren × Shinola</div>
+    </div>
+    <div class="desc">
+      Parchment paper, deep navy ink, an editorial product stage with an amber vial,
+      brass label, and whispered flag. <em>Americana without cosplay.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="c-heritage.html" loading="lazy" style="--tile-w: 640;"></iframe>
+    </div>
+    <div class="actions">
+      <a href="c-heritage.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "C"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div><span class="letter">D ·</span> <span class="title">The Certificate</span></div>
+      <div class="note">Museum artifact</div>
+    </div>
+    <div class="desc">
+      The Certificate of Analysis is the hero. Engraved borders, wax seal, Spencerian
+      signature. <em>The product is the document.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="d-certificate.html" loading="lazy" style="--tile-w: 640;"></iframe>
+    </div>
+    <div class="actions">
+      <a href="d-certificate.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "D"</div>
+    </div>
+  </article>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Font variants — The Great American Peptide Company</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,900;1,500;1,600&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0B0E14;
+    --card: #141821;
+    --fg: #E7EAF0;
+    --fg-dim: rgba(231, 234, 240, 0.58);
+    --fg-mute: rgba(231, 234, 240, 0.32);
+    --accent: #D4B565;
+    --rule: rgba(231, 234, 240, 0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    padding: 36px 48px 28px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  header .tag {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg-dim); font-weight: 500;
+  }
+
+  .lede {
+    padding: 32px 48px 12px;
+    max-width: 820px;
+    color: var(--fg-dim);
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+  .lede b { color: var(--fg); font-weight: 600; }
+
+  /* ========== SPECIMEN PANEL (direct-rendered, no iframe) ========== */
+  .specimens {
+    padding: 28px 48px 8px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+  }
+  @media (max-width: 1400px) { .specimens { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 760px)  { .specimens { grid-template-columns: 1fr; } }
+
+  .spec {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    padding: 32px 32px 28px;
+  }
+  .spec .spec-id {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .spec .spec-name {
+    color: var(--fg);
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 24px;
+    font-family: "Inter", sans-serif;
+  }
+  .spec .headline {
+    font-size: 38px;
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: var(--fg);
+    margin-bottom: 8px;
+  }
+  .spec .headline em {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
+  }
+  .spec .price {
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    margin: 20px 0 12px;
+  }
+  .spec .body {
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+    max-width: 36ch;
+  }
+  .spec .body b { color: var(--fg); font-weight: 600; }
+  .spec .meta {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  /* Font-specific classes for the specimens */
+  .spec.f1 .headline, .spec.f1 .price { font-family: "Libre Caslon Text", serif; font-weight: 700; }
+  .spec.f1 .headline em { font-family: "Playfair Display", serif; font-weight: 500; }
+
+  .spec.f2 .headline, .spec.f2 .price { font-family: "Fraunces", serif; font-weight: 600; font-variation-settings: "opsz" 144; }
+  .spec.f2 .headline em { font-family: "Fraunces", serif; font-weight: 500; font-style: italic; font-variation-settings: "opsz" 144; }
+
+  .spec.f3 .headline, .spec.f3 .price { font-family: "Playfair Display", serif; font-weight: 600; }
+  .spec.f3 .headline em { font-family: "Playfair Display", serif; font-weight: 500; font-style: italic; }
+
+  .spec.f4 .headline, .spec.f4 .price { font-family: "Cormorant Garamond", serif; font-weight: 600; letter-spacing: -0.015em; }
+  .spec.f4 .headline em { font-family: "Cormorant Garamond", serif; font-weight: 500; font-style: italic; letter-spacing: 0; }
+
+  /* ========== IFRAME GRID ========== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+    padding: 40px 48px 80px;
+  }
+  @media (max-width: 900px)  { .grid { grid-template-columns: 1fr; } }
+
+  .tile {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: border-color 180ms;
+  }
+  .tile:hover { border-color: rgba(212, 181, 101, 0.36); }
+
+  .tile .head {
+    padding: 20px 24px 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .id {
+    font-family: "Playfair Display", serif;
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .tile .title {
+    font-family: "Playfair Display", serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--fg);
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+  .tile .note {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--fg-mute);
+    text-align: right;
+    font-weight: 500;
+  }
+  .tile .desc {
+    padding: 12px 24px 16px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .desc em { color: var(--accent); font-style: normal; }
+
+  .frame-wrap {
+    position: relative;
+    aspect-ratio: 16 / 11;
+    background: #0E1016;
+    overflow: hidden;
+  }
+  .frame-wrap iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1440px; height: 990px;
+    transform: scale(calc(var(--tile-w, 450) / 1440));
+    transform-origin: top left;
+    border: 0;
+    pointer-events: none;
+  }
+
+  .actions {
+    padding: 14px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--rule);
+  }
+  .actions a {
+    color: var(--accent);
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(212, 181, 101, 0.32);
+    padding-bottom: 2px;
+  }
+  .actions a:hover { border-color: var(--accent); }
+  .actions .pick {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--fg-mute);
+    font-weight: 500;
+  }
+
+  .section-label {
+    padding: 36px 48px 0;
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg-mute);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Federal — Font variations</h1>
+  <div class="tag">Four serifs · Same layout · Pick one</div>
+</header>
+
+<div class="lede">
+  Same layout, same palette, same copy. <b>Only the display serif changes.</b>
+  Caslon is warm and bookish. Fraunces is contemporary editorial, soft letterforms.
+  Playfair goes high-contrast, fashion-y. Cormorant Garamond is the finest of the four,
+  cursive italic, almost wedding-invitation. <b>Look at the hero headline and $49 first,</b>
+  that's where the character lives.
+</div>
+
+<div class="section-label">Type specimens — real size, direct render</div>
+
+<div class="specimens">
+
+  <div class="spec f1">
+    <div class="spec-id">F1 · Caslon</div>
+    <div class="spec-name">Libre Caslon Text + Playfair italic</div>
+    <div class="headline">Test your peptide in a real US lab. <em>In 48 hours.</em></div>
+    <div class="price">$49<span style="font-family:Inter,sans-serif;font-size:18px;font-weight:500;letter-spacing:0;color:rgba(231,234,240,0.58);">/test</span></div>
+    <p class="body">
+      Mail us your sample. Get a signed report from our independent American
+      lab in 48 hours. Know what's really in the vial, and that it's safe to
+      use, before it goes anywhere near your body.
+    </p>
+    <div class="meta">
+      Warm · bookish · Revolutionary-era<br/>
+      Treasury & US Constitution feel
+    </div>
+  </div>
+
+  <div class="spec f2">
+    <div class="spec-id">F2 · Fraunces</div>
+    <div class="spec-name">Fraunces variable (opsz + ital + wght)</div>
+    <div class="headline">Test your peptide in a real US lab. <em>In 48 hours.</em></div>
+    <div class="price">$49<span style="font-family:Inter,sans-serif;font-size:18px;font-weight:500;letter-spacing:0;color:rgba(231,234,240,0.58);">/test</span></div>
+    <p class="body">
+      Mail us your sample. Get a signed report from our independent American
+      lab in 48 hours. Know what's really in the vial, and that it's safe to
+      use, before it goes anywhere near your body.
+    </p>
+    <div class="meta">
+      Contemporary editorial · soft ink traps<br/>
+      Stripe Press / Commonplace voice
+    </div>
+  </div>
+
+  <div class="spec f3">
+    <div class="spec-id">F3 · Playfair</div>
+    <div class="spec-name">Playfair Display — dominant didone</div>
+    <div class="headline">Test your peptide in a real US lab. <em>In 48 hours.</em></div>
+    <div class="price">$49<span style="font-family:Inter,sans-serif;font-size:18px;font-weight:500;letter-spacing:0;color:rgba(231,234,240,0.58);">/test</span></div>
+    <p class="body">
+      Mail us your sample. Get a signed report from our independent American
+      lab in 48 hours. Know what's really in the vial, and that it's safe to
+      use, before it goes anywhere near your body.
+    </p>
+    <div class="meta">
+      High-contrast didone · dramatic<br/>
+      Vogue-meets-lab editorial
+    </div>
+  </div>
+
+  <div class="spec f4">
+    <div class="spec-id">F4 · Cormorant</div>
+    <div class="spec-name">Cormorant Garamond + cursive italic</div>
+    <div class="headline">Test your peptide in a real US lab. <em>In 48 hours.</em></div>
+    <div class="price">$49<span style="font-family:Inter,sans-serif;font-size:18px;font-weight:500;letter-spacing:0;color:rgba(231,234,240,0.58);">/test</span></div>
+    <p class="body">
+      Mail us your sample. Get a signed report from our independent American
+      lab in 48 hours. Know what's really in the vial, and that it's safe to
+      use, before it goes anywhere near your body.
+    </p>
+    <div class="meta">
+      Fine classical · calligraphic italic<br/>
+      Condé Nast / wedding-invitation
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label">Full-page previews</div>
+
+<div class="grid">
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">F1 · Caslon</div>
+        <div class="title">Classical American</div>
+      </div>
+      <div class="note">Current baseline<br/>Treasury / Constitution</div>
+    </div>
+    <div class="desc">
+      Libre Caslon Text with Playfair italic accents. The warm, bookish voice we have now.
+      <em>Authority via heritage.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="fonts-caslon.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="fonts-caslon.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "F1"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">F2 · Fraunces</div>
+        <div class="title">Contemporary editorial</div>
+      </div>
+      <div class="note">Variable font<br/>Stripe Press-ish</div>
+    </div>
+    <div class="desc">
+      Fraunces variable (opsz + ital + wght). Softer letterforms, warmer curves, very "now."
+      <em>Authority via craft.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="fonts-fraunces.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="fonts-fraunces.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "F2"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">F3 · Playfair</div>
+        <div class="title">High-contrast didone</div>
+      </div>
+      <div class="note">Dramatic thin/thick<br/>Vogue-ish</div>
+    </div>
+    <div class="desc">
+      Playfair Display throughout. Stronger thin-thick contrast, more editorial drama.
+      <em>Authority via elegance.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="fonts-playfair.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="fonts-playfair.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "F3"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">F4 · Cormorant</div>
+        <div class="title">Classical, cursive italic</div>
+      </div>
+      <div class="note">Fine hairlines<br/>Condé Nast-ish</div>
+    </div>
+    <div class="desc">
+      Cormorant Garamond throughout. Finest letterforms of the four, the italic is
+      genuinely calligraphic. <em>Authority via refinement.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="fonts-cormorant.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="fonts-cormorant.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "F4"</div>
+    </div>
+  </article>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #F2E9D8;
+      --ink: #0F1B2D;
+      --red: #B0202E;
+      --green: #5C8264;
+      --gold: #C9A961;
+      --muted: #626B78;
+      --border: #E5DDC8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 2064px;
+      height: 2752px;
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", Arial, sans-serif;
+    }
+    .art {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(242,233,216,.70), rgba(242,233,216,.94)),
+        url("file:///Users/ovsh/Documents/code/peptide-lab/mobile/store-assets/app-store/backdrops/gpt-image-2-clinical-ledger-backdrop.png");
+      background-size: cover;
+      background-position: center;
+    }
+    .art::before {
+      content: "";
+      position: absolute;
+      left: 104px;
+      right: 104px;
+      top: 58px;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--red), var(--ink), var(--red), transparent);
+      opacity: .55;
+      z-index: 2;
+    }
+    .copy {
+      position: absolute;
+      z-index: 4;
+      left: 112px; top: 126px; width: 720px; text-align: left;
+    }
+    .kicker {
+      margin: 0 0 18px;
+      color: var(--red);
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 8px;
+      font-weight: 900;
+    }
+    h1 {
+      margin: 0;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 98px;
+      line-height: .98;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+    .sub {
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 38px;
+      line-height: 1.18;
+      font-weight: 800;
+      text-wrap: balance;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .chips span {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 13px 17px;
+      border: 1px solid rgba(15,27,45,.13);
+      border-radius: 999px;
+      background: rgba(255,255,255,.62);
+      color: var(--ink);
+      font-size: 22px;
+      font-weight: 800;
+      box-shadow: 0 8px 24px rgba(15,27,45,.05);
+    }
+    .chips span::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+    .device {
+      position: absolute;
+      z-index: 3;
+      width: 1120px;
+      right: 96px; bottom: 74px;
+      border-radius: 72px;
+      border: 8px solid rgba(15,27,45,.96);
+      overflow: hidden;
+      background: #FFFDF6;
+      box-shadow:
+        0 42px 90px rgba(15,27,45,.25),
+        0 0 0 2px rgba(255,255,255,.8) inset;
+    }
+    .device img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .device::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.72);
+      pointer-events: none;
+    }
+    .badge {
+      position: absolute;
+      z-index: 5;
+      left: 112px; bottom: 150px; width: 610px;
+      display: block;
+      padding: 30px 34px;
+      border: 1px solid rgba(15,27,45,.12);
+      border-radius: 28px;
+      background: rgba(255,255,255,.66);
+      box-shadow: 0 24px 60px rgba(15,27,45,.10);
+      backdrop-filter: blur(8px);
+    }
+    .badge strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 34px;
+      line-height: 1.08;
+    }
+    .badge p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 23px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="art">
+    <section class="copy">
+      <p class="kicker">LOG SHOT</p>
+      <h1>Log in seconds.</h1>
+      <p class="sub">Medication, dose, date, time, and site stay together.</p>
+      <div class="chips"><span>0.1 dose ticks</span><span>Date &amp; time</span><span>Site rotation</span></div>
+    </section>
+    <section class="badge">
+      <strong>Made for repeat routines.</strong>
+      <p>Clear logs, calm charts, and less context switching.</p>
+    </section>
+    <div class="device">
+      <img src="file:///Users/ovsh/Documents/code/peptide-lab/mobile/store-assets/app-store/screenshots/real-scerenshots/WhatsApp%20Image%202026-04-30%20at%2001.25.14%20(1).jpeg" alt="">
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <radialGradient id="navyGrad" cx=".5" cy=".4" r=".9">
+      <stop offset="0" stop-color="#13316A"/>
+      <stop offset="1" stop-color="#08183A"/>
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0D58E"/>
+      <stop offset=".5" stop-color="#C5A572"/>
+      <stop offset="1" stop-color="#8E7340"/>
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E03244"/>
+      <stop offset="1" stop-color="#7C0A12"/>
+    </linearGradient>
+    <linearGradient id="creamGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFCEB"/>
+      <stop offset="1" stop-color="#F0E6CB"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+      <feOffset dx="0" dy="6"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".4"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- navy field -->
+  <rect width="1200" height="630" fill="url(#navyGrad)"/>
+
+  <!-- gold borders -->
+  <g stroke="url(#goldGrad)" fill="none">
+    <rect x="28" y="28" width="1144" height="574" stroke-width="2"/>
+    <rect x="42" y="42" width="1116" height="546" stroke-width="5"/>
+    <rect x="60" y="60" width="1080" height="510" stroke-width="1" opacity=".5"/>
+  </g>
+
+  <!-- corner stars -->
+  <g fill="url(#goldGrad)" font-family="Georgia, 'Times New Roman', serif" font-size="28" text-anchor="middle">
+    <text x="56" y="80">★</text>
+    <text x="1144" y="80">★</text>
+    <text x="56" y="586">★</text>
+    <text x="1144" y="586">★</text>
+  </g>
+
+  <!-- left medallion: chromatogram peak inside cream coin -->
+  <g transform="translate(245, 315)" filter="url(#dropShadow)">
+    <circle r="170" fill="url(#redGrad)" opacity=".08"/>
+    <circle r="158" fill="none" stroke="url(#redGrad)" stroke-width="6"/>
+    <circle r="146" fill="none" stroke="url(#redGrad)" stroke-width="1.5"/>
+    <circle r="132" fill="url(#creamGrad)"/>
+
+    <!-- inside peak -->
+    <path d="
+      M -72 72
+      L -40 72
+      Q -20 70 -8 68
+      Q -2 64 -1 -40
+      Q 0 -64 1 -40
+      Q 2 64 8 68
+      Q 20 70 40 72
+      L 72 72 Z"
+      fill="url(#redGrad)"/>
+    <line x1="-90" y1="74" x2="90" y2="74" stroke="url(#redGrad)" stroke-width="1.5" opacity=".7"/>
+    <text x="0" y="-70" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="30" fill="url(#redGrad)" text-anchor="middle" letter-spacing="2">99.8%</text>
+  </g>
+
+  <!-- right column: wordmark + tagline -->
+  <g>
+    <text x="450" y="220" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="56" fill="url(#creamGrad)" letter-spacing="2">The Great American</text>
+    <text x="450" y="290" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="56" fill="url(#creamGrad)" letter-spacing="2">Peptide Company</text>
+    <line x1="450" y1="320" x2="1100" y2="320" stroke="url(#goldGrad)" stroke-width="1" opacity=".7"/>
+    <text x="450" y="372" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="34" fill="url(#goldGrad)" letter-spacing="1">Know what's in the vial.</text>
+
+    <!-- chips -->
+    <g font-family="Georgia, 'Times New Roman', serif" font-size="22" fill="url(#creamGrad)" letter-spacing="3">
+      <text x="450" y="450">FROM $225</text>
+      <text x="660" y="450" fill="url(#goldGrad)">·</text>
+      <text x="688" y="450">3 - 5 DAY TURNAROUND</text>
+    </g>
+    <g font-family="Georgia, 'Times New Roman', serif" font-size="18" fill="url(#goldGrad)" letter-spacing="6" opacity=".85">
+      <text x="450" y="500">HPLC PURITY  ·  ENDOTOXIN LAL  ·  US LAB</text>
+    </g>
+  </g>
+
+  <!-- bottom seal -->
+  <g text-anchor="middle">
+    <text x="600" y="555" font-family="Georgia, 'Times New Roman', serif" font-size="14" fill="url(#goldGrad)" letter-spacing="5" opacity=".75">ISO/IEC 17025  ·  A2LA ACCREDITED</text>
+  </g>
+</svg>

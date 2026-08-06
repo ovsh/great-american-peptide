@@ -58,5 +58,9 @@ export interface PreferencesRow {
   start_weight_at: number | null;
   goal_weight: number | null;
   height: number | null;
+  review_event_count: number;
+  review_first_event_at: number | null;
+  review_last_prompted_at: number | null;
+  review_prompted_version: string | null;
   updated_at: number;
 }

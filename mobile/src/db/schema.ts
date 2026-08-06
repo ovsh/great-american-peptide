@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -77,5 +77,14 @@ export const MIGRATIONS: { version: number; up: string }[] = [
   {
     version: 3,
     up: `ALTER TABLE preferences ADD COLUMN goal_weight REAL;`,
+  },
+  {
+    version: 4,
+    up: `
+      ALTER TABLE preferences ADD COLUMN review_event_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE preferences ADD COLUMN review_first_event_at INTEGER;
+      ALTER TABLE preferences ADD COLUMN review_last_prompted_at INTEGER;
+      ALTER TABLE preferences ADD COLUMN review_prompted_version TEXT;
+    `,
   },
 ];

@@ -20,6 +20,7 @@ import type { MedicationRow } from '@/db/types';
 import { getBodySite, type View as BodyView } from '@/domain/bodySites';
 import { peptidePresets, getPreset } from '@/domain/peptides';
 import { useAppStore } from '@/stores/app';
+import { recordPositiveEvent, maybePromptForReview } from '@/services/review';
 import { safeBack } from '@/utils/nav';
 import { colors, spacing, radius, text as typo } from '@/theme';
 
@@ -232,6 +233,9 @@ export default function LogShotScreen() {
       bumpVersion();
       haptic('success');
       safeBack('/');
+      recordPositiveEvent()
+        .then(() => maybePromptForReview())
+        .catch(() => {});
     } catch (err: any) {
       Alert.alert('Could not save', String(err?.message ?? err));
     } finally {
