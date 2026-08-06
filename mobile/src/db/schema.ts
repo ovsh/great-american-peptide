@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -85,6 +85,25 @@ export const MIGRATIONS: { version: number; up: string }[] = [
       ALTER TABLE preferences ADD COLUMN review_first_event_at INTEGER;
       ALTER TABLE preferences ADD COLUMN review_last_prompted_at INTEGER;
       ALTER TABLE preferences ADD COLUMN review_prompted_version TEXT;
+    `,
+  },
+  {
+    version: 5,
+    up: `
+      CREATE TABLE IF NOT EXISTS side_effect_logs (
+        id          TEXT PRIMARY KEY,
+        effect      TEXT NOT NULL,
+        severity    INTEGER NOT NULL,
+        taken_at    INTEGER NOT NULL,
+        notes       TEXT,
+        deleted_at  INTEGER,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_side_effects_taken ON side_effect_logs(taken_at);
+
+      ALTER TABLE preferences ADD COLUMN goal_kind TEXT;
+      ALTER TABLE preferences ADD COLUMN display_name TEXT;
+      ALTER TABLE preferences ADD COLUMN side_effect_concerns TEXT;
     `,
   },
 ];

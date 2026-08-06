@@ -44,6 +44,27 @@ function parseTime(hhmm: string): { hour: number; minute: number } {
   return { hour: h ?? 9, minute: m ?? 0 };
 }
 
+function nextAnchoredAt(
+  weekday: number,
+  intervalMs: number,
+  hour: number,
+  minute: number,
+): number {
+  const now = Date.now();
+  const anchor = new Date(now);
+  anchor.setHours(hour, minute, 0, 0);
+  const daysSinceAnchor = (anchor.getDay() - weekday + 7) % 7;
+  anchor.setDate(anchor.getDate() - daysSinceAnchor);
+  if (anchor.getTime() > now) anchor.setDate(anchor.getDate() - 7);
+
+  for (let occurrence = 0; occurrence < 20; occurrence++) {
+    const candidate = new Date(anchor.getTime() + occurrence * intervalMs);
+    candidate.setHours(hour, minute, 0, 0);
+    if (candidate.getTime() > now) return candidate.getTime();
+  }
+  return now + intervalMs;
+}
+
 export async function refreshScheduledReminders(): Promise<void> {
   const Notifications = await getNotifications();
   if (!Notifications) return;
@@ -58,8 +79,18 @@ export async function refreshScheduledReminders(): Promise<void> {
     if (med.status !== 'active') continue;
     const last = await lastInjectionFor(med.id);
     const intervalMs = frequencyHours(med.frequency_kind, med.frequency_value) * 60 * 60 * 1000;
+    const weekdayAnchor = med.frequency_kind !== 'every_n_days'
+      && med.frequency_kind !== 'daily'
+      && med.frequency_value !== null
+      && Number.isInteger(med.frequency_value)
+      && med.frequency_value >= 0
+      && med.frequency_value <= 6
+        ? med.frequency_value
+        : null;
     const lastTaken = last?.taken_at ?? Date.now() - intervalMs;
-    let next = lastTaken + intervalMs;
+    let next = weekdayAnchor !== null
+      ? nextAnchoredAt(weekdayAnchor, intervalMs, hour, minute)
+      : lastTaken + intervalMs;
     const now = Date.now();
     if (next < now) next = now + 60 * 1000;
 

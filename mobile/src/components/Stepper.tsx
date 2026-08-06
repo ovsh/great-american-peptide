@@ -20,11 +20,11 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
   const inputRef = useRef<TextInput>(null);
 
   const dec = () => {
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
     onChange(Math.max(min, +(value - step).toFixed(2)));
   };
   const inc = () => {
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
     onChange(Math.min(max, +(value + step).toFixed(2)));
   };
 
@@ -44,7 +44,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
 
   return (
     <View style={styles.row}>
-      <Pressable style={styles.btn} onPress={dec} hitSlop={10}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Decrease" style={styles.btn} onPress={dec}>
         <Minus size={18} color={colors.ink} />
       </Pressable>
       <View style={styles.valueWrap}>
@@ -69,7 +69,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
           ) : null
         ) : null}
       </View>
-      <Pressable style={styles.btn} onPress={inc} hitSlop={10}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Increase" style={styles.btn} onPress={inc}>
         <Plus size={18} color={colors.ink} />
       </Pressable>
     </View>
@@ -85,8 +85,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   btn: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,

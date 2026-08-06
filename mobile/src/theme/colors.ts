@@ -1,48 +1,52 @@
-// Sampled from reference/1.jpg and 2.jpg.
-// Cream background, deep navy ink, crimson CTAs, muted olive-green status.
-
 export const colors = {
-  background: '#F2E9D8',
+  background: '#FAFAF8',
   surface: '#FFFFFF',
-  surfaceMuted: '#FAF3E0',
-  surfaceInverse: '#0F1B2D',
+  surfaceMuted: '#FAFAF8',
+  surfaceInverse: '#111418',
 
-  ink: '#0F1B2D',
+  ink: '#111418',
   inkMuted: '#6B7280',
-  inkSubtle: '#9CA3AF',
-  inkInverse: '#FFF8E7',
+  inkSubtle: '#9AA1AA',
+  inkInverse: '#FFFFFF',
 
-  navy: '#0F1B2D',
-  navyDeep: '#080F1B',
+  navy: '#111418',
+  navyDeep: '#111418',
 
-  red: '#B0202E',
-  redDeep: '#8B1623',
-  redSoft: '#F2DDDF',
+  red: '#2FB47C',
+  redDeep: '#2FB47C',
+  redSoft: '#E7F6EF',
 
-  gold: '#C9A961',
-  goldDeep: '#9C7B33',
+  gold: '#E8A13C',
+  goldDeep: '#E8A13C',
 
-  success: '#5C8264',
-  successDeep: '#3F6147',
-  successSoft: '#DCE6D9',
+  success: '#2FB47C',
+  successDeep: '#2FB47C',
+  successSoft: '#E7F6EF',
 
-  warning: '#C58A2E',
-  warningSoft: '#F4E6CC',
+  warning: '#E8A13C',
+  warningSoft: 'rgba(232,161,60,0.14)',
 
-  danger: '#B0202E',
-  dangerSoft: '#F2DDDF',
+  danger: '#E5484D',
+  dangerSoft: 'rgba(229,72,77,0.12)',
 
-  border: '#E5DDC8',
-  borderStrong: '#C9BFA5',
-  divider: 'rgba(15, 27, 45, 0.06)',
-  dividerStrong: 'rgba(15, 27, 45, 0.12)',
+  border: 'rgba(17,20,24,0.08)',
+  borderStrong: 'rgba(17,20,24,0.12)',
+  divider: 'rgba(17,20,24,0.08)',
+  dividerStrong: 'rgba(17,20,24,0.12)',
 
-  chartLine: '#0F1B2D',
-  chartFill: 'rgba(15, 27, 45, 0.08)',
-  chartProjection: 'rgba(15, 27, 45, 0.35)',
-  chartGrid: 'rgba(15, 27, 45, 0.06)',
+  chartLine: '#2FB47C',
+  chartFill: 'rgba(47,180,124,0.10)',
+  chartProjection: 'rgba(17,20,24,0.35)',
+  chartGrid: 'rgba(17,20,24,0.08)',
 
-  med: ['#B0202E', '#0F1B2D', '#5C8264', '#C9A961', '#7B5EA7', '#2E7D8A'] as const,
+  accent: '#2FB47C',
+  accentSoft: '#E7F6EF',
+  amber: '#E8A13C',
+  violet: '#8B7BD8',
+  blue: '#4A9FE8',
+  cardShadow: '#111418',
+
+  med: ['#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C'] as const,
 } as const;
 
 export type Color = keyof typeof colors;

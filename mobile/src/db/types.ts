@@ -33,6 +33,17 @@ export interface InjectionRow {
 
 export type MeasurementKind = 'weight' | 'bmi' | 'height';
 
+export type GoalKind = 'weight_loss' | 'recovery' | 'longevity' | 'performance' | 'other';
+
+export type SideEffectKind =
+  | 'nausea'
+  | 'fatigue'
+  | 'constipation'
+  | 'headache'
+  | 'injection_site'
+  | 'appetite_loss'
+  | 'other';
+
 export interface MeasurementRow {
   id: string;
   kind: MeasurementKind;
@@ -41,6 +52,16 @@ export interface MeasurementRow {
   taken_at: number;
   source: 'manual' | 'healthkit';
   source_id: string | null;
+  notes: string | null;
+  deleted_at: number | null;
+  created_at: number;
+}
+
+export interface SideEffectLogRow {
+  id: string;
+  effect: SideEffectKind;
+  severity: number;
+  taken_at: number;
   notes: string | null;
   deleted_at: number | null;
   created_at: number;
@@ -62,5 +83,8 @@ export interface PreferencesRow {
   review_first_event_at: number | null;
   review_last_prompted_at: number | null;
   review_prompted_version: string | null;
+  goal_kind: GoalKind | null;
+  display_name: string | null;
+  side_effect_concerns: string | null;
   updated_at: number;
 }

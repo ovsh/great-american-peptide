@@ -62,6 +62,33 @@ export async function createMedication(input: NewMedication): Promise<Medication
   return row;
 }
 
+export async function updateMedicationDefaults(
+  id: string,
+  input: Omit<NewMedication, 'colorIndex'>,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE medications SET
+      name = ?, preset_id = ?, default_dose = ?, default_unit = ?, default_route = ?,
+      frequency_kind = ?, frequency_value = ?, half_life_hours = ?, tmax_hours = ?,
+      status = 'active', updated_at = ?
+     WHERE id = ?`,
+    [
+      input.name,
+      input.presetId ?? null,
+      input.defaultDose,
+      input.defaultUnit,
+      input.defaultRoute,
+      input.frequencyKind,
+      input.frequencyValue ?? null,
+      input.halfLifeHours ?? null,
+      input.tmaxHours ?? null,
+      Date.now(),
+      id,
+    ],
+  );
+}
+
 export async function setMedicationStatus(id: string, status: 'active' | 'paused' | 'archived'): Promise<void> {
   const db = await getDb();
   await db.runAsync(`UPDATE medications SET status = ?, updated_at = ? WHERE id = ?`, [status, Date.now(), id]);

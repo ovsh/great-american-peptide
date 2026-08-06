@@ -10,16 +10,19 @@ interface CardProps {
   raised?: boolean;
 }
 
-export function Card({ children, style, padding = 'lg', variant = 'default', raised = false }: CardProps) {
-  const bg =
-    variant === 'inverse' ? colors.surfaceInverse :
-    variant === 'muted' ? colors.surfaceMuted :
-    colors.surface;
+const CARD_BACKGROUNDS = {
+  default: colors.surface,
+  muted: colors.surface,
+  inverse: colors.surface,
+} as const;
+
+export function Card({ children, style, padding = 'xl', variant = 'default', raised = false }: CardProps) {
+  const bg = CARD_BACKGROUNDS[variant];
   return (
     <View
       style={[
         styles.card,
-        raised && elevation.card,
+        raised ? elevation.raised : elevation.card,
         { backgroundColor: bg, padding: spacing[padding] },
         style,
       ]}
@@ -31,8 +34,6 @@ export function Card({ children, style, padding = 'lg', variant = 'default', rai
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.xl,
   },
 });

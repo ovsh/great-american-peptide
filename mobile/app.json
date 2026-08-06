@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Peptide Tracker",
+    "name": "Poke",
     "owner": "ovsh-2",
     "slug": "peptide-tracker",
     "version": "1.0.1",
@@ -14,6 +14,7 @@
       "bundleIdentifier": "industries.peptide.tracker",
       "appStoreUrl": "https://apps.apple.com/us/app/the-great-peptide-tracker/id6764757185",
       "infoPlist": {
+        "CFBundleDisplayName": "Poke",
         "ITSAppUsesNonExemptEncryption": false
       }
     },

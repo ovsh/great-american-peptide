@@ -1,6 +1,28 @@
 import { getDb } from '../db/client';
 import type { PreferencesRow } from '../db/types';
 
+export type PreferencesPatch = Partial<Omit<PreferencesRow, 'id' | 'updated_at'>>;
+
+const PREFERENCE_COLUMNS = [
+  'weight_unit',
+  'height_unit',
+  'reminder_time',
+  'notifications_enabled',
+  'disclaimer_accepted_at',
+  'onboarding_completed_at',
+  'start_weight',
+  'start_weight_at',
+  'goal_weight',
+  'height',
+  'review_event_count',
+  'review_first_event_at',
+  'review_last_prompted_at',
+  'review_prompted_version',
+  'goal_kind',
+  'display_name',
+  'side_effect_concerns',
+] as const satisfies readonly (keyof PreferencesPatch)[];
+
 export async function getPreferences(): Promise<PreferencesRow> {
   const db = await getDb();
   const row = await db.getFirstAsync<PreferencesRow>(`SELECT * FROM preferences WHERE id = 1`);
@@ -8,13 +30,15 @@ export async function getPreferences(): Promise<PreferencesRow> {
   return row;
 }
 
-export async function updatePreferences(patch: Partial<Omit<PreferencesRow, 'id' | 'updated_at'>>): Promise<void> {
+export async function updatePreferences(patch: PreferencesPatch): Promise<void> {
   const db = await getDb();
   const sets: string[] = [];
   const args: (string | number | null)[] = [];
-  for (const [k, v] of Object.entries(patch)) {
-    sets.push(`${k} = ?`);
-    args.push(v as string | number | null);
+  for (const column of PREFERENCE_COLUMNS) {
+    const value = patch[column];
+    if (value === undefined) continue;
+    sets.push(`${column} = ?`);
+    args.push(value);
   }
   if (sets.length === 0) return;
   sets.push('updated_at = ?');
