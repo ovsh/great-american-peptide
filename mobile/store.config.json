@@ -1,0 +1,94 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.1.0",
+    "copyright": "Hypermark LLC",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "en-US": {
+        "title": "Poke: Peptide & GLP-1 Log",
+        "subtitle": "Shot log, levels and trends",
+        "promoText": "Log a shot in seconds. See your level fall day by day, watch weight and side effects move together, and take a clean record to your next appointment.",
+        "description": "Poke is a private notebook for a routine that runs on injections.\n\nLog a shot in a few taps: medication, amount, site, date and time. Poke then tells you the one thing you actually want to know — when the next shot is due. Everything stays on your phone. There is no account and no sign-in.\n\nFREE, FOR AS LONG AS YOU USE IT\n- Log a shot in seconds\n- Your next shot day, on the first screen\n- The full history of what you logged\n- One medication\n- One reminder\n\nPOKE PRO\n- Your level, day by day. Poke draws the estimated curve between your shots from the half-life you set and the shots you logged.\n- Trends that add up. Weight, doses and the side effects you record, on one timeline, so you can see what moved with what.\n- Every medication. Run more than one at a time, each with its own schedule.\n- Take it to your doctor. Export everything you logged as a CSV file.\n\nWHAT POKE IS NOT\nPoke is a record of what you enter, and nothing more. It gives no medical advice, no diagnosis, no treatment guidance and no dose recommendations. The level curve is an estimate calculated from the values you type in, not a measurement, and it is not a basis for changing a dose. The reconstitution screen is a unit conversion for laboratory and educational use: it turns a mass and a volume into a concentration. Speak to a licensed clinician about your treatment, and call your local emergency number in an emergency.\n\nPRIVACY\nYour log lives on your device. Poke has no user accounts, so there is nothing to sign in to and nothing to leak.\n\nSUBSCRIPTION\nPoke Pro is an auto-renewable subscription.\n- Poke Pro Yearly: 39.99 USD per year, after a 1-month free trial for new subscribers.\n- Poke Pro Monthly: 9.99 USD per month, no trial.\nPrices are in US dollars and may differ in your region; the price you will pay is always shown in the app before you buy. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews on its own unless you turn off auto-renew at least 24 hours before the period ends. Your Apple Account is charged for renewal within 24 hours before the current period ends. Manage or cancel a subscription in your Apple Account settings after purchase. Any unused part of a free trial is forfeited when you buy a subscription.\n\nTerms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/\nPrivacy Policy: https://peptide.industries/privacy",
+        "keywords": [
+          "glp1",
+          "semaglutide",
+          "tirzepatide",
+          "injection",
+          "peptide",
+          "shot",
+          "reminder",
+          "dose",
+          "weight",
+          "tracker",
+          "log",
+          "level"
+        ],
+        "releaseNotes": "Poke Pro arrives. Logging stays free for as long as you use it — the level curve, the trend charts, more than one medication and CSV export are now part of Pro. Also: the reminder is steadier, and the first-run setup states plainly what Poke is and is not.",
+        "marketingUrl": "https://peptide.industries/peptide-tracker/",
+        "supportUrl": "https://peptide.industries/support/",
+        "privacyPolicyUrl": "https://peptide.industries/privacy",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/en-US/APP_IPHONE_67/01-today.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/02-log.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/03-level.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/04-progress.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/05-history.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/06-medications.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "store/apple/screenshot/en-US/APP_IPAD_PRO_3GEN_129/01-today.png",
+            "store/apple/screenshot/en-US/APP_IPAD_PRO_3GEN_129/02-log.png",
+            "store/apple/screenshot/en-US/APP_IPAD_PRO_3GEN_129/03-level.png",
+            "store/apple/screenshot/en-US/APP_IPAD_PRO_3GEN_129/04-progress.png",
+            "store/apple/screenshot/en-US/APP_IPAD_PRO_3GEN_129/05-history.png"
+          ]
+        }
+      }
+    },
+    "categories": [
+      "HEALTH_AND_FITNESS",
+      "MEDICAL"
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": true,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Miki",
+      "lastName": "Ovshievich",
+      "email": "mikiovshievich@gmail.com",
+      "phone": "+1 845 300 3458",
+      "demoRequired": false,
+      "notes": "NO ACCOUNT IS NEEDED\nPoke has no user accounts, no sign-in and no server. Nothing is sent anywhere. All data lives in a local database on the device. There is no demo account to supply, because there is nothing to sign in to. Open the app and the setup flow starts.\n\nHOW TO SEE THE PAID FEATURES\nPoke Pro is an auto-renewable subscription in the group \"Poke Pro\", sold through RevenueCat over StoreKit 2.\n\n1. Finish the short setup flow. The paywall opens on its own at the end of it, and it can be dismissed — the free features work without buying anything.\n2. To reach the paywall again later: Profile tab → Subscription → \"Get Poke Pro\". Any locked feature opens it too: the Progress tab, the level chart on a medication card in the Today tab, \"Export history\" in the Profile tab, or adding a second medication in Profile → Medications.\n3. Buy either plan with the sandbox Apple Account. Sandbox purchases are free. The yearly plan carries a 1-month free trial for new subscribers.\n4. The paywall closes and every Pro screen unlocks at once. \"Restore purchases\" sits in the top bar of the paywall and in Profile → Subscription.\n\nIf the sandbox store is unreachable for any reason, the app unlocks every feature rather than showing a locked screen you cannot buy your way out of. So a failed store connection will not block the review.\n\nFREE VERSUS PAID\nFree, permanently: log a shot, next shot day, full history, one medication, one reminder.\nPro: estimated level curve, progress and trend charts, more than one medication, CSV export.\n\nMEDICAL POSITIONING — PLEASE READ\nPoke is a personal record-keeping app. It is not a medical device and it makes no clinical claim.\n\n- Poke does not recommend, calculate or suggest a dose. It records the dose the user tells it they took. It never proposes a number.\n- Poke does not diagnose, treat or give treatment guidance, and it gives no administration instructions.\n- The \"level\" chart is an estimate drawn from two things the user typed in: the shots they logged and a half-life value they set. It is labelled on screen as an estimate and marked \"not for dosing\". It is not a measurement of anything in the body.\n- The reconstitution screen is a unit conversion — mass and volume in, concentration out. It is labelled on screen \"For laboratory research and educational calculations only. Not for clinical, patient, medical, injection, or dosing use.\" It suggests nothing and it fills nothing in for the user.\n- The first-run setup states, above the button that finishes it, that Poke gives no medical advice, no diagnosis and no dose instructions, and that the user should speak to their clinician. A full disclaimer also sits in Profile.\n- No drug brand names are used anywhere in the app or in this listing. Only generic medication names the user selects for their own log.\n\nVersion 1.0 of this app was approved with the same framing. Version 1.1.0 adds the subscription and does not change what the app claims to do.\n\nCONTACT\nsupport@peptide.industries"
+    }
+  }
+}

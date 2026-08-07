@@ -1,11 +1,31 @@
 # Poke Pro — App Store Connect and RevenueCat setup
 
+Status, 7 August 2026: **all of this is done.** Version 1.1.0 (build 9) went to
+App Review at 4:15 AM with four items in one submission — the app version, both
+subscriptions and the subscription group. The sections below are kept as the
+record of what exists, not as a to-do list. The one open item is the sandbox
+tester account in §1.6.
+
 Scope: everything that must exist in the two consoles before the paywall can sell
 anything. The app code is done and committed; nothing here needs a code change,
 except the last step (the API key).
 
 The names below are read directly from the source. If you change a name in a
 console, change it in the source too, or the paywall will find nothing.
+
+## Identifiers, as built
+
+| Thing | Id |
+| --- | --- |
+| ASC app | `6764757185` |
+| Subscription group `Poke Pro` | `22292953` |
+| `poke_pro_annual` (Poke Pro Yearly) | `6798991220` |
+| `poke_pro_monthly` (Poke Pro Monthly) | `6798994162` |
+| RevenueCat project `Poke` | `52c999f8` |
+| RevenueCat app | `app2f31765daa` |
+| Entitlement `pro` | `entl4a7d85862d` |
+| Offering `default` | `ofrng523430a17d` |
+| EAS project | `3047092a-148d-4bd7-97bb-f6b8d9d619f2` |
 
 | Thing | Value | Read by |
 | --- | --- | --- |
@@ -40,21 +60,17 @@ the paywall will show one number offline and a different one online.
 
 ## 1. App Store Connect
 
-These steps need your Apple Account. I cannot do them: they need a password, and
-several of them are agreements. Do them in this order.
+Done. Kept here because the order matters if any of it has to be rebuilt.
 
 ### 1.1 Paid Applications agreement — blocks everything else
 
 Business → Agreements. The Paid Applications agreement must read **Active**.
 
-As of 7 August 2026 it reads **Expired** (term Jan 18 2026 to May 14 2026), a
-new version is waiting to be signed, and the bank account attached to it needs
-more information. While it is expired App Store Connect **disables the Create
-button** on the Subscriptions page, so no product can be made at all — and
-RevenueCat would return an empty offering even if one existed.
-
-Sign the new agreement and clear the bank notice first. Nothing below this line
-can be done until then.
+It now reads **Active**, term 6 August 2026 to 22 July 2027. Before it was
+signed it read Expired, and while it is expired App Store Connect **disables the
+Create button** on the Subscriptions page, so no product can be made at all —
+and RevenueCat returns an empty offering even if one exists. If subscriptions
+ever go quiet, look here first.
 
 ### 1.2 Subscription group
 
@@ -88,13 +104,24 @@ upgrade.
 ### 1.4 Localisation and review data
 
 Each product needs a display name, a description, and a review screenshot before
-Apple will approve it. Suggested copy, in the tone of the app:
+Apple will approve it. What is set:
 
-- Monthly display name: `Poke Pro`
-- Yearly display name: `Poke Pro`
-- Description: `Your medication level day by day, trends across weight, doses and side effects, more than one medication, and export for your doctor.`
+- Yearly display name: `Poke Pro Yearly`
+- Monthly display name: `Poke Pro Monthly`
+- Description, both: `Your levels, trends and exports, all in one place.`
+- Review screenshot, both: the paywall, 1320×2868
+- Review notes, both: how to reach the paywall with no account, what free gets
+  against what Pro gets, the terms shown before purchase, and the note that the
+  app unlocks everything when the store cannot be reached
 
-The review screenshot can be the paywall itself.
+**Getting the review screenshot into ASC without a file picker.** The file input
+on the subscription page cannot be driven from this toolchain. The way round it:
+publish the image as a temporary extra app screenshot with `eas metadata:push`,
+read its `is1-ssl.mzstatic.com` URL out of the Media Manager DOM, `fetch` it from
+the ASC page itself (CORS allows it), wrap the blob in a `File` through
+`DataTransfer`, assign it to the subscription's file input and dispatch `input`
+and `change`. ASC uploads it at once, with no Save. Then remove the temporary
+screenshot with a second push.
 
 ### 1.5 App privacy
 
@@ -102,17 +129,81 @@ The paywall links `https://peptide.industries/privacy`. Confirm that URL is the
 one on the listing (App Information → Privacy Policy URL). If it is not, either
 fix the listing or fix `src/config/legal.ts` — they must agree.
 
-### 1.6 Sandbox tester
+### 1.6 Sandbox tester — still open, yours to do
 
 Users and Access → Sandbox → Testers. Make one account. Use it to test a real
 purchase without paying. Do not use your own Apple Account.
+
+This is the one step I cannot do: it needs a password to be set, and creating
+accounts is off limits to me. It does not block review — the app unlocks every
+feature when the store cannot be reached, so a reviewer never meets a locked
+door they cannot open. It does block step 4.3 below.
+
+---
+
+## 1A. The listing, and how it is written
+
+The App Store listing is **not** edited by hand any more. It lives in
+`mobile/store.config.json` and is pushed with:
+
+```
+npx eas metadata:push
+```
+
+`eas metadata` drives the App Store Connect API with the key EAS holds on its own
+servers, so no `.p8` is needed on this machine. One push sets the name, subtitle,
+promotional text, description, keywords, release notes, all three URLs, the
+copyright, both categories, the age advisory, the review contact and notes, the
+release option, and it uploads every screenshot. `npx eas metadata:pull` reads
+the live listing back into the same file.
+
+`eas submit` needs `ascAppId` in the `submit.production.ios` profile of
+`eas.json`, or it stops and asks for interactive mode.
+
+Screenshots live under `mobile/store/apple/screenshot/en-US/<display type>/`.
+Two display types cover the whole store:
+
+| Display type | Sizes accepted | What is there |
+| --- | --- | --- |
+| `APP_IPHONE_67` | 1290×2796 or **1320×2868** | 6 shots, 1320×2868 |
+| `APP_IPAD_PRO_3GEN_129` | 2048×2732 or **2064×2752** | 5 shots, 2064×2752 |
+
+The images are made in two steps. Raw simulator captures go in
+`store-assets/app-store/captures/<device>/`, taken on the simulators Apple
+accepts for each size class — **iPhone 17 Pro Max** (1320×2868) and **iPad Pro
+13" M4** (2064×2752). Then `node scripts/render-store-assets.mjs` draws the
+caption over each capture on a canvas of the same size, so the phone pixels are
+never resampled, and writes the finished slides to
+`store-assets/app-store/screenshots/<device>/`. Copy those into
+`store/apple/screenshot/en-US/<display type>/` for `metadata:push`. Do not
+hand-crop: a resized capture is what makes Apple reject a screenshot.
+
+The listing copy is drafted in
+`store-assets/app-store/copy/app-store-listing.md`; `store.config.json` is the
+machine-readable copy of it. Keep them in step.
+
+### Medical wording — do not loosen this
+
+The description and the review notes both say, in plain words, that Poke gives no
+medical advice, no diagnosis, no treatment guidance and no dose recommendation;
+that the level curve is an estimate drawn from numbers the user typed in and is
+not a measurement and not a basis for a dose; and that the reconstitution screen
+is a unit conversion for laboratory and educational use. No drug brand names
+appear anywhere. App Information carries the declaration that the app is not a
+regulated medical device in any country or region. This is what keeps the app on
+the right side of guidelines 1.4.1 and 1.4.2. Version 1.0 was approved with the
+same framing.
+
+The subscription disclosure that guideline 3.1.2 asks for — price, period,
+"renews automatically until cancelled", and links to the Apple standard Terms of
+Use and to the privacy policy — sits in the description **and** on the paywall
+itself. Both are required.
 
 ---
 
 ## 2. RevenueCat
 
-Needs a RevenueCat account. Creating the account is yours to do; everything
-after it is dashboard configuration.
+Done, and the ids are in the table at the top. Kept as the record of the shape.
 
 ### 2.1 Project and app
 
@@ -174,7 +265,8 @@ Confirm `.env.local` is ignored by git before you write the key into it.
 
 Until the key exists, the app runs **fully unlocked** on purpose: locking a door
 we cannot sell a key for only breaks the app. So the first proof is that the
-locks appear at all.
+locks appear at all. That same fallback is what stops a store outage from
+blocking App Review.
 
 1. `EXPO_PUBLIC_REVENUECAT_IOS_KEY=... npx expo start` on a device signed in to
    the sandbox tester account.
@@ -182,12 +274,40 @@ locks appear at all.
    row must say the trial. If it shows 49.99 with no trial, the offering did not
    load — check the offering is Current and the agreement is Active.
 3. Buy the yearly plan with the sandbox account. The paywall must close and
-   `/reports/level` must render the chart.
+   `/reports/level` must render the chart. **Not done yet** — waiting on the
+   sandbox tester account in §1.6.
 4. Delete and reinstall the app, then press **Restore purchases** in Profile.
-   Pro must come back.
+   Pro must come back. Same wait.
 5. Profile → Developer → Entitlement lets you force `free` or `pro` in a debug
    build without touching the store. `EXPO_PUBLIC_DEV_ENTITLEMENT=free` does the
-   same from the start.
+   same from the start. This is what the locked and unlocked screens were checked
+   with.
+
+---
+
+## 4A. Releasing
+
+```
+npx eas build --platform ios --profile production
+npx eas submit --platform ios --profile production --latest
+npx eas metadata:push
+```
+
+Then, in App Store Connect, by hand — the API does not do these:
+
+1. Wait about 5 to 10 minutes for Apple to finish processing the binary. Watch
+   TestFlight; the build must read **Complete**.
+2. Version page → **Add Build** → pick the build → Done → **Save**.
+3. Each subscription → **Add for Review** → the draft submission.
+4. The subscription group → **Add for Review** → the same draft submission. A
+   first subscription will not submit without its group **and** a new app
+   version; ASC says so in the draft panel and refuses until all three are in.
+5. Version page → **Add for Review** → the same draft submission.
+6. App Review → the draft → **Submit for Review**.
+
+Build on EAS, not locally. The local Xcode on this machine does not archive this
+project cleanly; EAS builds on its own image, and every shipped build so far came
+from there.
 
 ---
 
@@ -198,3 +318,19 @@ and Poke has none — the RevenueCat id is anonymous per install, so a purchase
 made on the web could not be matched to a phone. The sequence is: ship this,
 add Sign in with Apple at roughly 50 paying users, then build the web funnel
 when paid acquisition starts and the 30% actually costs real money.
+
+---
+
+## 6. Submission record
+
+**1.1.0 (9)** — submitted 7 August 2026, 4:15 AM. Four items in one submission:
+iOS App 1.1.0, Poke Pro Yearly, Poke Pro Monthly, and the Poke Pro subscription
+group. Status: Waiting for Review. Release option: **automatic on approval**.
+Age rating kept, not reset. Sign-in not required.
+
+The listing was renamed in this version: `Poke: Peptide & GLP-1 Log`, subtitle
+`Shot log, levels and trends`, categories Health & Fitness and Medical. Name,
+subtitle and category are shared app information — they go live with the version,
+not before.
+
+**1.0** — submitted 30 April 2026, approved.
