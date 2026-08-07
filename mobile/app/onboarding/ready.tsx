@@ -132,6 +132,13 @@ export default function ReadyScreen() {
       footer={(
         <View style={styles.actions}>
           {error ? <Text selectable color={colors.danger} align="center">{error}</Text> : null}
+          {/* `completeOnboarding` writes `disclaimer_accepted_at`, so this button
+              is the acceptance. The text must therefore be on this screen. */}
+          <Text variant="small" color={colors.inkMuted} align="center" style={styles.disclaimer}>
+            Poke keeps a record of what you enter. It gives no medical advice, no
+            diagnosis and no dose instructions. Speak to your clinician about your
+            treatment. Continue to agree.
+          </Text>
           <Button disabled={submitting} onPress={finish}>
             {submitting ? 'Saving your plan' : 'Start tracking'}
           </Button>
@@ -190,6 +197,10 @@ const styles = StyleSheet.create({
   },
   concernLine: {
     paddingTop: spacing.sm,
+  },
+  disclaimer: {
+    maxWidth: 340,
+    alignSelf: 'center',
   },
   actions: {
     gap: spacing.md,

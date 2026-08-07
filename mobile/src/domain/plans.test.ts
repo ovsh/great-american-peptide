@@ -22,8 +22,10 @@ test('a paid introductory price is not advertised as a free trial', () => {
   assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0.99, periodNumberOfUnits: 1, periodUnit: 'MONTH' })), null, 'paid intro');
 });
 
-test('a free introductory period becomes a day count', () => {
-  assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 1, periodUnit: 'WEEK' })), '7 days free', 'one week');
+test('a free introductory period keeps the unit the store gave it', () => {
+  assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 1, periodUnit: 'MONTH' })), '1 month free', 'one month');
+  assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 1, periodUnit: 'WEEK' })), '1 week free', 'one week');
+  assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 2, periodUnit: 'WEEK' })), '2 weeks free', 'two weeks');
   assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 3, periodUnit: 'DAY' })), '3 days free', 'three days');
   assertEqual(trialLabel(pkg('ANNUAL', 49.99, { price: 0, periodNumberOfUnits: 1, periodUnit: 'DAY' })), '1 day free', 'singular');
 });
@@ -32,7 +34,7 @@ test('placeholder pricing is used when no offering exists', () => {
   const [annual, monthly] = buildPlanOptions(null);
   assertEqual(annual.pkg, null, 'annual has no package');
   assertEqual(annual.badge, 'Save 67%', 'placeholder badge');
-  assertEqual(annual.trialLabel, '30 days free', 'placeholder trial');
+  assertEqual(annual.trialLabel, '1 month free', 'placeholder trial');
   assertEqual(monthly.badge, null, 'monthly never carries a badge');
   assertEqual(monthly.perMonthLabel, null, 'monthly needs no per-month line');
 });
@@ -43,7 +45,7 @@ test('real store prices drive the badge, not the placeholders', () => {
     pkg('MONTHLY', 9.99, null),
   ]));
   assertEqual(options[0].badge, 'Save 33%', 'badge from live prices');
-  assertEqual(options[0].trialLabel, '7 days free', 'trial from live product');
+  assertEqual(options[0].trialLabel, '1 week free', 'trial from live product');
   assertEqual(options[1].trialLabel, null, 'monthly has no trial');
 });
 

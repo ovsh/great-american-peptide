@@ -1,3 +1,12 @@
+// Builds the App Store slides: a caption over the real simulator capture.
+//
+// Sources live in store-assets/app-store/captures/<device>/, taken on the
+// simulators Apple accepts for each size class — iPhone 17 Pro Max (6.9",
+// 1320x2868) and iPad Pro 13" M4 (2064x2752). The canvas is the same size as
+// the capture, so no resampling happens on the phone pixels themselves.
+//
+// Run: node scripts/render-store-assets.mjs
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -5,61 +14,76 @@ import chromeLauncher from 'chrome-launcher';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(ROOT, 'store-assets', 'app-store');
-const BG = path.join(OUT, 'backdrops', 'gpt-image-2-clinical-ledger-backdrop.png');
-const REAL = path.join(OUT, 'screenshots', 'real-scerenshots');
+const CAPTURES = path.join(OUT, 'captures');
+const FONTS = path.join(ROOT, 'node_modules', '@expo-google-fonts', 'inter');
 
-const devices = [
-  { key: 'iphone-6.7', width: 1284, height: 2778, shotW: 1128 },
-  { key: 'ipad-13', width: 2064, height: 2752, shotW: 1120 },
-];
-
-const real = {
-  today: 'WhatsApp Image 2026-04-30 at 01.25.14.jpeg',
-  logShot: 'WhatsApp Image 2026-04-30 at 01.25.14 (1).jpeg',
-  siteMap: 'WhatsApp Image 2026-04-30 at 01.25.15.jpeg',
-  calendar: 'WhatsApp Image 2026-04-30 at 01.25.15 (1).jpeg',
+// The app's own palette, so the frame around a screenshot never fights it.
+const brand = {
+  bg: '#FAFAF8',
+  ink: '#111418',
+  // A step darker than the app's inkMuted: this text is read at thumbnail size
+  // in the store, not at arm's length on a phone.
+  inkMuted: '#4B5563',
+  accent: '#2FB47C',
+  accentSoft: '#E7F6EF',
 };
 
+// `copyH` is the band reserved for the caption; the capture takes whatever
+// height is left, so both devices keep their own aspect exactly. `radius` is a
+// fraction of the capture width and has to match the real hardware — a phone
+// corner on an iPad would eat the status bar.
+const devices = [
+  { key: 'iphone-6.9', width: 1320, height: 2868, top: 120, copyH: 470, gutter: 80, radius: 0.075 },
+  { key: 'ipad-13', width: 2064, height: 2752, top: 140, copyH: 450, gutter: 90, radius: 0.02 },
+];
+
+// Order and wording match the caption list in copy/app-store-listing.md.
+// Nothing here promises an outcome or tells anyone what to take: the level and
+// trend slides say "estimate" and "not for dosing" in the shot itself.
 const slides = [
   {
     id: '01-today',
+    file: '01-today.png',
     kicker: 'TODAY',
-    title: "Keep today's plan visible.",
-    sub: 'Timing, trends, weight, and goals in one focused home view.',
-    image: real.today,
-    chips: ['Next entry', 'Trend view', 'Weight goal'],
+    title: 'Know what is due today.',
+    sub: 'One card holds the next shot, the day of the week and the dose you logged last time.',
   },
   {
-    id: '02-log-shot',
-    kicker: 'LOG SHOT',
-    title: 'Log in seconds.',
-    sub: 'Item, amount, date, time, and site stay together.',
-    image: real.logShot,
-    chips: ['Amount steps', 'Date & time', 'Site rotation'],
+    id: '02-log',
+    file: '02-log.png',
+    kicker: 'LOG A SHOT',
+    title: 'Log a shot in seconds.',
+    sub: 'Medication, dose and site in one sheet. The next site is suggested, and you can override it.',
   },
   {
-    id: '03-site-map',
-    kicker: 'BODY SITES',
-    title: 'See every body site.',
-    sub: 'Tap front or back and keep rotation visible while you log.',
-    image: real.siteMap,
-    chips: ['Front & back', 'All sites', 'Rotation context'],
+    id: '03-level',
+    file: '03-level.png',
+    kicker: 'LEVEL',
+    title: 'Watch the level fall between shots.',
+    sub: 'A half-life estimate built only from the shots you logged. Peak, trough and average, on one curve.',
   },
   {
-    id: '04-calendar',
-    kicker: 'CALENDAR',
-    title: 'Keep the routine visible.',
-    sub: 'Review logged days, amounts, and timing without digging.',
-    image: real.calendar,
-    chips: ['Monthly view', 'Entry history', 'Amount notes'],
+    id: '04-progress',
+    file: '04-progress.png',
+    kicker: 'PROGRESS',
+    title: 'See what moved, and when.',
+    sub: 'Weight, streaks and the side effects you told us to watch, on the same timeline.',
   },
   {
-    id: '05-reconstitution',
-    kicker: 'LAB CALC',
-    title: 'Research reconstitution math.',
-    sub: 'Convert vial mass and diluent volume into concentration values.',
-    mock: 'reconstitution',
-    chips: ['mcg/mL', 'mg/mL', 'Aliquot volume'],
+    id: '05-history',
+    file: '05-history.png',
+    kicker: 'HISTORY',
+    title: 'Every shot, every site, on record.',
+    sub: 'A list or a calendar of what you took, when you took it and where. Export it for your doctor.',
+  },
+  {
+    id: '06-medications',
+    file: '06-medications.png',
+    kicker: 'YOUR STACK',
+    title: 'Keep the whole stack, not one item.',
+    sub: 'Add each medication with its own schedule, dose and half-life. Pause one without losing its log.',
+    // Two rows of cards on a 13" screen leaves the slide mostly empty.
+    skip: ['ipad-13'],
   },
 ];
 
@@ -73,505 +97,122 @@ function esc(value) {
   })[ch]);
 }
 
-function cssUrl(filePath) {
+function fileUrl(filePath) {
   return pathToFileURL(filePath).href;
 }
 
-function deviceContent(slide, shotUrl) {
-  if (slide.mock === 'reconstitution') {
-    return `<div class="mock-screen">
-      <div class="mock-status">
-        <span>1:24</span>
-        <span class="status-icons">LTE 100%</span>
-      </div>
-      <div class="mock-nav">
-        <span class="close">x</span>
-        <strong>Reconstitution</strong>
-      </div>
-      <div class="mock-content">
-        <div class="mock-title-row">
-          <h2>Lab Calc</h2>
-          <p>RECONSTITUTION MATH</p>
-        </div>
-        <p class="mock-sub">For laboratory researchers and scientists. Convert vial mass and diluent volume into concentration values.</p>
-
-        <div class="mock-card">
-          <div class="mock-field">
-            <label>VIAL MATERIAL</label>
-            <div><strong>5</strong><span>mg</span></div>
-          </div>
-          <div class="mock-field">
-            <label>DILUENT VOLUME</label>
-            <div><strong>2</strong><span>mL</span></div>
-          </div>
-          <div class="mock-field last">
-            <label>OPTIONAL ALIQUOT AMOUNT</label>
-            <div><strong>250</strong><span>mcg</span></div>
-            <em>Optional research sample amount for mL conversion.</em>
-          </div>
-        </div>
-
-        <div class="mock-card muted">
-          <label class="accent">CALCULATED CONCENTRATION</label>
-          <div class="mock-result"><strong>2500</strong><span>mcg/mL</span></div>
-          <div class="mock-grid">
-            <div><label>MG / ML</label><p>2.500 mg/mL</p></div>
-            <div><label>VIAL TOTAL</label><p>5000 mcg</p></div>
-          </div>
-          <div class="mock-volume-meter">
-            <div class="meter-plunger"></div>
-            <div class="meter-barrel">
-              <div class="meter-fill"></div>
-              <div class="meter-ticks">
-                <span style="left: 0%">0</span>
-                <span style="left: 25%">0.25</span>
-                <span style="left: 50%">0.5</span>
-                <span style="left: 75%">0.75</span>
-                <span style="left: 100%">1.0</span>
-              </div>
-              <b>0.10 mL</b>
-            </div>
-            <div class="meter-tip"></div>
-          </div>
-          <div class="mock-grid">
-            <div><label>ALIQUOT VOLUME</label><p>0.100 mL</p></div>
-            <div><label>DILUENT</label><p>2.00 mL</p></div>
-          </div>
-          <div class="mock-note">Research calculation only. No administration instructions, clinical guidance, or use recommendations.</div>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  return `<img src="${shotUrl}" alt="">`;
+/**
+ * Inter as a data URL. Headless Chrome only sees fonts installed on the host,
+ * and Inter is not one of them, so the slides would silently fall back to
+ * Helvetica and stop matching the app.
+ */
+async function interFaces() {
+  const weights = [
+    ['400', '400Regular'],
+    ['500', '500Medium'],
+    ['600', '600SemiBold'],
+    ['700', '700Bold'],
+  ];
+  const faces = await Promise.all(
+    weights.map(async ([weight, dir]) => {
+      const ttf = await fs.readFile(path.join(FONTS, dir, `Inter_${dir}.ttf`));
+      return `@font-face {
+        font-family: Inter;
+        font-weight: ${weight};
+        font-style: normal;
+        src: url(data:font/ttf;base64,${ttf.toString('base64')}) format('truetype');
+      }`;
+    }),
+  );
+  return faces.join('\n');
 }
 
-function slideHtml(slide, device) {
+function slideHtml(slide, device, shotUrl, fontFaces) {
   const isPad = device.key === 'ipad-13';
-  const shotPath = slide.image ? path.join(REAL, slide.image) : null;
-  const bgUrl = cssUrl(BG);
-  const shotUrl = shotPath ? cssUrl(shotPath) : '';
+  // Whatever the caption leaves over, minus the bottom margin.
+  const shotH = device.height - device.top - device.copyH - device.gutter;
+  const shotW = Math.round((shotH * device.width) / device.height);
+  const scale = isPad ? 1.32 : 1;
+
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
   <style>
-    :root {
-      --bg: #F2E9D8;
-      --ink: #0F1B2D;
-      --red: #B0202E;
-      --green: #5C8264;
-      --gold: #C9A961;
-      --muted: #626B78;
-      --border: #E5DDC8;
-    }
+    ${fontFaces}
     * { box-sizing: border-box; }
     body {
       margin: 0;
       width: ${device.width}px;
       height: ${device.height}px;
       overflow: hidden;
-      color: var(--ink);
-      background: var(--bg);
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", Arial, sans-serif;
+      background: ${brand.bg};
+      color: ${brand.ink};
+      font-family: Inter, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
     .art {
       position: relative;
       width: 100%;
       height: 100%;
       overflow: hidden;
+      /* A single soft wash of the accent, so the slide reads as one family
+         without putting colour behind the screenshot itself. */
       background:
-        linear-gradient(180deg, rgba(242,233,216,.70), rgba(242,233,216,.94)),
-        url("${bgUrl}");
-      background-size: cover;
-      background-position: center;
-    }
-    .art::before {
-      content: "";
-      position: absolute;
-      left: ${isPad ? 104 : 70}px;
-      right: ${isPad ? 104 : 70}px;
-      top: ${isPad ? 58 : 42}px;
-      height: 3px;
-      background: linear-gradient(90deg, transparent, var(--red), var(--ink), var(--red), transparent);
-      opacity: .55;
-      z-index: 2;
+        radial-gradient(120% 62% at 50% -12%, ${brand.accentSoft} 0%, rgba(231,246,239,0) 62%),
+        ${brand.bg};
     }
     .copy {
       position: absolute;
-      z-index: 4;
-      ${isPad
-        ? 'left: 112px; top: 126px; width: 720px; text-align: left;'
-        : 'left: 74px; right: 74px; top: 66px; text-align: center;'}
+      left: ${device.gutter}px;
+      right: ${device.gutter}px;
+      top: ${device.top}px;
+      height: ${device.copyH}px;
+      text-align: center;
     }
     .kicker {
-      margin: 0 0 ${isPad ? 18 : 12}px;
-      color: var(--red);
-      font-size: ${isPad ? 34 : 28}px;
+      margin: 0 0 ${Math.round(26 * scale)}px;
+      color: ${brand.accent};
+      font-size: ${Math.round(30 * scale)}px;
       line-height: 1;
-      letter-spacing: ${isPad ? 8 : 7}px;
-      font-weight: 900;
+      letter-spacing: ${Math.round(5 * scale)}px;
+      font-weight: 700;
     }
     h1 {
       margin: 0;
-      color: var(--ink);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: ${isPad ? 98 : 78}px;
-      line-height: .98;
-      letter-spacing: 0;
+      font-size: ${Math.round(82 * scale)}px;
+      line-height: 1.06;
+      letter-spacing: -${Math.round(2 * scale)}px;
+      font-weight: 700;
       text-wrap: balance;
     }
     .sub {
-      margin: ${isPad ? 24 : 14}px 0 0;
-      color: var(--muted);
-      font-size: ${isPad ? 38 : 31}px;
-      line-height: 1.18;
-      font-weight: 800;
+      margin: ${Math.round(26 * scale)}px auto 0;
+      max-width: ${Math.round(940 * scale)}px;
+      color: ${brand.inkMuted};
+      font-size: ${Math.round(34 * scale)}px;
+      line-height: 1.35;
+      font-weight: 400;
       text-wrap: balance;
-    }
-    .chips {
-      display: ${isPad ? 'flex' : 'none'};
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 32px;
-    }
-    .chips span {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      padding: 13px 17px;
-      border: 1px solid rgba(15,27,45,.13);
-      border-radius: 999px;
-      background: rgba(255,255,255,.62);
-      color: var(--ink);
-      font-size: 22px;
-      font-weight: 800;
-      box-shadow: 0 8px 24px rgba(15,27,45,.05);
-    }
-    .chips span::before {
-      content: "";
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--red);
     }
     .device {
       position: absolute;
-      z-index: 3;
-      width: ${device.shotW}px;
-      ${isPad
-        ? 'right: 96px; bottom: 74px;'
-        : 'left: 50%; bottom: 38px; transform: translateX(-50%);'}
-      border-radius: ${isPad ? 72 : 78}px;
-      border: ${isPad ? 8 : 7}px solid rgba(15,27,45,.96);
+      left: 50%;
+      transform: translateX(-50%);
+      top: ${device.top + device.copyH}px;
+      width: ${shotW}px;
+      height: ${shotH}px;
+      border-radius: ${Math.round(shotW * device.radius)}px;
       overflow: hidden;
-      background: #FFFDF6;
+      background: #FFFFFF;
       box-shadow:
-        0 ${isPad ? 42 : 38}px ${isPad ? 90 : 74}px rgba(15,27,45,.25),
-        0 0 0 2px rgba(255,255,255,.8) inset;
+        0 ${Math.round(40 * scale)}px ${Math.round(90 * scale)}px rgba(17,20,24,.16),
+        0 0 0 1px rgba(17,20,24,.07);
     }
-	    .device img {
-	      display: block;
-	      width: 100%;
-	      height: auto;
-	    }
-	    .mock-screen {
-	      width: 100%;
-	      height: ${isPad ? 2140 : 2360}px;
-	      background: #F2E9D8;
-	      color: var(--ink);
-	      overflow: hidden;
-	      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", Arial, sans-serif;
-	    }
-	    .mock-status {
-	      display: flex;
-	      justify-content: space-between;
-	      align-items: center;
-	      padding: 64px 92px 36px;
-	      color: #05070B;
-	      font-size: 42px;
-	      font-weight: 900;
-	    }
-	    .status-icons {
-	      font-size: 31px;
-	      letter-spacing: 0;
-	    }
-	    .mock-nav {
-	      position: relative;
-	      display: flex;
-	      justify-content: center;
-	      align-items: center;
-	      padding: 58px 72px 42px;
-	      color: var(--ink);
-	    }
-	    .mock-nav .close {
-	      position: absolute;
-	      left: 72px;
-	      top: 54px;
-	      font-size: 56px;
-	      line-height: 1;
-	      font-weight: 400;
-	    }
-	    .mock-nav strong {
-	      font-family: Georgia, "Times New Roman", serif;
-	      font-size: 55px;
-	      line-height: 1;
-	    }
-	    .mock-content {
-	      padding: 26px 70px 120px;
-	    }
-	    .mock-title-row {
-	      display: flex;
-	      align-items: baseline;
-	      justify-content: space-between;
-	      gap: 28px;
-	    }
-	    .mock-title-row h2 {
-	      margin: 0;
-	      font-family: Georgia, "Times New Roman", serif;
-	      font-size: 72px;
-	      line-height: 1;
-	      letter-spacing: 0;
-	    }
-	    .mock-title-row p {
-	      margin: 0;
-	      max-width: 360px;
-	      color: var(--muted);
-	      font-size: 24px;
-	      line-height: 1.2;
-	      font-weight: 900;
-	      letter-spacing: 3px;
-	      text-align: right;
-	    }
-	    .mock-sub {
-	      margin: 24px 0 44px;
-	      color: var(--muted);
-	      font-size: 32px;
-	      line-height: 1.28;
-	      font-weight: 700;
-	    }
-	    .mock-card {
-	      margin-top: 34px;
-	      padding: 38px 42px;
-	      border-radius: 30px;
-	      border: 1px solid rgba(15,27,45,.10);
-	      background: #FFFDF8;
-	    }
-	    .mock-card.muted {
-	      background: #F7F0E2;
-	    }
-	    .mock-field {
-	      padding: 0 0 30px;
-	      margin-bottom: 30px;
-	      border-bottom: 1px solid rgba(15,27,45,.09);
-	    }
-	    .mock-field.last {
-	      padding-bottom: 0;
-	      margin-bottom: 0;
-	      border-bottom: 0;
-	    }
-	    .mock-field label,
-	    .mock-card label {
-	      display: block;
-	      margin-bottom: 20px;
-	      color: #69717E;
-	      font-size: 25px;
-	      line-height: 1;
-	      letter-spacing: 6px;
-	      font-weight: 900;
-	    }
-	    .mock-field .accent,
-	    .mock-card .accent {
-	      color: var(--red);
-	    }
-	    .mock-field div {
-	      display: flex;
-	      align-items: baseline;
-	      justify-content: space-between;
-	      gap: 24px;
-	    }
-	    .mock-field strong {
-	      font-size: 64px;
-	      line-height: .95;
-	      font-weight: 700;
-	    }
-	    .mock-field span {
-	      color: var(--muted);
-	      font-size: 42px;
-	      font-weight: 800;
-	    }
-	    .mock-field em {
-	      display: block;
-	      margin-top: 18px;
-	      color: #7E8794;
-	      font-size: 25px;
-	      line-height: 1.2;
-	      font-style: normal;
-	      font-weight: 700;
-	    }
-	    .mock-result {
-	      display: flex;
-	      align-items: baseline;
-	      gap: 22px;
-	      margin-top: 16px;
-	    }
-	    .mock-result strong {
-	      color: var(--red);
-	      font-family: Georgia, "Times New Roman", serif;
-	      font-size: 94px;
-	      line-height: .95;
-	    }
-	    .mock-result span {
-	      color: var(--muted);
-	      font-family: Georgia, "Times New Roman", serif;
-	      font-size: 40px;
-	      font-weight: 800;
-	    }
-	    .mock-grid {
-	      display: grid;
-	      grid-template-columns: 1fr 1fr;
-	      gap: 34px;
-	      margin-top: 44px;
-	      padding-top: 32px;
-	      border-top: 1px solid rgba(15,27,45,.10);
-	    }
-	    .mock-grid label {
-	      font-size: 21px;
-	      letter-spacing: 4px;
-	      margin-bottom: 10px;
-	    }
-	    .mock-grid p {
-	      margin: 0;
-	      color: var(--ink);
-	      font-size: 31px;
-	      line-height: 1.15;
-	      font-weight: 900;
-	    }
-	    .mock-note {
-	      margin-top: 36px;
-	      padding: 28px;
-	      border-radius: 18px;
-	      border: 1px solid rgba(15,27,45,.10);
-	      background: #FFFDF8;
-	      color: var(--muted);
-	      font-size: 27px;
-	      line-height: 1.25;
-	      font-weight: 700;
-	    }
-	    .mock-volume-meter {
-	      display: flex;
-	      align-items: center;
-	      gap: 0;
-	      margin-top: 38px;
-	      padding: 22px 0 8px;
-	    }
-	    .meter-plunger {
-	      width: 36px;
-	      height: 18px;
-	      background: #D7CEB9;
-	    }
-	    .meter-barrel {
-	      position: relative;
-	      flex: 1;
-	      height: 36px;
-	      border: 2px solid var(--ink);
-	      border-radius: 4px;
-	      background: #FFFDF8;
-	    }
-	    .meter-fill {
-	      position: absolute;
-	      left: 0;
-	      top: 0;
-	      bottom: 0;
-	      width: 10%;
-	      background: rgba(176,32,46,.60);
-	    }
-	    .meter-ticks {
-	      position: absolute;
-	      left: 0;
-	      right: 0;
-	      top: -32px;
-	      height: 28px;
-	    }
-	    .meter-ticks::before {
-	      content: "";
-	      position: absolute;
-	      left: 0;
-	      right: 0;
-	      bottom: 0;
-	      height: 14px;
-	      background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 5%);
-	      opacity: .65;
-	    }
-	    .meter-ticks span {
-	      position: absolute;
-	      top: -2px;
-	      transform: translateX(-50%);
-	      color: var(--muted);
-	      font-size: 18px;
-	      line-height: 1;
-	      font-weight: 800;
-	    }
-	    .meter-barrel b {
-	      position: absolute;
-	      left: 10%;
-	      top: 48px;
-	      transform: translateX(-50%);
-	      color: var(--red);
-	      font-size: 22px;
-	      line-height: 1;
-	      font-weight: 900;
-	    }
-	    .meter-barrel b::before {
-	      content: "";
-	      position: absolute;
-	      left: 50%;
-	      top: -16px;
-	      width: 2px;
-	      height: 14px;
-	      background: var(--red);
-	    }
-	    .meter-tip {
-	      width: 48px;
-	      height: 2px;
-	      background: var(--ink);
-	    }
-	    .device::after {
-	      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.72);
-      pointer-events: none;
-    }
-    .badge {
-      position: absolute;
-      z-index: 5;
-      ${isPad
-        ? 'left: 112px; bottom: 150px; width: 610px;'
-        : 'left: 104px; right: 104px; bottom: 118px;'}
-      display: ${isPad ? 'block' : 'none'};
-      padding: 30px 34px;
-      border: 1px solid rgba(15,27,45,.12);
-      border-radius: 28px;
-      background: rgba(255,255,255,.66);
-      box-shadow: 0 24px 60px rgba(15,27,45,.10);
-      backdrop-filter: blur(8px);
-    }
-    .badge strong {
+    .device img {
       display: block;
-      margin-bottom: 8px;
-      color: var(--ink);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 34px;
-      line-height: 1.08;
-    }
-    .badge p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 23px;
-      line-height: 1.25;
-      font-weight: 700;
+      width: 100%;
+      height: 100%;
     }
   </style>
 </head>
@@ -581,16 +222,9 @@ function slideHtml(slide, device) {
       <p class="kicker">${esc(slide.kicker)}</p>
       <h1>${esc(slide.title)}</h1>
       <p class="sub">${esc(slide.sub)}</p>
-      <div class="chips">${slide.chips.map((chip) => `<span>${esc(chip)}</span>`).join('')}</div>
     </section>
-    <section class="badge">
-      <strong>Made for repeat routines.</strong>
-      <p>Clear logs, calm charts, and less context switching.</p>
-    </section>
-	    <div class="device">
-	      ${deviceContent(slide, shotUrl)}
-	    </div>
-	  </main>
+    <div class="device"><img src="${shotUrl}" alt=""></div>
+  </main>
 </body>
 </html>`;
 }
@@ -629,9 +263,10 @@ async function cdp(port) {
   return { send, waitEvent, close: () => ws.close() };
 }
 
-async function renderDevice(device) {
+async function renderDevice(device, fontFaces) {
   const screenshotDir = path.join(OUT, 'screenshots', device.key);
   const htmlDir = path.join(OUT, 'html', device.key);
+  await fs.rm(screenshotDir, { recursive: true, force: true });
   await fs.mkdir(screenshotDir, { recursive: true });
   await fs.mkdir(htmlDir, { recursive: true });
 
@@ -639,6 +274,7 @@ async function renderDevice(device) {
     chromeFlags: ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run'],
   });
   const client = await cdp(chrome.port);
+  let count = 0;
 
   try {
     await client.send('Page.enable');
@@ -652,30 +288,45 @@ async function renderDevice(device) {
     });
 
     for (const slide of slides) {
+      if (slide.skip?.includes(device.key)) continue;
+      const shotUrl = fileUrl(path.join(CAPTURES, device.key, slide.file));
       const htmlPath = path.join(htmlDir, `${slide.id}.html`);
-      await fs.writeFile(htmlPath, slideHtml(slide, device), 'utf8');
+      await fs.writeFile(htmlPath, slideHtml(slide, device, shotUrl, fontFaces), 'utf8');
       const loaded = client.waitEvent('Page.loadEventFired');
-      await client.send('Page.navigate', { url: cssUrl(htmlPath) });
+      await client.send('Page.navigate', { url: fileUrl(htmlPath) });
       await loaded;
+      // The fonts are inline, but Chrome still needs a frame to lay them out.
+      await client.send('Runtime.evaluate', {
+        expression: 'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))',
+        awaitPromise: true,
+      });
       const shot = await client.send('Page.captureScreenshot', {
         format: 'png',
         fromSurface: true,
         captureBeyondViewport: false,
       });
       await fs.writeFile(path.join(screenshotDir, `${slide.id}.png`), Buffer.from(shot.data, 'base64'));
+      count += 1;
     }
   } finally {
     client.close();
     await chrome.kill();
   }
+  return count;
 }
 
-for (const slide of slides) {
-  if (slide.image) await fs.access(path.join(REAL, slide.image));
-}
+const fontFaces = await interFaces();
 
 for (const device of devices) {
-  await renderDevice(device);
+  for (const slide of slides) {
+    if (slide.skip?.includes(device.key)) continue;
+    await fs.access(path.join(CAPTURES, device.key, slide.file));
+  }
 }
 
-console.log(`Rendered ${slides.length * devices.length} App Store images to ${path.join(OUT, 'screenshots')}`);
+let total = 0;
+for (const device of devices) {
+  total += await renderDevice(device, fontFaces);
+}
+
+console.log(`Rendered ${total} App Store images to ${path.join(OUT, 'screenshots')}`);

@@ -13,7 +13,7 @@ export interface PlanOption {
   perMonthLabel: string | null;
   /** Annual only: how much cheaper than paying monthly, e.g. "Save 58%". */
   badge: string | null;
-  /** e.g. "7 days free", when the product carries a free introductory period. */
+  /** e.g. "1 month free", when the product carries a free introductory period. */
   trialLabel: string | null;
 }
 
@@ -31,7 +31,7 @@ const PLACEHOLDER = {
 // A month, not a week. Everything Pro sells is a trend across shots, and a
 // weekly injector logs one shot in seven days and four in a month. A short
 // trial would show an empty chart.
-const PLACEHOLDER_TRIAL_DAYS = 30;
+const PLACEHOLDER_TRIAL = '1 month free';
 
 export function buildPlanOptions(offering: PurchasesOffering | null): PlanOption[] {
   const annualPkg = offering?.annual ?? findByType(offering, 'ANNUAL');
@@ -51,7 +51,7 @@ export function buildPlanOptions(offering: PurchasesOffering | null): PlanOption
       cadenceLabel: 'per year',
       perMonthLabel: `${formatPrice(annualPrice / 12, currency)} / month`,
       badge: savingsBadge(annualPrice, monthlyPrice),
-      trialLabel: trialLabel(annualPkg) ?? (annualPkg ? null : `${PLACEHOLDER_TRIAL_DAYS} days free`),
+      trialLabel: trialLabel(annualPkg) ?? (annualPkg ? null : PLACEHOLDER_TRIAL),
     },
     {
       id: 'monthly',
@@ -83,15 +83,20 @@ function savingsBadge(annualPrice: number, monthlyPrice: number): string | null 
   return percent === null ? null : `Save ${percent}%`;
 }
 
+/**
+ * The trial in the store's own words. A one month trial is said as "1 month
+ * free", never as "30 days free": the month it starts in decides whether it is
+ * 28, 30 or 31 days, so a day count would be a promise we do not keep.
+ */
 export function trialLabel(pkg: PurchasesPackage | null | undefined): string | null {
   const intro = pkg?.product.introPrice;
   if (!intro || intro.price > 0) return null;
 
   const count = intro.periodNumberOfUnits;
+  if (!Number.isFinite(count) || count <= 0) return null;
   const unit = intro.periodUnit?.toLowerCase() ?? '';
-  const days = unit === 'week' ? count * 7 : unit === 'month' ? count * 30 : unit === 'year' ? count * 365 : count;
-  if (days <= 0) return null;
-  return `${days} ${days === 1 ? 'day' : 'days'} free`;
+  const noun = unit === 'week' || unit === 'month' || unit === 'year' ? unit : 'day';
+  return `${count} ${count === 1 ? noun : `${noun}s`} free`;
 }
 
 function findByType(
