@@ -15,8 +15,22 @@ console, change it in the source too, or the paywall will find nothing.
 | Monthly product id | `poke_pro_monthly` | `src/services/purchases.ts` |
 | Yearly product id | `poke_pro_annual` | `src/services/purchases.ts` |
 | Monthly price | 9.99 USD | `src/domain/plans.ts` |
-| Yearly price | 49.99 USD | `src/domain/plans.ts` |
-| Free trial | 7 days, yearly only | `src/domain/plans.ts` |
+| Yearly price | 39.99 USD | `src/domain/plans.ts` |
+| Free trial | 1 month, yearly only | `src/domain/plans.ts` |
+
+Why these numbers, from the category as it stood in August 2026:
+
+- Shotsy leads the category (4.8 stars, 29K ratings) and tests 39.99, 49.99 and
+  59.99 a year, with a 9.99 month. Peps asks 9.99 and 44.99. PepTrac asks 7.99
+  and 59.99. Several free apps (Glapp, GLP3 Planner, GLP-1 Plotter) give the
+  level chart away, so a new app with no ratings should not lead on price.
+- 39.99 puts the yearly saving at 67% against the monthly price, not 58%.
+- The trial is a month because everything Pro sells is a trend across shots. A
+  weekly injector logs one shot in seven days and four in a month. RevenueCat's
+  2026 report also measures trials of 17 to 32 days converting at 42.5% against
+  25.5% for four days or fewer.
+- No discount ladder. About 90% of subscriptions in the category sell at full
+  price; the yearly anchor is the discount.
 
 The prices in `plans.ts` are only the placeholders shown when the store cannot be
 reached. Real prices come from the store at run time. Keep the two in step, or
@@ -29,11 +43,18 @@ the paywall will show one number offline and a different one online.
 These steps need your Apple Account. I cannot do them: they need a password, and
 several of them are agreements. Do them in this order.
 
-### 1.1 Paid Applications agreement
+### 1.1 Paid Applications agreement — blocks everything else
 
 Business → Agreements. The Paid Applications agreement must read **Active**.
-Until it does, no subscription can be sold and RevenueCat will return an empty
-offering. This step also asks for bank and tax details.
+
+As of 7 August 2026 it reads **Expired** (term Jan 18 2026 to May 14 2026), a
+new version is waiting to be signed, and the bank account attached to it needs
+more information. While it is expired App Store Connect **disables the Create
+button** on the Subscriptions page, so no product can be made at all — and
+RevenueCat would return an empty offering even if one existed.
+
+Sign the new agreement and clear the bank notice first. Nothing below this line
+can be done until then.
 
 ### 1.2 Subscription group
 
@@ -58,8 +79,8 @@ In the group, create two auto-renewable subscriptions.
 - Product ID: `poke_pro_annual`
 - Reference name: `Poke Pro Yearly`
 - Duration: 1 year
-- Price: 49.99 USD
-- Introductory offer: **Free trial, 7 days, new subscribers**
+- Price: 39.99 USD
+- Introductory offer: **Free trial, 1 month, new subscribers**
 
 Set the yearly rank above the monthly one in the group, so an upgrade is an
 upgrade.

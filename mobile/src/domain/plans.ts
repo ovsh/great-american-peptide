@@ -19,12 +19,19 @@ export interface PlanOption {
 
 // Shown when the store is unreachable. These must stay in step with the prices
 // configured in App Store Connect, or the paywall will lie in dev.
+//
+// 39.99 a year sits at the bottom of what the category charges (Shotsy tests
+// 39.99 to 59.99, Peps asks 44.99), and it makes the yearly saving read 67%
+// rather than 58% next to the monthly price.
 const PLACEHOLDER = {
-  annual: { price: 49.99, currency: 'USD' },
+  annual: { price: 39.99, currency: 'USD' },
   monthly: { price: 9.99, currency: 'USD' },
 } as const;
 
-const PLACEHOLDER_TRIAL_DAYS = 7;
+// A month, not a week. Everything Pro sells is a trend across shots, and a
+// weekly injector logs one shot in seven days and four in a month. A short
+// trial would show an empty chart.
+const PLACEHOLDER_TRIAL_DAYS = 30;
 
 export function buildPlanOptions(offering: PurchasesOffering | null): PlanOption[] {
   const annualPkg = offering?.annual ?? findByType(offering, 'ANNUAL');
