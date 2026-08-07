@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Card } from '@/components/Card';
 import { LineChart } from '@/components/LineChart';
+import { ProLock, openPaywall } from '@/components/ProLock';
 import { Text } from '@/components/Text';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 import type {
@@ -34,6 +35,7 @@ import { listMedications } from '@/repositories/medications';
 import { getPreferences } from '@/repositories/preferences';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
+import { useIsPro } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -55,7 +57,11 @@ export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const dataVersion = useAppStore((state) => state.dataVersion);
+  const pro = useIsPro();
   const [range, setRange] = useState<ProgressRange>('30d');
+  // Free keeps the last week. Longer history is the paid part, so we clamp the
+  // range rather than trusting whatever the toggle last held.
+  const effectiveRange: ProgressRange = pro ? range : '7d';
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
   const [medications, setMedications] = useState<MedicationRow[]>([]);
@@ -81,8 +87,8 @@ export default function ProgressScreen() {
 
   const unit = preferences?.weight_unit ?? 'lb';
   const points = useMemo(
-    () => weightPoints(weights, unit, range),
-    [range, unit, weights],
+    () => weightPoints(weights, unit, effectiveRange),
+    [effectiveRange, unit, weights],
   );
   const goal = useMemo(
     () => goalProgress(weights, preferences),
@@ -127,7 +133,15 @@ export default function ProgressScreen() {
                 <Text variant="small" color={colors.inkMuted}>{latest ? unit : 'No data'}</Text>
               </View>
             </View>
-            <TimeRangeToggle options={RANGES} value={range} onChange={setRange} size="sm" />
+            <TimeRangeToggle
+              options={RANGES}
+              value={effectiveRange}
+              onChange={(next) => {
+                if (!pro && next !== '7d') openPaywall();
+                else setRange(next);
+              }}
+              size="sm"
+            />
           </View>
           {points.length >= 2 ? (
             <LineChart
@@ -152,7 +166,14 @@ export default function ProgressScreen() {
         <GoalCard goal={goal} hasGoal={preferences?.goal_weight !== null && preferences?.goal_weight !== undefined} />
         <StreakCard streak={streak} />
 
-        {effectCounts.length > 0 ? (
+        {effectCounts.length > 0 && !pro ? (
+          <ProLock
+            title="Side effect patterns"
+            body="See which effects come back, how often, and how bad they get."
+          />
+        ) : null}
+
+        {effectCounts.length > 0 && pro ? (
           <Card style={styles.effectsCard}>
             <View style={styles.effectsHead}>
               <Text variant="h2">Side effects</Text>

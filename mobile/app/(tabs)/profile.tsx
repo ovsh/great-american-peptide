@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Info, Pill, Scale, Target } from 'lucide-react-native';
+import { Bell, ChevronRight, Info, Pill, Scale, Share2, Sparkles, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -19,8 +19,12 @@ import {
   updatePreferences,
   type PreferencesPatch,
 } from '@/repositories/preferences';
+import { exportHistory } from '@/services/export';
 import { ensureNotificationPermission, refreshScheduledReminders } from '@/services/notifications';
+import { openManageSubscriptions } from '@/services/purchases';
 import { useAppStore } from '@/stores/app';
+import { useEntitlementStore, useIsPro, usePaywallEnabled, type DevOverride } from '@/stores/entitlement';
+import { openPaywall } from '@/components/ProLock';
 import { colors, spacing } from '@/theme';
 
 export default function ProfileScreen() {
@@ -32,6 +36,13 @@ export default function ProfileScreen() {
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const pro = useIsPro();
+  const paywallEnabled = usePaywallEnabled();
+  const restoring = useEntitlementStore((state) => state.restoring);
+  const restore = useEntitlementStore((state) => state.restore);
+  const devOverride = useEntitlementStore((state) => state.devOverride);
+  const setDevOverride = useEntitlementStore((state) => state.setDevOverride);
 
   const load = useCallback(async () => {
     const row = await getPreferences();
@@ -106,10 +117,66 @@ export default function ProfileScreen() {
     }
   };
 
+  const runExport = async () => {
+    if (!pro) {
+      openPaywall();
+      return;
+    }
+    setExporting(true);
+    const outcome = await exportHistory();
+    setExporting(false);
+    if (outcome.kind === 'empty') {
+      Alert.alert('Nothing to export yet', 'Log a shot or a weight first.');
+    } else if (outcome.kind === 'failed') {
+      Alert.alert('Could not export', outcome.message);
+    }
+  };
+
+  const runRestore = async () => {
+    const outcome = await restore();
+    if (outcome === 'restored') Alert.alert('Poke Pro is active', 'Your subscription is back on this device.');
+    else if (outcome === 'none') Alert.alert('No subscription found', 'We found no active subscription for this Apple Account.');
+  };
+
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}> 
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
         <Text variant="display">Profile</Text>
+
+        {paywallEnabled ? (
+          <SettingsSection label="Subscription">
+            <Card padding="xs" style={styles.groupCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={pro ? 'Manage subscription' : 'See Poke Pro'}
+                onPress={() => (pro ? openManageSubscriptions() : openPaywall())}
+                style={({ pressed }) => [styles.row, styles.divider, pressed && styles.pressed]}
+              >
+                <View style={styles.rowIcon}><Sparkles size={20} color={colors.accent} /></View>
+                <View style={styles.rowCopy}>
+                  <Text variant="bodyStrong">{pro ? 'Poke Pro' : 'Get Poke Pro'}</Text>
+                  <Text variant="small" color={colors.inkMuted}>
+                    {pro ? 'Active · manage in your Apple Account' : 'Levels, trends and export'}
+                  </Text>
+                </View>
+                <ChevronRight size={19} color={colors.inkSubtle} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Restore purchases"
+                onPress={runRestore}
+                disabled={restoring}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              >
+                <View style={styles.rowIcon} />
+                <View style={styles.rowCopy}>
+                  <Text variant="bodyStrong">{restoring ? 'Restoring' : 'Restore purchases'}</Text>
+                  <Text variant="small" color={colors.inkMuted}>If you paid on another device</Text>
+                </View>
+              </Pressable>
+            </Card>
+          </SettingsSection>
+        ) : null}
 
         <SettingsSection label="My medications">
           <SettingsRow
@@ -180,6 +247,15 @@ export default function ProfileScreen() {
           </Card>
         </SettingsSection>
 
+        <SettingsSection label="Your data">
+          <SettingsRow
+            icon={<Share2 size={20} color={colors.violet} />}
+            label={exporting ? 'Preparing your file' : 'Export history'}
+            detail={pro ? 'A CSV of every shot, weight and side effect' : 'Poke Pro'}
+            onPress={runExport}
+          />
+        </SettingsSection>
+
         <SettingsSection label="About">
           <SettingsRow
             icon={<Info size={20} color={colors.inkMuted} />}
@@ -188,6 +264,25 @@ export default function ProfileScreen() {
             onPress={() => setAboutOpen(true)}
           />
         </SettingsSection>
+
+        {__DEV__ ? (
+          <SettingsSection label="Developer">
+            <Card padding="xs" style={styles.groupCard}>
+              <View style={styles.pickerRow}>
+                <Text variant="smallStrong">Entitlement</Text>
+                <TimeRangeToggle
+                  options={['real', 'free', 'pro'] as const}
+                  value={devOverride ?? 'real'}
+                  onChange={(next) => setDevOverride(next === 'real' ? null : (next as DevOverride))}
+                  size="sm"
+                />
+                <Text variant="caption" color={colors.inkSubtle}>
+                  Debug builds only. &quot;real&quot; follows the App Store.
+                </Text>
+              </View>
+            </Card>
+          </SettingsSection>
+        ) : null}
       </ScrollView>
 
       <BottomSheet visible={goalOpen} title="Goal weight" onClose={() => setGoalOpen(false)}>

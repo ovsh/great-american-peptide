@@ -17,9 +17,17 @@ import { MedVialIcon } from '@/components/MedVialIcon';
 
 import { peptidePresets, type PeptidePreset, type FrequencyKind, type Route, type Unit } from '@/domain/peptides';
 import { WEEKDAY_OPTIONS, isWeekday, type Weekday } from '@/domain/scheduling';
-import { getMedication, nextColorIndex, type NewMedication } from '@/repositories/medications';
+import { ProLock } from '@/components/ProLock';
+import {
+  countActiveMedications,
+  FREE_MEDICATION_LIMIT,
+  getMedication,
+  nextColorIndex,
+  type NewMedication,
+} from '@/repositories/medications';
 import { createMedicationAndRefresh, updateMedicationAndRefresh } from '@/services/medicationMutations';
 import { useAppStore } from '@/stores/app';
+import { isProNow, useIsPro } from '@/stores/entitlement';
 import { safeBack } from '@/utils/nav';
 import { colors, spacing, radius } from '@/theme';
 
@@ -50,6 +58,16 @@ export default function AddMedicationScreen() {
   const [halfLife, setHalfLife] = useState('');
   const [tmax, setTmax] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const pro = useIsPro();
+  // The route is reachable directly, so the screen checks the limit itself.
+  const [atFreeLimit, setAtFreeLimit] = useState(false);
+
+  useEffect(() => {
+    if (editingId || pro) { setAtFreeLimit(false); return; }
+    countActiveMedications()
+      .then((count) => setAtFreeLimit(count >= FREE_MEDICATION_LIMIT))
+      .catch(() => {});
+  }, [editingId, pro]);
 
   useEffect(() => {
     if (!editingId) return;
@@ -129,6 +147,13 @@ export default function AddMedicationScreen() {
       if (editingId) {
         await updateMedicationAndRefresh(editingId, input);
       } else {
+        // Last check before the write: the entitlement can change while the
+        // form is open.
+        if (!isProNow() && (await countActiveMedications()) >= FREE_MEDICATION_LIMIT) {
+          setAtFreeLimit(true);
+          setStep('pick');
+          return;
+        }
         const colorIndex = await nextColorIndex();
         await createMedicationAndRefresh({ ...input, colorIndex });
       }
@@ -161,14 +186,21 @@ export default function AddMedicationScreen() {
             <X size={22} color={colors.ink} />
           </Pressable>
         }
-        trailing={step === 'config' ? (
+        trailing={step === 'config' && !atFreeLimit ? (
           <Pressable onPress={onSave} hitSlop={10} disabled={submitting}>
             <Check size={22} color={colors.accent} />
           </Pressable>
         ) : null}
       />
 
-      {step === 'pick' ? (
+      {atFreeLimit ? (
+        <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.lg }}>
+          <ProLock
+            title="Track more than one medication"
+            body="The free version keeps one medication. Pro follows a full stack — each with its own schedule, level and history."
+          />
+        </View>
+      ) : step === 'pick' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
           <Section eyebrow="Preset Library" gap="sm">
             {peptidePresets.map((p, idx) => (

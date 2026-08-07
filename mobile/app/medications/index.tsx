@@ -11,10 +11,12 @@ import { Text } from '@/components/Text';
 import { Button } from '@/components/Button';
 import { Pill } from '@/components/Pill';
 import { MedVialIcon } from '@/components/MedVialIcon';
-import { listMedications } from '@/repositories/medications';
+import { openPaywall } from '@/components/ProLock';
+import { FREE_MEDICATION_LIMIT, listMedications } from '@/repositories/medications';
 import { setMedicationStatusAndRefresh } from '@/services/medicationMutations';
 import type { MedicationRow } from '@/db/types';
 import { useAppStore } from '@/stores/app';
+import { useIsPro } from '@/stores/entitlement';
 import { formatDose } from '@/domain/units';
 import { colors, spacing } from '@/theme';
 
@@ -31,6 +33,12 @@ export default function MedicationsScreen() {
   const dataVersion = useAppStore((s) => s.dataVersion);
   const bumpVersion = useAppStore((s) => s.bumpVersion);
   const [meds, setMeds] = useState<MedicationRow[]>([]);
+  const pro = useIsPro();
+
+  // Send a free user to the paywall from here rather than let them fill in a
+  // form that will not save.
+  const atFreeLimit = !pro && meds.filter((m) => m.status !== 'archived').length >= FREE_MEDICATION_LIMIT;
+  const addMedication = () => (atFreeLimit ? openPaywall() : router.push('/medications/new'));
 
   const load = useCallback(async () => {
     const rows = await listMedications(true);
@@ -59,7 +67,7 @@ export default function MedicationsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       <Header title="Medications" showBack trailing={
-        <Pressable onPress={() => router.push('/medications/new')} hitSlop={10}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add medication" onPress={addMedication} hitSlop={10}>
           <Plus size={22} color={colors.ink} />
         </Pressable>
       } />
@@ -73,7 +81,7 @@ export default function MedicationsScreen() {
                 Pick a preset or add your own.
               </Text>
               <View style={{ height: spacing.md }} />
-              <Button onPress={() => router.push('/medications/new')} trailingChevron>Add Medication</Button>
+              <Button onPress={addMedication} trailingChevron>Add Medication</Button>
             </Card>
           </View>
         ) : (

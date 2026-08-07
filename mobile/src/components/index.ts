@@ -20,3 +20,4 @@ export { InlineTimePicker } from './InlineTimePicker';
 export { LogActionSheet } from './LogActionSheet';
 export { SeveritySlider } from './SeveritySlider';
 export { MonthGrid } from './MonthGrid';
+export { ProLock, ProSection, openPaywall, useProAction } from './ProLock';

@@ -19,6 +19,7 @@ import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
+import { useEntitlementStore } from '@/stores/entitlement';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
 
@@ -77,6 +78,12 @@ export default function RootLayout() {
     refreshScheduledReminders().catch(() => {});
   }, [gate.kind]);
 
+  // Independent of the database gate: the store must know whether we can sell
+  // before any screen asks whether a feature is locked.
+  useEffect(() => {
+    useEntitlementStore.getState().bootstrap().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (fontsReady && gate.kind !== 'checking') {
       SplashScreen.hideAsync().catch(() => {});
@@ -132,6 +139,9 @@ export default function RootLayout() {
           <Stack.Screen name="medications" options={{ presentation: 'card' }} />
           <Stack.Screen name="reports" options={{ presentation: 'card' }} />
           <Stack.Screen name="calculator" options={{ presentation: 'modal' }} />
+          {/* Full screen, not a card: the offer needs the whole height for the
+              benefits, both prices and the renewal disclosure. */}
+          <Stack.Screen name="paywall" options={{ presentation: 'fullScreenModal' }} />
         </Stack.Protected>
       </Stack>
       <StatusBar style="dark" />

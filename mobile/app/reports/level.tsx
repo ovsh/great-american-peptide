@@ -11,6 +11,8 @@ import { Pill } from '@/components/Pill';
 import { LineChart } from '@/components/LineChart';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 
+import { ProLock } from '@/components/ProLock';
+
 import { listMedications } from '@/repositories/medications';
 import { listInjections } from '@/repositories/injections';
 import type { MedicationRow } from '@/db/types';
@@ -18,6 +20,7 @@ import { levelTrajectory, peakTroughAvg, trendLabel, tmaxOrDefault } from '@/dom
 import { formatDose } from '@/domain/units';
 import { fmtTime } from '@/utils/date';
 import { useAppStore } from '@/stores/app';
+import { useIsPro } from '@/stores/entitlement';
 import { colors, spacing } from '@/theme';
 
 const RANGES = ['7d', '14d', '30d'] as const;
@@ -35,6 +38,7 @@ export default function LevelReportScreen() {
   const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ medicationId?: string }>();
   const dataVersion = useAppStore((s) => s.dataVersion);
+  const pro = useIsPro();
   const [meds, setMeds] = useState<MedicationRow[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState<Range>('14d');
@@ -91,7 +95,14 @@ export default function LevelReportScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       <Header title="Medication level" showBack />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
-        {meds.length === 0 ? (
+        {!pro ? (
+          <View style={{ paddingHorizontal: spacing.screen }}>
+            <ProLock
+              title="Your level, day by day"
+              body="See the estimated amount in your body between shots — peak, trough and average across the window."
+            />
+          </View>
+        ) : meds.length === 0 ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <Card padding="lg">
               <Text variant="h3">No active medications with a half-life set.</Text>

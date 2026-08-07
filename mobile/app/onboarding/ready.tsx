@@ -9,6 +9,7 @@ import { Text } from '@/components/Text';
 import { getPreset } from '@/domain/peptides';
 import { completeOnboarding } from '@/services/onboarding';
 import { useAppStore } from '@/stores/app';
+import { isProNow, paywallEnabledNow } from '@/stores/entitlement';
 import {
   CONCERN_OPTIONS,
   GOAL_OPTIONS,
@@ -92,7 +93,13 @@ export default function ReadyScreen() {
       setGate({ kind: 'complete' });
       bumpVersion();
       resetDraft();
+      // Land on Today first, then raise the paywall over it. Seeing the app you
+      // just set up behind the sheet beats a wall in front of an empty room, and
+      // dismissing leaves you already home.
       router.replace('/');
+      if (paywallEnabledNow() && !isProNow()) {
+        router.push('/paywall?from=onboarding');
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Poke could not save your plan. Try again.');
       setSubmitting(false);

@@ -28,6 +28,17 @@ export async function listMedications(includeArchived = false): Promise<Medicati
   );
 }
 
+/** The free tier keeps one medication. An archived one does not count against it. */
+export const FREE_MEDICATION_LIMIT = 1;
+
+export async function countActiveMedications(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM medications WHERE status != 'archived'`,
+  );
+  return row?.n ?? 0;
+}
+
 export async function getMedication(id: string): Promise<MedicationRow | null> {
   const db = await getDb();
   return (await db.getFirstAsync<MedicationRow>(`SELECT * FROM medications WHERE id = ?`, [id])) ?? null;
