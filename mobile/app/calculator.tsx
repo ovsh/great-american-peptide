@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { X, AlertTriangle } from 'lucide-react-native';
 
@@ -9,6 +9,7 @@ import { Field } from '@/components/Field';
 import { SyringeViz } from '@/components/SyringeViz';
 
 import { reconstitution, formatMcg, formatMl } from '@/domain/reconstitution';
+import { maybePromptForReview } from '@/services/review';
 import { safeBack } from '@/utils/nav';
 import { colors, spacing } from '@/theme';
 
@@ -26,6 +27,15 @@ export default function CalculatorScreen() {
     }),
     [materialMg, diluentMl, aliquotMcg],
   );
+  // Reconstitution is why grey-market users install Poke, and it is free, so this is
+  // the earliest honest ask. The timer restarts on every keystroke, so it fires only
+  // when the user has stopped typing and is reading a valid answer.
+  useEffect(() => {
+    if (!result.valid) return;
+    const timer = setTimeout(() => { maybePromptForReview('calculation').catch(() => {}); }, 4000);
+    return () => clearTimeout(timer);
+  }, [result]);
+
   const vizWidth = Math.min(width - spacing.screen * 2 - spacing.lg * 2, 380);
   const vizCapacityMl = Math.max(1, Math.ceil(result.aliquotVolumeMl ?? 1));
 
@@ -54,7 +64,7 @@ export default function CalculatorScreen() {
             <Text variant="caption" color={colors.inkMuted}>Reconstitution math</Text>
           </View>
           <Text variant="small" color={colors.inkMuted} style={{ marginTop: spacing.xs }}>
-            For laboratory researchers and scientists. Convert vial mass and diluent volume into concentration values.
+            For laboratory researchers and scientists. Poke converts a vial mass and a diluent volume into a concentration.
           </Text>
         </View>
 
@@ -90,7 +100,7 @@ export default function CalculatorScreen() {
               </View>
             </Field>
 
-            <Field label="Optional aliquot amount" divider={false}>
+            <Field label="Aliquot amount (optional)" divider={false}>
               <View style={styles.inputRow}>
                 <TextInput
                   value={aliquotMcg}
@@ -103,7 +113,7 @@ export default function CalculatorScreen() {
                 <Text variant="bodyStrong" color={colors.inkMuted}>mcg</Text>
               </View>
               <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
-                Optional research sample amount for mL conversion.
+                Poke converts a research sample amount into a volume in mL.
               </Text>
             </Field>
           </Card>
@@ -154,7 +164,7 @@ export default function CalculatorScreen() {
 
               <View style={styles.noteBox}>
                 <Text variant="small" color={colors.inkMuted}>
-                  Research calculation only. The app does not provide administration instructions, clinical guidance, or use recommendations.
+                  Research calculation only. Poke does not provide administration instructions, clinical guidance, or use recommendations.
                 </Text>
               </View>
 
@@ -172,7 +182,7 @@ export default function CalculatorScreen() {
           ) : (
             <Card padding="lg" variant="muted">
               <Text variant="small" color={colors.inkMuted}>
-                Enter vial material and diluent volume to calculate concentration.
+                Enter the vial material and the diluent volume. Poke then shows the concentration.
               </Text>
             </Card>
           )}

@@ -139,7 +139,7 @@ function HistoryGroup({
         </Card>
       ) : (
         <Card style={styles.emptyDay}>
-          <Text color={colors.inkMuted}>No shots logged on this day.</Text>
+          <Text color={colors.inkMuted}>You logged no shot on this day.</Text>
           <Button size="sm" onPress={() => router.push('/log-shot')}>Log shot</Button>
         </Card>
       )}
@@ -164,9 +164,9 @@ function HistoryRow({
     <View style={[styles.row, divider && styles.rowDivider]}>
       <View style={[styles.medicationDot, { backgroundColor: color }]} />
       <View style={styles.rowCopy}>
-        <Text variant="bodyStrong">{medication?.name ?? 'Medication'}</Text>
+        <Text variant="bodyStrong">{medication?.name ?? 'Unknown medication'}</Text>
         <Text variant="small" color={colors.inkMuted}>
-          {fmtTime(injection.taken_at).toLocaleLowerCase()} · {site?.label ?? 'Site not recorded'}
+          {fmtTime(injection.taken_at).toLocaleLowerCase()} · {site?.label ?? 'No site'}
         </Text>
       </View>
       <Text variant="smallStrong">{formatDose(injection.dose, injection.unit)}</Text>
@@ -177,8 +177,8 @@ function HistoryRow({
 function EmptyHistory() {
   return (
     <Card style={styles.emptyDay}>
-      <Text variant="h2">No shots logged yet.</Text>
-      <Text color={colors.inkMuted}>Your shot history will appear here.</Text>
+      <Text variant="h2">No shots yet.</Text>
+      <Text color={colors.inkMuted}>Every shot you log appears here.</Text>
       <Button onPress={() => router.push('/log-shot')}>Log shot</Button>
     </Card>
   );

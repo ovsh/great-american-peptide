@@ -16,12 +16,12 @@ const ACTIONS: readonly { label: string; href: '/log-shot' | '/log-weight' | '/l
   { label: 'Log shot', href: '/log-shot', icon: Syringe },
   { label: 'Log weight', href: '/log-weight', icon: Scale },
   { label: 'Log side effect', href: '/log-side-effect', icon: ShieldPlus },
-  { label: 'Calculator', href: '/calculator', icon: Calculator },
+  { label: 'Reconstitution calculator', href: '/calculator', icon: Calculator },
 ];
 
 export function LogActionSheet({ visible, onClose }: LogActionSheetProps) {
   return (
-    <BottomSheet visible={visible} title="Add a log" onClose={onClose}>
+    <BottomSheet visible={visible} title="Choose an action" onClose={onClose}>
       <View style={styles.actions}>
         {ACTIONS.map((action) => {
           const Icon = action.icon;

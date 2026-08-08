@@ -74,7 +74,7 @@ export default function AddMedicationScreen() {
     getMedication(editingId)
       .then((medication) => {
         if (!medication) {
-          Alert.alert('Medication not found');
+          Alert.alert('Poke could not find that medication');
           safeBack('/medications');
           return;
         }
@@ -95,7 +95,7 @@ export default function AddMedicationScreen() {
         setStep('config');
       })
       .catch((error: unknown) => {
-        Alert.alert('Could not load medication', error instanceof Error ? error.message : 'Try again.');
+        Alert.alert('Poke could not load your medication', error instanceof Error ? error.message : 'Try again.');
       });
   }, [editingId]);
 
@@ -128,9 +128,9 @@ export default function AddMedicationScreen() {
   };
 
   const onSave = async () => {
-    if (!name.trim()) { Alert.alert('Name is required'); return; }
+    if (!name.trim()) { Alert.alert('Enter a medication name'); return; }
     const d = parseFloat(dose);
-    if (!Number.isFinite(d) || d <= 0) { Alert.alert('Enter a valid dose'); return; }
+    if (!Number.isFinite(d) || d <= 0) { Alert.alert('Enter a dose above zero'); return; }
     setSubmitting(true);
     try {
       const input = {
@@ -160,7 +160,7 @@ export default function AddMedicationScreen() {
       bumpVersion();
       safeBack('/medications');
     } catch (err: unknown) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : String(err));
+      Alert.alert('Poke could not save your medication', err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -172,9 +172,11 @@ export default function AddMedicationScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Header
-        title={editingId ? 'Edit medication' : step === 'pick' ? 'Add Medication' : 'Configure'}
+        title={editingId ? 'Edit medication' : step === 'pick' ? 'Add medication' : 'Set the details'}
         leading={
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={step === 'config' && !editingId ? 'Go back' : 'Close'}
             onPress={() => {
               if (editingId) safeBack('/medications');
               else if (step === 'config') setStep('pick');
@@ -187,7 +189,7 @@ export default function AddMedicationScreen() {
           </Pressable>
         }
         trailing={step === 'config' && !atFreeLimit ? (
-          <Pressable onPress={onSave} hitSlop={10} disabled={submitting}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save this medication" onPress={onSave} hitSlop={10} disabled={submitting}>
             <Check size={22} color={colors.accent} />
           </Pressable>
         ) : null}
@@ -197,12 +199,12 @@ export default function AddMedicationScreen() {
         <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.lg }}>
           <ProLock
             title="Track more than one medication"
-            body="The free version keeps one medication. Pro follows a full stack — each with its own schedule, level and history."
+            body="The free version keeps one medication. Pro tracks every medication with its own schedule, level and history."
           />
         </View>
       ) : step === 'pick' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
-          <Section eyebrow="Preset Library" gap="sm">
+          <Section eyebrow="Presets" gap="sm">
             {peptidePresets.map((p, idx) => (
               <Pressable key={p.id} onPress={() => pickPreset(p)}>
                 <Card padding="md" style={styles.presetCard}>
@@ -224,9 +226,9 @@ export default function AddMedicationScreen() {
           <Section eyebrow="Custom">
             <Pressable onPress={pickCustom}>
               <Card padding="md">
-                <Text variant="bodyStrong">Add custom peptide</Text>
+                <Text variant="bodyStrong">Add a custom medication</Text>
                 <Text variant="small" color={colors.inkMuted} style={{ marginTop: 2 }}>
-                  Set name, dose, route, and schedule yourself.
+                  You enter every detail yourself.
                 </Text>
               </Card>
             </Pressable>
@@ -239,7 +241,7 @@ export default function AddMedicationScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Field label="Name">
-            <Input value={name} onChangeText={setName} placeholder="e.g. Tirzepatide" size="lg" />
+            <Input value={name} onChangeText={setName} placeholder="Type the name" size="lg" />
           </Field>
 
           <Field label="Default dose">
@@ -317,7 +319,7 @@ export default function AddMedicationScreen() {
             </Field>
           ) : null}
 
-          <Field label="Half-life (hours, optional)">
+          <Field label="Half-life in hours (optional)">
             <TextInput
               value={halfLife}
               onChangeText={setHalfLife}
@@ -327,11 +329,11 @@ export default function AddMedicationScreen() {
               style={styles.doseInput}
             />
             <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
-              Drives the elimination tail of the level chart.
+              Poke uses the half-life to draw the fall of the level curve.
             </Text>
           </Field>
 
-          <Field label="Time to peak (Tmax hours, optional)" divider={false}>
+          <Field label="Time to peak in hours (optional)" divider={false}>
             <TextInput
               value={tmax}
               onChangeText={setTmax}
@@ -341,13 +343,14 @@ export default function AddMedicationScreen() {
               style={styles.doseInput}
             />
             <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
-              How long after the shot the level peaks. SC peptides usually 0.5–2 h; weekly GLP-1s 24–48 h.
+              The time from the shot to the peak level. Most SC peptides peak in 0.5 to 2 hours.
+              Weekly GLP-1 medications peak in 24 to 48 hours.
             </Text>
           </Field>
 
           <View style={{ height: spacing.xl }} />
           <Button onPress={onSave} disabled={submitting} trailingChevron>
-            {submitting ? 'Saving…' : editingId ? 'Save changes' : 'Save'}
+            {submitting ? 'Saving' : editingId ? 'Save changes' : 'Save this medication'}
           </Button>
         </ScrollView>
       )}

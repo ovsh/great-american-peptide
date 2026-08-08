@@ -28,6 +28,7 @@ import { listInjections } from '@/repositories/injections';
 import { listMeasurements } from '@/repositories/measurements';
 import { listMedications } from '@/repositories/medications';
 import { getPreferences } from '@/repositories/preferences';
+import { maybePromptForReview } from '@/services/review';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
@@ -107,6 +108,15 @@ export default function TodayScreen() {
       setRefreshing(false);
     }
   };
+
+  // Streaks here count whole weeks, so four is a month on schedule. That is earned,
+  // and the home screen is a resting place rather than a task the ask would interrupt.
+  const streakWeeks = dashboard.streak.current;
+  useEffect(() => {
+    if (streakWeeks < 4) return;
+    const timer = setTimeout(() => { maybePromptForReview('streak').catch(() => {}); }, 2000);
+    return () => clearTimeout(timer);
+  }, [streakWeeks]);
 
   return (
     <View style={styles.root}>
@@ -351,11 +361,11 @@ function WeightTile({ dashboard }: { dashboard: TodayDashboard }) {
         {dashboard.weightSeries.length >= 2 ? (
           <Sparkline data={dashboard.weightSeries} width={84} height={34} color={colors.amber} />
         ) : dashboard.weight ? (
-          <Text variant="small" color={colors.inkMuted}>First weight logged.</Text>
+          <Text variant="small" color={colors.inkMuted}>Log a second weight to see a trend.</Text>
         ) : (
-          <Text variant="small" color={colors.inkMuted}>No weight logged yet.</Text>
+          <Text variant="small" color={colors.inkMuted}>No weight yet.</Text>
         )}
-        <Text variant="smallStrong" color={colors.amber}>+ log</Text>
+        <Text variant="smallStrong" color={colors.amber}>Log weight</Text>
       </Card>
     </Pressable>
   );
@@ -378,9 +388,9 @@ function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLog | null }) {
         <Text variant="small" color={colors.inkMuted}>
           {sideEffect
             ? `Last: ${sideEffectLabel(sideEffect.effect)} · ${sideEffect.severity}/10`
-            : 'Add a quick check-in.'}
+            : 'No side effect yet.'}
         </Text>
-        <Text variant="smallStrong" color={colors.violet}>Quick add</Text>
+        <Text variant="smallStrong" color={colors.violet}>Log side effect</Text>
       </Card>
     </Pressable>
   );

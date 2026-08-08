@@ -74,6 +74,10 @@ export interface PreferencesRow {
   review_first_event_at: number | null;
   review_last_prompted_at: number | null;
   review_prompted_version: string | null;
+  /** Comma-separated ms timestamps of our prompt attempts, pruned to the last 365 days. */
+  review_prompt_log: string | null;
+  /** Comma-separated ReviewTrigger names already used. Each trigger asks once, ever. */
+  review_triggers_used: string | null;
   goal_kind: GoalKind | null;
   display_name: string | null;
   side_effect_concerns: string | null;

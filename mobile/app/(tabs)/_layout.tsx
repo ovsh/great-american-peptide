@@ -49,7 +49,7 @@ function PokeTabBar({ state, navigation }: BottomTabBarProps) {
               {index === 2 ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Open log menu"
+                  accessibilityLabel="Open the action menu"
                   onPress={() => setSheetOpen(true)}
                   style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
                 >

@@ -130,7 +130,7 @@ export default function ProgressScreen() {
               <Text variant="smallStrong">Weight</Text>
               <View style={styles.currentRow}>
                 <Text style={styles.currentValue}>{latest ? latest.v.toFixed(1) : '—'}</Text>
-                <Text variant="small" color={colors.inkMuted}>{latest ? unit : 'No data'}</Text>
+                <Text variant="small" color={colors.inkMuted}>{latest ? unit : 'No weight yet'}</Text>
               </View>
             </View>
             <TimeRangeToggle
@@ -169,7 +169,7 @@ export default function ProgressScreen() {
         {effectCounts.length > 0 && !pro ? (
           <ProLock
             title="Side effect patterns"
-            body="See which effects come back, how often, and how bad they get."
+            body="See which effects come back, how often and how bad they get."
           />
         ) : null}
 
@@ -238,10 +238,10 @@ function GoalCard({ goal, hasGoal }: { goal: GoalProgress | null; hasGoal: boole
         </View>
         <View style={styles.summaryCopy}>
           <Text variant="h2">{hasGoal ? 'Log weight to measure your goal.' : 'Set a goal weight.'}</Text>
-          <Text color={colors.inkMuted}>Poke will show how far you have come.</Text>
+          <Text color={colors.inkMuted}>Poke then shows how far you have come.</Text>
         </View>
         <Button size="sm" onPress={() => hasGoal ? router.push('/log-weight') : router.push('/profile')}>
-          {hasGoal ? 'Log weight' : 'Set goal'}
+          {hasGoal ? 'Log weight' : 'Open Profile'}
         </Button>
       </Card>
     );

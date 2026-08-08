@@ -54,10 +54,10 @@ export function reconstitution(input: ReconstitutionInput): ReconstitutionResult
   const aliquotVolumeMl = hasAliquot ? aliquotAmountMcg / concentrationMcgPerMl : null;
 
   if (aliquotVolumeMl !== null && aliquotVolumeMl > input.diluentMl) {
-    warnings.push('Aliquot volume exceeds the prepared solution volume.');
+    warnings.push('The aliquot volume is more than the prepared solution volume.');
   }
   if (aliquotVolumeMl !== null && aliquotVolumeMl > 0 && aliquotVolumeMl < 0.01) {
-    warnings.push('Very small aliquot volume. Verify with calibrated lab equipment.');
+    warnings.push('The aliquot volume is very small. Check it with calibrated lab equipment.');
   }
 
   return {

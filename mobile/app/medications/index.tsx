@@ -56,7 +56,7 @@ export default function MedicationsScreen() {
   const archive = (m: MedicationRow) => {
     Alert.alert(
       'Archive medication?',
-      `${m.name} will stop appearing in active lists. History stays.`,
+      `Poke removes ${m.name} from your active lists. Your history stays.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Archive', style: 'destructive', onPress: async () => { await setMedicationStatusAndRefresh(m.id, 'archived'); bumpVersion(); } },
@@ -78,10 +78,10 @@ export default function MedicationsScreen() {
             <Card padding="lg">
               <Text variant="h2">No medications yet.</Text>
               <Text variant="small" color={colors.inkMuted} style={{ marginTop: 4 }}>
-                Pick a preset or add your own.
+                Choose a preset or add your own.
               </Text>
               <View style={{ height: spacing.md }} />
-              <Button onPress={addMedication} trailingChevron>Add Medication</Button>
+              <Button onPress={addMedication} trailingChevron>Add medication</Button>
             </Card>
           </View>
         ) : (

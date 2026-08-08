@@ -124,9 +124,9 @@ export default function LogShotScreen() {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       safeBack('/');
-      recordPositiveEvent().then(() => maybePromptForReview()).catch(() => {});
+      recordPositiveEvent().then(() => maybePromptForReview('shot-logged')).catch(() => {});
     } catch (error: unknown) {
-      Alert.alert('Could not log shot', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert('Poke could not log your shot', error instanceof Error ? error.message : 'Try again.');
       setSaving(false);
     }
   };
@@ -145,7 +145,7 @@ export default function LogShotScreen() {
         {medications.length === 0 ? (
           <Card style={styles.empty}>
             <Text variant="h2">Add a medication first.</Text>
-            <Text color={colors.inkMuted}>Poke needs a dose and route before it can log your shot.</Text>
+            <Text color={colors.inkMuted}>A medication carries the dose and the route that a shot needs.</Text>
             <Button onPress={() => router.push('/medications/new')}>Add medication</Button>
           </Card>
         ) : (
@@ -207,10 +207,10 @@ export default function LogShotScreen() {
                   />
                 </View>
                 <Text variant="smallStrong" align="center">
-                  {selectedSite?.label ?? 'Tap a site to choose it'}
+                  {selectedSite?.label ?? 'No site yet'}
                 </Text>
                 <Text variant="caption" color={colors.inkMuted} align="center">
-                  Tap the diagram to override the suggestion.
+                  Poke suggests the next site. Tap the diagram to choose a different one.
                 </Text>
               </Card>
             ) : null}
@@ -246,7 +246,7 @@ export default function LogShotScreen() {
                   <Input
                     value={draft.notes}
                     onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
-                    placeholder="Optional note"
+                    placeholder="Add a note"
                   />
                 </View>
               </Card>

@@ -19,12 +19,20 @@ import type { MedicationRow } from '@/db/types';
 import { levelTrajectory, peakTroughAvg, trendLabel, tmaxOrDefault } from '@/domain/pk';
 import { formatDose } from '@/domain/units';
 import { fmtTime } from '@/utils/date';
+import { maybePromptForReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
 import { useIsPro } from '@/stores/entitlement';
 import { colors, spacing } from '@/theme';
 
 const RANGES = ['7d', '14d', '30d'] as const;
 type Range = typeof RANGES[number];
+
+const TREND_LABEL = {
+  rising: 'Rising',
+  falling: 'Falling',
+  steady: 'Steady',
+} as const;
+
 const DAY = 24 * 60 * 60 * 1000;
 
 function rangeMs(r: Range): number {
@@ -91,6 +99,20 @@ export default function LevelReportScreen() {
 
   const chartW = Math.min(width, 600) - spacing.screen * 2;
 
+  // The curve is the paid hook, and it only becomes one at the third dose: below that
+  // it is a single rise and decay, which is a textbook diagram, not the user's routine.
+  // The dwell timer keeps this a read, not a screen the user passed through.
+  const dosesInWindow = useMemo(() => {
+    const from = Date.now() - rangeMs(range);
+    return doses.filter((d) => d.takenAt >= from).length;
+  }, [doses, range]);
+
+  useEffect(() => {
+    if (!pro || dosesInWindow < 3) return;
+    const timer = setTimeout(() => { maybePromptForReview('level-curve').catch(() => {}); }, 3000);
+    return () => clearTimeout(timer);
+  }, [pro, dosesInWindow]);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       <Header title="Medication level" showBack />
@@ -99,15 +121,15 @@ export default function LevelReportScreen() {
           <View style={{ paddingHorizontal: spacing.screen }}>
             <ProLock
               title="Your level, day by day"
-              body="See the estimated amount in your body between shots — peak, trough and average across the window."
+              body="See the estimated amount in your body between shots. Poke shows the peak, the trough and the average across each dose window."
             />
           </View>
         ) : meds.length === 0 ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <Card padding="lg">
-              <Text variant="h3">No active medications with a half-life set.</Text>
+              <Text variant="h3">No medication has a half-life yet.</Text>
               <Text variant="small" color={colors.inkMuted} style={{ marginTop: 4 }}>
-                Add half-life when configuring a medication to see the estimated-level chart.
+                Add a half-life to a medication. Poke then draws the estimated level chart.
               </Text>
             </Card>
           </View>
@@ -133,10 +155,10 @@ export default function LevelReportScreen() {
                   <Text variant="hero" style={{ marginTop: 4 }}>
                     {med ? formatDose(stats.peak.level, med.default_unit) : '—'}
                   </Text>
-                  <Text variant="caption" color={colors.inkMuted}>peak this window</Text>
+                  <Text variant="caption" color={colors.inkMuted}>peak in this range</Text>
                 </View>
                 <Pill tone={trend === 'rising' ? 'success' : trend === 'falling' ? 'warning' : 'neutral'}>
-                  {trend}
+                  {TREND_LABEL[trend]}
                 </Pill>
               </View>
 
@@ -159,7 +181,7 @@ export default function LevelReportScreen() {
                     }}
                   />
                 ) : (
-                  <Text variant="small" color={colors.inkMuted}>Log a few shots to see the level chart.</Text>
+                  <Text variant="small" color={colors.inkMuted}>Log a shot to see the level chart.</Text>
                 )}
               </Card>
 
@@ -168,13 +190,14 @@ export default function LevelReportScreen() {
               <View style={styles.statRow}>
                 <Stat label="Peak" value={med ? formatDose(stats.peak.level, med.default_unit) : '—'} hint={fmtTime(stats.peak.t)} />
                 <Stat label="Trough" value={med ? formatDose(stats.trough.level, med.default_unit) : '—'} hint={fmtTime(stats.trough.t)} />
-                <Stat label="Average" value={med ? formatDose(stats.avg, med.default_unit) : '—'} hint="window" />
+                <Stat label="Average" value={med ? formatDose(stats.avg, med.default_unit) : '—'} hint="this range" />
               </View>
 
               <View style={{ height: spacing.xl }} />
 
               <Text variant="caption" color={colors.inkSubtle}>
-                Half-life load estimate from logged shots only. This trend is not for dosing.
+                Poke estimates this level from the shots you logged and the half-life you set.
+                The estimate is not a measurement. This trend is not for dosing.
               </Text>
             </View>
           </>

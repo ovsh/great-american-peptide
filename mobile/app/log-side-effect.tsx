@@ -58,7 +58,7 @@ export default function LogSideEffectScreen() {
       }
       returnTimer.current = setTimeout(() => safeBack('/'), 650);
     } catch (error: unknown) {
-      Alert.alert('Could not save side effect', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert('Poke could not save your side effect', error instanceof Error ? error.message : 'Try again.');
       setSaving(false);
     }
   };
@@ -130,7 +130,7 @@ export default function LogSideEffectScreen() {
           <Input
             value={notes}
             onChangeText={setNotes}
-            placeholder="Anything else?"
+            placeholder="Add a note"
             accessibilityLabel="Optional note"
             maxLength={240}
           />

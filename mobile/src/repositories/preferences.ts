@@ -18,6 +18,8 @@ const PREFERENCE_COLUMNS = [
   'review_first_event_at',
   'review_last_prompted_at',
   'review_prompted_version',
+  'review_prompt_log',
+  'review_triggers_used',
   'goal_kind',
   'display_name',
   'side_effect_concerns',

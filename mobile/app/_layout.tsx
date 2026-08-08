@@ -67,7 +67,7 @@ export default function RootLayout() {
         setReady(true);
       })
       .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : 'The database could not open.';
+        const message = error instanceof Error ? error.message : 'Poke could not open the database.';
         setGate({ kind: 'error', message });
       });
   }, [gate.kind, setGate, setReady]);

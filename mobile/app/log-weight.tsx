@@ -39,7 +39,7 @@ export default function LogWeightScreen() {
   const onSave = async () => {
     const v = parseFloat(value);
     if (!Number.isFinite(v) || v <= 0) {
-      Alert.alert('Enter a valid weight'); return;
+      Alert.alert('Enter a weight above zero'); return;
     }
     setSubmitting(true);
     try {
@@ -57,7 +57,7 @@ export default function LogWeightScreen() {
       bumpVersion();
       safeBack('/');
     } catch (error: unknown) {
-      Alert.alert('Could not save', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert('Poke could not save your weight', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -71,12 +71,12 @@ export default function LogWeightScreen() {
       <Header
         title="Log weight"
         leading={
-          <Pressable onPress={() => safeBack('/')} hitSlop={10} style={styles.iconBtn}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => safeBack('/')} hitSlop={10} style={styles.iconBtn}>
             <X size={22} color={colors.ink} />
           </Pressable>
         }
         trailing={
-          <Pressable onPress={onSave} hitSlop={10} disabled={submitting}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save weight" onPress={onSave} hitSlop={10} disabled={submitting}>
             <Check size={22} color={colors.accent} />
           </Pressable>
         }

@@ -106,4 +106,11 @@ export const MIGRATIONS: { version: number; up: string }[] = [
       ALTER TABLE preferences ADD COLUMN side_effect_concerns TEXT;
     `,
   },
+  {
+    version: 6,
+    up: `
+      ALTER TABLE preferences ADD COLUMN review_prompt_log TEXT;
+      ALTER TABLE preferences ADD COLUMN review_triggers_used TEXT;
+    `,
+  },
 ];

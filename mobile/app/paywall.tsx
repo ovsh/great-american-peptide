@@ -17,22 +17,22 @@ const BENEFITS = [
   {
     icon: Activity,
     title: 'Your level, day by day',
-    body: 'What is still in you between shots.',
+    body: 'See the estimated amount in your body between shots.',
   },
   {
     icon: TrendingUp,
     title: 'Trends that add up',
-    body: 'Weight, doses and effects on one line.',
+    body: 'See your weight, your doses and your side effects together.',
   },
   {
     icon: Layers,
     title: 'Every medication',
-    body: 'Your whole stack, not only one.',
+    body: 'Track more than one medication at a time.',
   },
   {
     icon: FileDown,
     title: 'Take it to your doctor',
-    body: 'Export a clean summary of your log.',
+    body: 'Export your whole log as a CSV file.',
   },
 ] as const;
 
@@ -116,7 +116,7 @@ export default function PaywallScreen() {
             <View style={styles.badge}>
               <Text variant="caption" color={colors.accent}>POKE PRO</Text>
             </View>
-            <Text variant="h1">Get the full picture.</Text>
+            <Text variant="h1">Every shot you log becomes a chart.</Text>
             <Text color={colors.inkMuted}>
               Logging is free forever. Pro adds the numbers.
             </Text>
@@ -246,9 +246,9 @@ function LegalLink({ label, url }: { label: string; url: string }) {
 }
 
 function ctaLabel(plan: PlanOption, storeReady: boolean, purchasing: boolean): string {
-  if (purchasing) return 'Working';
+  if (purchasing) return 'Purchasing';
   if (!storeReady) return 'Continue';
-  return plan.trialLabel ? 'Start free trial' : `Subscribe ${plan.priceLabel}`;
+  return plan.trialLabel ? 'Start free trial' : `Subscribe for ${plan.priceLabel}`;
 }
 
 function renewalCopy(plan: PlanOption): string {
@@ -258,17 +258,17 @@ function renewalCopy(plan: PlanOption): string {
     : `${plan.priceLabel} per ${period}.`;
   // Apple wants the price, the period, that it renews on its own, and how to
   // stop it. Say all four, and no more.
-  return `${lead} It renews on its own until you cancel it in your Apple Account settings.`;
+  return `${lead} The subscription renews on its own until you cancel it in your Apple Account settings.`;
 }
 
 function storeReadyMessage(configured: boolean, offeringState: string): string {
   if (!configured) {
     return Platform.OS === 'web'
-      ? 'Purchases do not run in the web preview. Use the iOS build to test them.'
-      : 'Subscriptions are not connected in this build yet. Everything stays unlocked.';
+      ? 'Purchases do not run in the web preview. Use the iOS build to test purchases.'
+      : 'This build has no subscription connection. Every Pro feature stays unlocked.';
   }
   if (offeringState === 'loading') return 'Loading the current prices.';
-  return 'We could not reach the App Store. Check your connection and try again.';
+  return 'Poke could not reach the App Store. Check your connection and try again.';
 }
 
 const styles = StyleSheet.create({

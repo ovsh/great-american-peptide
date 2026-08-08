@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Info, Pill, Scale, Share2, Sparkles, Target } from 'lucide-react-native';
+import { Bell, ChevronRight, Info, Pill, Scale, Share2, Sparkles, Star, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -22,6 +22,7 @@ import {
 import { exportHistory } from '@/services/export';
 import { ensureNotificationPermission, refreshScheduledReminders } from '@/services/notifications';
 import { openManageSubscriptions } from '@/services/purchases';
+import { maybePromptForReview, openWriteReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
 import { useEntitlementStore, useIsPro, usePaywallEnabled, type DevOverride } from '@/stores/entitlement';
 import { openPaywall } from '@/components/ProLock';
@@ -94,7 +95,7 @@ export default function ProfileScreen() {
       if (refreshReminders) await refreshScheduledReminders().catch(() => {});
       await load();
     } catch (error: unknown) {
-      Alert.alert('Could not save preference', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert('Poke could not save your preference', error instanceof Error ? error.message : 'Try again.');
     }
   };
 
@@ -111,7 +112,7 @@ export default function ProfileScreen() {
       await load();
       setGoalOpen(false);
     } catch (error: unknown) {
-      Alert.alert('Could not save goal', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert('Poke could not save your goal', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setSavingGoal(false);
     }
@@ -128,14 +129,16 @@ export default function ProfileScreen() {
     if (outcome.kind === 'empty') {
       Alert.alert('Nothing to export yet', 'Log a shot or a weight first.');
     } else if (outcome.kind === 'failed') {
-      Alert.alert('Could not export', outcome.message);
+      Alert.alert('Poke could not export your history', outcome.message);
+    } else if (outcome.kind === 'shared') {
+      maybePromptForReview('export').catch(() => {});
     }
   };
 
   const runRestore = async () => {
     const outcome = await restore();
     if (outcome === 'restored') Alert.alert('Poke Pro is active', 'Your subscription is back on this device.');
-    else if (outcome === 'none') Alert.alert('No subscription found', 'We found no active subscription for this Apple Account.');
+    else if (outcome === 'none') Alert.alert('No subscription found', 'Poke found no active subscription for this Apple Account.');
   };
 
   return (
@@ -182,7 +185,7 @@ export default function ProfileScreen() {
           <SettingsRow
             icon={<Pill size={20} color={colors.accent} />}
             label="Medications"
-            detail="Dose, schedule, and status"
+            detail="Dose, schedule and status"
             onPress={() => router.push('/medications')}
           />
         </SettingsSection>
@@ -257,12 +260,36 @@ export default function ProfileScreen() {
         </SettingsSection>
 
         <SettingsSection label="About">
-          <SettingsRow
-            icon={<Info size={20} color={colors.inkMuted} />}
-            label="About Poke"
-            detail="Privacy and medical disclaimer"
-            onPress={() => setAboutOpen(true)}
-          />
+          <Card padding="xs" style={styles.groupCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="About Poke"
+              onPress={() => setAboutOpen(true)}
+              style={({ pressed }) => [styles.row, styles.divider, pressed && styles.pressed]}
+            >
+              <View style={styles.rowIcon}><Info size={20} color={colors.inkMuted} /></View>
+              <View style={styles.rowCopy}>
+                <Text variant="bodyStrong">About Poke</Text>
+                <Text variant="small" color={colors.inkMuted}>Privacy and medical disclaimer</Text>
+              </View>
+              <ChevronRight size={19} color={colors.inkSubtle} />
+            </Pressable>
+            {/* Opens the App Store review composer. Never StoreReview.requestReview():
+                StoreKit can show nothing, and a button that does nothing is a dead tap. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Rate Poke on the App Store"
+              onPress={() => { openWriteReview().catch(() => {}); }}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            >
+              <View style={styles.rowIcon}><Star size={20} color={colors.amber} /></View>
+              <View style={styles.rowCopy}>
+                <Text variant="bodyStrong">Rate Poke</Text>
+                <Text variant="small" color={colors.inkMuted}>Opens the App Store</Text>
+              </View>
+              <ChevronRight size={19} color={colors.inkSubtle} />
+            </Pressable>
+          </Card>
         </SettingsSection>
 
         {__DEV__ ? (
@@ -292,7 +319,7 @@ export default function ProfileScreen() {
             onChangeText={setGoalDraft}
             keyboardType="decimal-pad"
             inputMode="decimal"
-            placeholder="175"
+            placeholder="Enter a number"
             accessibilityLabel="Goal weight"
           />
           <Text variant="small" color={colors.inkMuted}>{preferences?.weight_unit ?? 'lb'}</Text>
@@ -312,7 +339,7 @@ export default function ProfileScreen() {
           <View style={styles.disclaimer}>
             <Text variant="bodyStrong">Medical disclaimer</Text>
             <Text color={colors.inkMuted}>
-              Poke is for personal record keeping only. It does not provide medical advice, diagnosis, treatment guidance, dosage recommendations, administration instructions, or emergency support.
+              Poke is for personal record keeping only. Poke does not provide medical advice, diagnosis, treatment guidance, dosage recommendations, administration instructions, or emergency support.
             </Text>
             <Text variant="small" color={colors.inkMuted}>For medical questions, contact a licensed clinician.</Text>
           </View>

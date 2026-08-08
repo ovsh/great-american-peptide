@@ -31,7 +31,7 @@ interface ProLockProps {
 }
 
 /** Replaces a paid section with an honest, tappable explanation of what is behind it. */
-export function ProLock({ title, body, cta = 'Unlock with Pro' }: ProLockProps) {
+export function ProLock({ title, body, cta = 'See Poke Pro' }: ProLockProps) {
   return (
     <Card style={styles.card}>
       <View style={styles.head}>

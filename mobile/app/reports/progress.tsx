@@ -85,7 +85,7 @@ export default function ProgressReportScreen() {
               <Text variant="hero" color={delta < 0 ? colors.successDeep : colors.ink}>
                 {delta >= 0 ? '+' : ''}{delta.toFixed(1)}
               </Text>
-              <Text variant="caption" color={colors.inkMuted}>over window</Text>
+              <Text variant="caption" color={colors.inkMuted}>in this range</Text>
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text variant="smallStrong" color={colors.inkMuted}>Goal</Text>
@@ -114,7 +114,7 @@ export default function ProgressReportScreen() {
                 }}
               />
             ) : (
-              <Text variant="small" color={colors.inkMuted}>Log at least two weights to see the chart.</Text>
+              <Text variant="small" color={colors.inkMuted}>Log two weights to see the chart.</Text>
             )}
           </Card>
         </View>
