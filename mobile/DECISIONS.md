@@ -1,39 +1,35 @@
-# Poke rebuild — decision trail
+# Poke — decision record
 
-Overnight rebuild of "The Great Peptide Tracker" into "Poke". Run started 2026-08-06 ~00:45.
-Owner: Claude (supervisor/critic). Implementation: codex gpt-5.6-sol, effort xhigh.
+Append only. When a decision changes, add a new row and set the old row's status to
+`Superseded by #N`. Never edit or delete an old row: it was true when it was made, and the
+reason behind it is the part you cannot rebuild later.
 
-## Exit condition
+Read this file before you change or undo an architectural choice. If you are about to do
+something this file argued against, the burden is on you to say what changed.
 
-App renamed and rebuilt in MeAgain's product style with our own branding: onboarding flow
-(personalized setup, gated on first run), clean spacious design system replacing the
-Americana theme, redesigned home/log/history/profile, side-effect logging, streaks.
-Predicate: typecheck clean, every screen walkable in web preview + iOS simulator without
-dead ends, before/after screenshots captured, all work committed on `rebuild/poke`.
+Dated narrative does not belong here. Run logs live in `docs/` with a date in the filename.
+See `docs/rebuild-log-2026-08-06.md`.
 
 ## Decisions
 
-| # | Decision | Why |
-|---|----------|-----|
-| 1 | Name: **Poke** ("Poke: Peptide & GLP-1 Tracker") | Short, friendly, literal (an injection is a poke). No collisions in niche (checked iTunes API: "poke tracker" surfaces only Pokemon apps; Dosely/Pip weaker). Keeps ASO keywords in subtitle like every category winner. |
-| 2 | Keep bundle id `industries.peptide.tracker` | Ships as an update to the existing App Store record (id6764757185). Display name change only. |
-| 3 | Keep domain layer (pk, reconstitution, rotation, scheduling, units), replace UI layer | Domain math is the app's hard-won value; the complaint was UX. Laziness protocol: smallest change that solves the problem. |
-| 4 | Schema: one migration (v5) adding side_effect_logs; onboarding uses existing tables | Schema already models meds/injections/measurements/preferences well. Model-the-domain: side effects are their own shape, not a measurement kind. |
-| 5 | Food/calorie tracking (MeAgain's biggest feature) **cut** from overnight scope | A calorie counter is weeks of work (food db, search). Water/protein quick-log via measurements.kind is the cheap adjacent win, Phase 3 stretch. |
-| 6 | Progress photos **cut** | Camera/photo storage flows too heavy for one night; schema can add later. |
-| 7 | Branch `rebuild/poke`, WIP snapshot committed first | Reversible; main untouched. |
-| 8 | Verify loop: expo web (fast iteration) + iOS simulator (final) | Web preview renders the real app; simulator is the shipping artifact. Prove-it-works. |
+Rows 1–8 come from the original run log. Rows 9–13 were reconstructed from the shipped
+artifacts and commit history on 7 August 2026, so their stated reasons are inferred, not
+quoted. Correct any row that is wrong — reconstruction is the one case where editing an old
+row is allowed, because the row was never a first-hand record.
 
-## Iteration log
-
-| Time | What changed | Predicate movement |
-|------|--------------|--------------------|
-| 00:45 | Branch created, WIP snapshot commit 0bf301f. Baseline web screenshot of old home captured. | Baseline established. |
-| 01:05 | MeAgain teardown landed. Spec updated: Cal-AI-school onboarding without the hard paywall (their #1 complaint), med-level card as home hero, countdown on dashboard (their redesign regret), 0–10 side-effect severity, no fabricated goal-date projection (medical-claim risk). | Spec complete. |
-| 01:10 | Phase 1 dispatched to codex (gpt-5.6-sol, xhigh): migration v5, theme swap (legacy keys kept for compile compat), primitives restyle incl. the focus-ring overflow bug, 8-screen onboarding, root gate, display name "Poke". Phase 2 brief pre-written. | Phase 1 in flight. |
-| 01:50 | Phase 1 landed. Found + fixed one real bug in review: relative route paths (./taking) 404'd on web — swept to absolute /onboarding/* paths. Walked all 8 onboarding screens on expo web: gate works, db seeding works, Today shows seeded med/weight/goal. Six polish findings appended to Phase 2 brief (a11y button names, placeholder dupes, time picker, welcome centering, plan-screen weight echo, day-pill grid). Committed a16aa50. | Phase 1 predicate met. |
-| 01:55 | Phase 2 dispatched: tab bar (+ center log sheet), Today rebuild (med-level hero, countdown, quick tiles), confirm-first log-shot, history+calendar merge, new Progress tab, Profile cleanup, Americana component deletion. | Phase 2 in flight. |
-| 03:25 | Phase 2 landed and verified on web: full loop works (onboard → Today → log shot → level 0.25mg + countdown flip → History row). All six Phase-1 findings confirmed fixed. Three new findings (weight-tile contradiction, log-shot button below fold, front/back diagram ambiguity) appended to Phase 3. Committed 7db4f32. | Phase 2 predicate met. |
-| 03:30 | Phase 3 dispatched: side-effect modal (0–10 severity), streaks domain module + tests, Progress side-effect frequency, reminders hardening, disclaimer surface, new app icon. | Phase 3 in flight. |
-| 04:25 | Phase 3 landed + verified: 6/6 streak tests pass (tsx), tsc clean. Native sim run with seeded fixture: PK math correct (0.37mg from two 0.25 doses at 165h half-life), weight-tile contradiction fixed, side-effect tile live ("Last: Nausea · 4/10"), new green syringe icon confirmed on springboard. Deep-link tour of Progress/History/side-effect blocked by iOS "Open in Poke?" dialog (needs tap; simulator MCP blocked by xcode-select) — those screens verified on web instead. Committed as phase 3. | Phase 3 predicate met. |
-| 03:40 | iOS build saga: expo run:ios failed 4 ways. Root causes found: (1) CocoaPods needs UTF-8 locale in background shells; (2) actool's AssetCatalogSimulatorAgent handshake over FIFOs is broken host-wide (its own recovery advice is a reboot — declined, user asleep). Workaround: compile Images.xcassets manually with actool (works without thinning), build with EXCLUDED_SOURCE_FILE_NAMES=Images.xcassets, copy icons + merge CFBundleIcons into Info.plist, ad-hoc re-sign, simctl install. Poke running natively on iPhone 16 Pro sim, Metro on 8081. NOTE for daytime: after a reboot, plain `expo run:ios` should work again; also `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` re-enables the simulator MCP panel. | Native verify loop live. |
+| # | Decision | Why | Status |
+|---|----------|-----|--------|
+| 1 | Name the app **Poke** ("Poke: Peptide & GLP-1 Tracker") | Short, friendly, literal — an injection is a poke. No collision in the niche: the iTunes API shows "poke tracker" returns only Pokemon apps. Dosely and Pip are weaker. Keeps the ASO keywords in the subtitle, like every winner in the category. | Superseded by #9 |
+| 2 | Keep the bundle id `industries.peptide.tracker` | Ships as an update to the existing App Store record `6764757185`. Only the display name changes. Changing it would mean a new app and the loss of all reviews. | Live |
+| 3 | Keep the domain layer (pk, reconstitution, rotation, scheduling, units). Replace the UI layer. | The domain math is the app's hard-won value. The complaint was about UX, not correctness. Smallest change that solves the problem. | Live |
+| 4 | One migration (v5) adding `side_effect_logs`. Onboarding reuses the existing tables. | The schema already models meds, injections, measurements and preferences well. A side effect is its own shape, not a kind of measurement. | Live |
+| 5 | Cut food and calorie tracking | It is the biggest feature in the app we studied, and it is weeks of work: a food database plus search. Water and protein quick-log through `measurements.kind` is the cheap adjacent win. | Live |
+| 6 | Cut progress photos | Camera and photo storage are too heavy for the time available. The schema can take them later without a migration conflict. | Live |
+| 7 | Work on branch `rebuild/poke`, with a WIP snapshot committed first | Reversible. `master` stays untouched until the rebuild is proven. | Live |
+| 8 | Verify on expo web first, iOS simulator last | Web preview renders the real app and iterates in seconds. The simulator is the shipping artifact, so it gets the final pass. | Live |
+| 9 | Rename the listing to **Poke: Peptide & GLP-1 Log** | "Tracker" is the most contested word in the category. "Log" is passive and matches the medical positioning: the app records what the user types, it does not track or infer anything. Lower App Review risk under guideline 1.4.1. | Live |
+| 10 | Subscription: monthly $9.99, yearly **$39.99** with a one-month free trial. No trial on monthly. No discount ladder. | $39.99 matches Shotsy's cheapest tested point and beats Peps at $44.99; it also makes the badge read "Save 67%" instead of "Save 58%". The one-month trial goes against the crowd on purpose: a weekly injector logs 0–1 shots in 3 days and 4 in a month, and we sell the trend across shots, so a short trial charges for an empty chart. Measured gap: trials of ≤4 days convert 25.5%, trials of 17–32 days convert 42.5%. No trial on monthly, because a free month on $9.99 gives the plan away. No discounts, because ~90% of the category sells at full price. Full working: `docs/market.md`. | Live |
+| 11 | Gate the paid features with RevenueCat, and unlock everything if the store is unreachable | A reviewer or an offline user must never meet a door that will not open. Failing open costs a few unpaid unlocks. Failing closed costs a rejection. | Live |
+| 12 | No account, no sign-in, no server. All data stays on the device. | It is the strongest privacy claim in the category, and it removes the single most common paid-app rejection: a reviewer who cannot get in. | Live |
+| 13 | The App Store listing is code (`store.config.json`, pushed with `eas metadata:push`) | A hand edit in App Store Connect is invisible to review and is lost on the next push. The listing wording is medical-risk surface, so it belongs under version control. | Live |
+| 14 | Agent documentation uses four layers, with append-only decisions | Always-loaded context is a fixed budget, so detail moves down the tree instead of being deleted. See `../docs/agent-docs.md`. | Live |

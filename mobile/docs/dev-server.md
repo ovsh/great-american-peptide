@@ -1,6 +1,6 @@
 # Expo dev server — operations guide
 
-Scope: how to stop, start, and prove the Metro/Expo dev server for `peptide-lab/mobile` on port 8081.
+Scope: how to stop, start, and prove the Metro/Expo dev server for `poke/mobile` on port 8081.
 Written 2026-08-06 after a restart that failed twice in two different ways. Every command and every
 number below was run and measured on this machine. Nothing here is from memory.
 
@@ -11,7 +11,7 @@ number below was run and measured on this machine. Nothing here is from memory.
 Use a real terminal. This is the only fully reliable form, because the Expo CLI wants a TTY.
 
 ```bash
-cd ~/Documents/code/archive/peptide-lab/mobile && npx expo start --port 8081
+cd ~/Documents/code/poke/mobile && npx expo start --port 8081
 ```
 
 Then use the interactive keys in that same terminal: `i` for iOS, `a` for Android, `w` for web,
@@ -117,7 +117,7 @@ background-safe.
 
 | Method | Command | Stays alive without a TTY? | Hot reload / Fast Refresh? | Interactive keys (`i`/`a`/`w`)? | Behaviour when port 8081 is busy | Use it when |
 |--------|---------|----------------------------|----------------------------|-------------------------------|----------------------------------|-------------|
-| **Real terminal (preferred)** | `cd ~/Documents/code/archive/peptide-lab/mobile && npx expo start --port 8081` | Not applicable — it has a TTY | **Yes** | **Yes** | Asks you: "Use port 8082 instead?" | You are a person at a keyboard, and you will edit code. This is the normal way. |
+| **Real terminal (preferred)** | `cd ~/Documents/code/poke/mobile && npx expo start --port 8081` | Not applicable — it has a TTY | **Yes** | **Yes** | Asks you: "Use port 8082 instead?" | You are a person at a keyboard, and you will edit code. This is the normal way. |
 | **Background, interactive CLI** | `npx expo start --port 8081` as a background job | **No.** Dies with exit code 1 and an empty log when stdin closes. | Not applicable | No | Asks a question that nobody can answer | Never. This is failure mode 3 above. |
 | **Background, non-interactive** | `CI=1 nohup npx expo start --port 8081 > /tmp/expo.log 2>&1 < /dev/null & disown` | **Yes** | **No — watch mode is off (L11)** | No | **Silently skips the dev server and exits.** Log says `Skipping dev server`. | Smoke tests, one-shot bundle checks, and agent runs. **Not for a code-edit loop.** Prove the port is free first, and read the log after the start. |
 
@@ -128,7 +128,7 @@ own exit; read `/status`.
 
 ```bash
 pkill -f "expo start"; sleep 2
-cd ~/Documents/code/archive/peptide-lab/mobile && CI=1 nohup npx expo start --port 8081 > /tmp/expo-8081.log 2>&1 < /dev/null & disown
+cd ~/Documents/code/poke/mobile && CI=1 nohup npx expo start --port 8081 > /tmp/expo-8081.log 2>&1 < /dev/null & disown
 for i in $(seq 1 30); do s=$(curl -s http://localhost:8081/status); [ -n "$s" ] && { echo "UP after ${i}s: $s"; break; }; sleep 1; done; tail -20 /tmp/expo-8081.log
 ```
 
@@ -284,7 +284,7 @@ These are real measurements from this machine, kept so a future run has somethin
 
 | Item | Value |
 |------|-------|
-| Project path | `/Users/ovsh/Documents/code/archive/peptide-lab/mobile` |
+| Project path | `/Users/ovsh/Documents/code/poke/mobile` |
 | Port | 8081 |
 | Local URL | `http://localhost:8081` |
 | LAN URL (Expo Go) | `exp://192.168.1.72:8081` — get the IP with `ipconfig getifaddr en0` |
