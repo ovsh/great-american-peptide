@@ -17,7 +17,7 @@ layer, not in peptide-native apps.
 
 | App | Revenue signal | Who runs it | How they grew |
 |---|---|---|---|
-| **MeAgain** | ~$700K / 30 days, claims 500K users | New York trio, founded 2025. Ex-BCG and Columbia. Operates like a funded consumer company. | **A TikTok account farm.** 35+ accounts, 9 still live, ~7.1M views in a year, each posing as a personal GLP-1 diary. Plus paid PR on the wire services. Not a product story. |
+| **MeAgain** | ~$700K / 30 days, claims 500K users | New York trio, founded 2025. Ex-BCG and Columbia. Operates like a funded consumer company. | **A TikTok account farm.** 35+ accounts, 9 still live, ~7.1M views in a year, each posing as a personal GLP-1 diary. Plus paid PR on the wire services. Not a product story. Spot-checked Aug 2026: 7 accounts confirmed, and the format is category-wide rather than MeAgain's alone — see `mobile/docs/competitor-creative.md`. |
 | **Shotsy** | ~$340K / 30 days, iOS + Android. 1.9M lifetime installs, 350K MAU, cash-flow positive. | Aja Beckett, solo, ex-New York Times iOS engineer. | Organic. Community trust, App Store featuring, two years of compounding. The opposite archetype to MeAgain. |
 | **Glowise** | ~$200K / 30 days | A Singapore entity with no public faces. Pattern-matches to a professional app studio. | Unclear. |
 
