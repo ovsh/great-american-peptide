@@ -1,9 +1,14 @@
 // The plan shown on the last onboarding screen.
 //
 // Every number here is arithmetic on what the user typed, plus a published
-// half-life. Nothing is a prediction about a body: no goal date, no pace, no
-// outcome. A level curve is a restatement of a half-life. A shot date is
-// calendar arithmetic. That is the whole payoff, and it is enough.
+// half-life. A level curve is a restatement of a half-life. A shot date is
+// calendar arithmetic. A goal date is a division.
+//
+// The projection is the one number that leaves the ground, so it is the one
+// number this module is strict about. It is division and nothing else: the
+// distance the user typed, over the weekly pace the user chose. It is not a
+// forecast, no model stands behind it, and the screen that draws it says so in
+// those words. If that sentence ever comes off the screen, take this out.
 //
 // This module holds the math so the screen only draws it.
 
@@ -12,12 +17,14 @@ import { getPreset, hasPublishedHalfLife, type Route, type Unit } from '../domai
 import { levelTrajectory, type DoseEvent } from '../domain/pk';
 import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
 import { recommendNextSite } from '../domain/rotation';
+import { bmi, bmiCategory } from '../domain/units';
 import {
   CUSTOM_MEDICATION_ID,
   SHOT_DAY_OPTIONS,
   medicationDisplayName,
   type MedicationScheduleDraft,
   type OnboardingDraft,
+  type WeightDraft,
 } from '../stores/onboarding';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -60,11 +67,30 @@ export interface PlanMedication {
   evidenceNote: string;
 }
 
+export interface PlanProjection {
+  current: number;
+  goal: number;
+  unit: 'lb' | 'kg';
+  /** Weight change per week, as the user set it. Always positive. */
+  pace: number;
+  weeks: number;
+  /** The date the division lands on. Arithmetic, not a forecast. */
+  reachesAt: number;
+  direction: 'down' | 'up';
+}
+
+export interface PlanBody {
+  value: number;
+  category: string;
+}
+
 export interface OnboardingPlan {
   medications: PlanMedication[];
   nextShot: { name: string; at: number } | null;
   sites: string[];
   curveCount: number;
+  projection: PlanProjection | null;
+  body: PlanBody | null;
 }
 
 export function buildOnboardingPlan(draft: OnboardingDraft, now: number): OnboardingPlan {
@@ -90,7 +116,65 @@ export function buildOnboardingPlan(draft: OnboardingDraft, now: number): Onboar
     nextShot,
     sites: rotationPreview(firstSchedule?.route ?? 'sc', now),
     curveCount: medications.filter((medication) => medication.curve !== null).length,
+    projection: planProjection(draft.weight, draft.pace, now),
+    body: body(draft),
   };
+}
+
+// The longest run the division is allowed to produce. Past this the answer is
+// arithmetically correct and useless, and a date in 2041 reads as a promise
+// rather than as a sum. A pace that slow gets no card.
+const MAX_PROJECTION_WEEKS = 260;
+
+/**
+ * Distance over pace. That is the whole calculation.
+ *
+ * It needs both weights and a pace above zero, and it refuses to run when the
+ * pace points away from the goal, because a slider set to lose weight against a
+ * goal above the current weight is a contradiction and not a longer timeline.
+ *
+ * It takes the weights and the pace rather than the whole draft because the plan
+ * screen calls it again on every drag of its own pace slider, against a `now`
+ * fixed at mount. Everything else on that screen is frozen, so passing the two
+ * inputs that move keeps the recompute honest and the dependency list short.
+ */
+export function planProjection(
+  weight: WeightDraft,
+  weeklyPace: number,
+  now: number,
+): PlanProjection | null {
+  const current = Number.parseFloat(weight.currentText);
+  const goal = Number.parseFloat(weight.goalText);
+  const pace = Math.abs(weeklyPace);
+  if (!Number.isFinite(current) || !Number.isFinite(goal)) return null;
+  if (current <= 0 || goal <= 0 || current === goal) return null;
+  if (!Number.isFinite(pace) || pace <= 0) return null;
+
+  const weeks = Math.abs(current - goal) / pace;
+  if (weeks > MAX_PROJECTION_WEEKS) return null;
+
+  return {
+    current,
+    goal,
+    unit: weight.unit,
+    pace,
+    weeks,
+    reachesAt: now + weeks * WEEK_MS,
+    direction: goal < current ? 'down' : 'up',
+  };
+}
+
+// BMI from the two numbers the user typed, through the same `domain/units`
+// function the rest of the app uses. No height, no BMI, and no card.
+function body(draft: OnboardingDraft): PlanBody | null {
+  const weight = Number.parseFloat(draft.weight.currentText);
+  const height = Number.parseFloat(draft.height.valueText);
+  if (!Number.isFinite(weight) || !Number.isFinite(height)) return null;
+  if (weight <= 0 || height <= 0) return null;
+
+  const value = bmi(weight, draft.weight.unit, height, draft.height.unit);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return { value, category: bmiCategory(value) };
 }
 
 function planMedication(
@@ -102,6 +186,12 @@ function planMedication(
   const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
   const dose = Number.parseFloat(schedule.doseText);
   const doses = upcomingDoses(id, schedule, draft.reminder.time, now, dose);
+  // The last-shot answer is worth asking only if it changes something. It does:
+  // a dose already in the body puts the curve above zero at week one instead of
+  // starting it from a flat line the user knows is wrong. Only the two answers
+  // that name an exact day are used. See `lastShotAt` in `services/onboarding`.
+  const prior = priorDose(draft.lastShot, now, dose);
+  const curveDoses = prior ? [prior, ...doses] : doses;
 
   return {
     id,
@@ -111,12 +201,23 @@ function planMedication(
     nextShotAt: doses[0]?.takenAt ?? null,
     shotsInFourWeeks: doses.length,
     curve: preset && hasPublishedHalfLife(preset) && doses.length > 0
-      ? buildCurve(doses, preset.halfLifeHours, preset.tmaxHours, schedule.unit, now)
+      ? buildCurve(curveDoses, preset.halfLifeHours, preset.tmaxHours, schedule.unit, now)
       : null,
     evidenceNote: preset
       ? preset.source
       : 'Poke has no half-life for a custom medication. Poke draws no level curve.',
   };
+}
+
+function priorDose(
+  choice: OnboardingDraft['lastShot'],
+  now: number,
+  dose: number,
+): DoseEvent | null {
+  if (!Number.isFinite(dose) || dose <= 0) return null;
+  if (choice === 'today') return { takenAt: now, dose };
+  if (choice === 'yesterday') return { takenAt: now - DAY_MS, dose };
+  return null;
 }
 
 // The doses Poke will expect over the next four weeks, from the same scheduling

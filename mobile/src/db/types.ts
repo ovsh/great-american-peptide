@@ -81,5 +81,18 @@ export interface PreferencesRow {
   goal_kind: GoalKind | null;
   display_name: string | null;
   side_effect_concerns: string | null;
+  /** Onboarding answers. Every question the flow asks has a column here. */
+  journey_stage: JourneyStage | null;
+  sex: Sex | null;
+  birth_year: number | null;
+  activity_level: ActivityLevel | null;
+  motivation: string | null;
+  /** Weight change per week the user chose on the pace screen, in `weight_unit`. */
+  weekly_pace: number | null;
+  last_shot_at: number | null;
   updated_at: number;
 }
+
+export type JourneyStage = 'taking' | 'starting';
+export type Sex = 'female' | 'male' | 'other';
+export type ActivityLevel = 'low' | 'light' | 'active' | 'very_active';

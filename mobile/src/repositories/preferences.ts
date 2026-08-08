@@ -23,6 +23,15 @@ const PREFERENCE_COLUMNS = [
   'goal_kind',
   'display_name',
   'side_effect_concerns',
+  // Schema version 7. A column missing from this list is written nowhere and
+  // fails silently, because the loop below skips what it cannot see.
+  'journey_stage',
+  'sex',
+  'birth_year',
+  'activity_level',
+  'motivation',
+  'weekly_pace',
+  'last_shot_at',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {

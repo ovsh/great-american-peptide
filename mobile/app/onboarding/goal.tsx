@@ -1,47 +1,36 @@
-import { View, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/Button';
-import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
-import {
-  GOAL_OPTIONS,
-  onboardingTotalSteps,
-  postScheduleStepIndex,
-  useOnboardingStore,
-} from '@/stores/onboarding';
+import { SelectionCard } from '@/components/OnboardingScreen';
+import { OnboardingStep } from '@/components/OnboardingStep';
+import { GOAL_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 export default function GoalScreen() {
   const goalKind = useOnboardingStore((state) => state.goalKind);
   const setGoalKind = useOnboardingStore((state) => state.setGoalKind);
-  const medicationIds = useOnboardingStore((state) => state.medicationIds);
-  const lastScheduleIndex = String(Math.max(0, medicationIds.length - 1));
+
   return (
-    <OnboardingScreen
-      step={postScheduleStepIndex(medicationIds.length, 'goal')}
-      totalSteps={onboardingTotalSteps(medicationIds.length)}
-      backHref={{ pathname: '/onboarding/schedule/[index]', params: { index: lastScheduleIndex } }}
-      title="What is your goal?"
-      subtitle="Choose the goal closest to why you started."
-      footer={(
-        <Button disabled={!goalKind} onPress={() => router.push('/onboarding/weight')}>
-          Add your weight
-        </Button>
-      )}
+    <OnboardingStep
+      step="goal"
+      title="What brings you to Poke?"
+      // Today has no goal-ordered card stack, so this answer does not reorder
+      // anything. It appears on the plan card and is written to `goal_kind`.
+      subtitle="Poke puts your goal on your plan and keeps it with your log."
+      canContinue={!!goalKind}
     >
       <View style={styles.list}>
-        {GOAL_OPTIONS.map((goal) => (
+        {GOAL_OPTIONS.map((option) => (
           <SelectionCard
-            key={goal.id}
+            key={option.id}
             role="radio"
-            title={goal.label}
-            description={goal.description}
-            selected={goalKind === goal.id}
-            onPress={() => setGoalKind(goal.id)}
+            title={option.label}
+            description={option.description}
+            selected={goalKind === option.id}
+            onPress={() => setGoalKind(option.id)}
           />
         ))}
       </View>
-    </OnboardingScreen>
+    </OnboardingStep>
   );
 }
 

@@ -80,7 +80,7 @@ user's own answers. We copy the structure, not the hard paywall (their #1 compla
 "no free trial", "can't track ANYTHING without membership"). Poke ships no paywall.
 
 Screens (one question each, progress dots on top, Back always works, <60s total):
-1. **Welcome** — wordmark, tagline "Your shots, sorted.", one button "Get started".
+1. **Welcome** — wordmark, tagline "One app for your whole routine.", one button "Get started".
 2. **What are you taking?** — preset grid, multi-select (semaglutide, tirzepatide,
    retatrutide, BPC-157, TB-500, CJC-1295/Ipamorelin, GHK-Cu, custom). Prefills from
    `src/domain/peptides` presets.

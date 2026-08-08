@@ -6,9 +6,11 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { ChoicePill, OnboardingScreen } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
+import { useOnboardingTransition } from '@/components/onboardingTransition';
 import { getPreset, type Route, type Unit } from '@/domain/peptides';
 import {
   CUSTOM_MEDICATION_ID,
+  POST_SCHEDULE_ROUTES,
   SHOT_DAY_OPTIONS,
   medicationDisplayName,
   onboardingTotalSteps,
@@ -31,8 +33,9 @@ const ROUTES: readonly { id: Route; label: string }[] = [
 ];
 
 // One screen for each medication the user picked. A single medication looks
-// exactly like the old single screen; a second one adds a second screen,
-// pre-filled from the preset, so nothing is ever filled in behind the user.
+// exactly like the old single screen, and a second one adds a second screen.
+// The dose field starts empty on every one of them: the user types the dose,
+// Poke does not offer one.
 export default function ScheduleScreen() {
   const params = useLocalSearchParams<{ index: string }>();
   const index = Number.parseInt(params.index ?? '0', 10);
@@ -46,14 +49,15 @@ export default function ScheduleScreen() {
   const setScheduleRoute = useOnboardingStore((state) => state.setScheduleRoute);
   const setScheduleFrequency = useOnboardingStore((state) => state.setScheduleFrequency);
   const setShotDay = useOnboardingStore((state) => state.setShotDay);
+  const transition = useOnboardingTransition();
 
   useEffect(() => {
     prepareSchedules();
   }, [prepareSchedules]);
 
   const total = medicationIds.length;
-  const totalSteps = onboardingTotalSteps(total);
-  const step = scheduleStepIndex(Number.isFinite(index) ? index : 0);
+  const totalSteps = onboardingTotalSteps();
+  const step = scheduleStepIndex(Number.isFinite(index) ? index : 0, total);
   const medicationId = Number.isInteger(index) && index >= 0 ? medicationIds[index] : undefined;
   const schedule = medicationId ? schedules[medicationId] : undefined;
 
@@ -63,6 +67,7 @@ export default function ScheduleScreen() {
         step={step}
         totalSteps={totalSteps}
         backHref="/onboarding/taking"
+        transition={transition}
         title="When is shot day?"
         footer={<Button onPress={() => router.replace('/onboarding/taking')}>Choose a medication</Button>}
       >
@@ -80,10 +85,12 @@ export default function ScheduleScreen() {
 
   const goNext = () => {
     if (isLast) {
-      router.push('/onboarding/goal');
+      // The first screen of the post-schedule run. Its name lives in one place,
+      // so adding a step at the front of that run cannot orphan this jump.
+      transition.go(POST_SCHEDULE_ROUTES['last-shot']);
       return;
     }
-    router.push({ pathname: '/onboarding/schedule/[index]', params: { index: String(index + 1) } });
+    transition.go({ pathname: '/onboarding/schedule/[index]', params: { index: String(index + 1) } });
   };
 
   return (
@@ -93,13 +100,14 @@ export default function ScheduleScreen() {
       backHref={index === 0
         ? '/onboarding/taking'
         : { pathname: '/onboarding/schedule/[index]', params: { index: String(index - 1) } }}
+      transition={transition}
       title={total > 1 ? name : "When is shot day?"}
       subtitle={total > 1
-        ? `Medication ${index + 1} of ${total}. Check the dose and the schedule.`
+        ? `Medication ${index + 1} of ${total}. Set the dose and the schedule.`
         : `Set the usual dose and schedule for ${name}.`}
       footer={(
         <Button disabled={!canContinue} onPress={goNext}>
-          {isLast ? 'Choose your goal' : 'Next medication'}
+          {isLast ? 'Continue' : 'Next medication'}
         </Button>
       )}
     >

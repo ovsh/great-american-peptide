@@ -7,3 +7,9 @@ node_modules/
 # Competitor ad creative kept for internal analysis only. Third-party
 # copyright — never commit, never republish. See mobile/docs/competitor-creative.md
 research/
+
+# MeAgain onboarding recording + extracted frames. Third-party copyright, kept
+# for internal teardown only — never commit, never republish. Same rule as
+# research/. The teardown in mobile/docs/meagain-onboarding-map.md stands alone.
+docs/onboarding-flow.mp4
+mobile/docs/meagain-frames/

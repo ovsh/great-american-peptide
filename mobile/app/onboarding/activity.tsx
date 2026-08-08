@@ -1,0 +1,39 @@
+import { StyleSheet, View } from 'react-native';
+
+import { SelectionCard } from '@/components/OnboardingScreen';
+import { OnboardingStep } from '@/components/OnboardingStep';
+import { ACTIVITY_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
+import { spacing } from '@/theme';
+
+export default function ActivityScreen() {
+  const activityLevel = useOnboardingStore((state) => state.activityLevel);
+  const setActivityLevel = useOnboardingStore((state) => state.setActivityLevel);
+
+  return (
+    <OnboardingStep
+      step="activity"
+      title="How much do you move in a normal week?"
+      subtitle="Poke keeps this with your log. Poke works out no calorie budget from it."
+      canContinue={activityLevel !== null}
+    >
+      <View style={styles.list}>
+        {ACTIVITY_OPTIONS.map((option) => (
+          <SelectionCard
+            key={option.id}
+            role="radio"
+            title={option.label}
+            description={option.description}
+            selected={activityLevel === option.id}
+            onPress={() => setActivityLevel(option.id)}
+          />
+        ))}
+      </View>
+    </OnboardingStep>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {
+    gap: spacing.md,
+  },
+});

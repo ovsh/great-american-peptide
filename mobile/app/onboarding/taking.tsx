@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
+import { useOnboardingTransition } from '@/components/onboardingTransition';
 import { EVIDENCE_LABELS, searchPresets, type PeptidePreset } from '@/domain/peptides';
 import {
   CUSTOM_MEDICATION_ID,
@@ -16,10 +16,12 @@ import { colors, spacing } from '@/theme';
 
 export default function TakingScreen() {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
+  const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
   const toggleMedication = useOnboardingStore((state) => state.toggleMedication);
   const setCustomMedicationName = useOnboardingStore((state) => state.setCustomMedicationName);
   const prepareSchedules = useOnboardingStore((state) => state.prepareSchedules);
+  const transition = useOnboardingTransition();
   const [query, setQuery] = useState('');
 
   const customSelected = medicationIds.includes(CUSTOM_MEDICATION_ID);
@@ -38,17 +40,21 @@ export default function TakingScreen() {
 
   return (
     <OnboardingScreen
-      step={1}
-      totalSteps={onboardingTotalSteps(medicationIds.length)}
-      backHref="/onboarding"
-      title="What are you taking?"
+      step={2}
+      totalSteps={onboardingTotalSteps()}
+      backHref="/onboarding/journey"
+      transition={transition}
+      // The wording follows the answer on the previous screen, the way the
+      // recording's does. Asking someone who has not started yet what they are
+      // "taking" is the small wrong note that makes a flow feel generic.
+      title={journeyStage === 'starting' ? 'What do you plan to use?' : 'What are you taking?'}
       subtitle="Search the list, or add your own. You can change this list later."
       footer={(
         <Button
           disabled={!canContinue}
           onPress={() => {
             prepareSchedules();
-            router.push({ pathname: '/onboarding/schedule/[index]', params: { index: '0' } });
+            transition.go({ pathname: '/onboarding/schedule/[index]', params: { index: '0' } });
           }}
         >
           {medicationIds.length > 1 ? `Set ${medicationIds.length} schedules` : 'Set the schedule'}

@@ -104,17 +104,38 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
     existingMedications.push(created);
   }
 
+  // Every question the flow asks lands somewhere. A question whose answer goes
+  // nowhere is a question Poke should not be asking. The medication and schedule
+  // answers went to the medications table above. The other thirteen land here.
   const preferences: PreferencesPatch = {
     goal_kind: draft.goalKind,
     side_effect_concerns: JSON.stringify(draft.concerns),
     reminder_time: reminderTime,
     notifications_enabled: draft.reminder.kind === 'enabled' ? 1 : 0,
     onboarding_completed_at: now,
+    // The disclaimer sits above the button that calls this function, and the
+    // button label is the acceptance. Write the timestamp here or that sentence
+    // is untrue, and `store.config.json` review notes make the same promise to
+    // App Review. This is the only writer: `markOnboardingComplete` is not called.
+    disclaimer_accepted_at: now,
+    journey_stage: draft.journeyStage,
+    sex: draft.sex,
+    birth_year: parseOptionalInt(draft.birthYearText),
+    activity_level: draft.activityLevel,
+    motivation: draft.motivation,
+    weight_unit: draft.weight.unit,
+    height_unit: draft.height.unit,
+    last_shot_at: lastShotAt(draft.lastShot, now),
   };
 
-  if (draft.weight.kind === 'entered') {
-    const currentWeight = parsePositive(draft.weight.currentText, 'current weight');
-    const goalWeight = parsePositive(draft.weight.goalText, 'goal weight');
+  // Current weight, goal weight and height each have their own screen and each
+  // can be skipped on its own, so each is parsed on its own. An unreadable or
+  // skipped field leaves its column alone rather than writing a zero.
+  const currentWeight = parseOptionalPositive(draft.weight.currentText);
+  const goalWeight = parseOptionalPositive(draft.weight.goalText);
+  const height = parseOptionalPositive(draft.height.valueText);
+
+  if (currentWeight !== null) {
     const latest = await latestMeasurement('weight');
     const alreadyRecorded = latest?.value === currentWeight && latest.unit === draft.weight.unit;
     if (!alreadyRecorded) {
@@ -126,12 +147,38 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
         notes: 'Added during setup',
       });
     }
-    preferences.weight_unit = draft.weight.unit;
     preferences.start_weight = currentWeight;
     preferences.start_weight_at = now;
-    preferences.goal_weight = goalWeight;
   }
+  if (goalWeight !== null) preferences.goal_weight = goalWeight;
+  if (height !== null) preferences.height = height;
+  // The pace only means something next to a goal. On its own it is a slider
+  // position, so it is stored only when there is something to apply it to.
+  if (currentWeight !== null && goalWeight !== null) preferences.weekly_pace = draft.pace;
 
   await updatePreferences(preferences);
   await refreshScheduledReminders().catch(() => {});
+}
+
+function parseOptionalPositive(value: string): number | null {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseOptionalInt(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The date of the prior dose, when the answer gives one.
+ *
+ * "Today" and "yesterday" are exact days. "Earlier this week" and "longer ago"
+ * are not, and a curve started from a guessed date is a guessed curve, so those
+ * answers are held in the flow and written as null here.
+ */
+function lastShotAt(choice: OnboardingDraft['lastShot'], now: number): number | null {
+  if (choice === 'today') return now;
+  if (choice === 'yesterday') return now - 24 * 60 * 60 * 1000;
+  return null;
 }

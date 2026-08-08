@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -111,6 +111,21 @@ export const MIGRATIONS: { version: number; up: string }[] = [
     up: `
       ALTER TABLE preferences ADD COLUMN review_prompt_log TEXT;
       ALTER TABLE preferences ADD COLUMN review_triggers_used TEXT;
+    `,
+  },
+  {
+    // The onboarding rebuild asks fourteen questions. These are the answers that
+    // had nowhere to live. A question whose answer is thrown away is a question
+    // Poke should not be asking, so every one of them lands in a column.
+    version: 7,
+    up: `
+      ALTER TABLE preferences ADD COLUMN journey_stage TEXT;
+      ALTER TABLE preferences ADD COLUMN sex TEXT;
+      ALTER TABLE preferences ADD COLUMN birth_year INTEGER;
+      ALTER TABLE preferences ADD COLUMN activity_level TEXT;
+      ALTER TABLE preferences ADD COLUMN motivation TEXT;
+      ALTER TABLE preferences ADD COLUMN weekly_pace REAL;
+      ALTER TABLE preferences ADD COLUMN last_shot_at INTEGER;
     `,
   },
 ];

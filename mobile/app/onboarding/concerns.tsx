@@ -1,49 +1,40 @@
 import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
 
-import { Button } from '@/components/Button';
-import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
-import {
-  CONCERN_OPTIONS,
-  onboardingTotalSteps,
-  postScheduleStepIndex,
-  useOnboardingStore,
-} from '@/stores/onboarding';
+import { SelectionCard } from '@/components/OnboardingScreen';
+import { OnboardingStep } from '@/components/OnboardingStep';
+import { CONCERN_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 export default function ConcernsScreen() {
   const concerns = useOnboardingStore((state) => state.concerns);
   const toggleConcern = useOnboardingStore((state) => state.toggleConcern);
-  const medicationIds = useOnboardingStore((state) => state.medicationIds);
+
   return (
-    <OnboardingScreen
-      step={postScheduleStepIndex(medicationIds.length, 'concerns')}
-      totalSteps={onboardingTotalSteps(medicationIds.length)}
-      backHref="/onboarding/weight"
-      title="Anything you want to watch?"
-      subtitle="Choose any effect you want on your watch list."
-      footer={(
-        <Button disabled={concerns.length === 0} onPress={() => router.push('/onboarding/reminders')}>
-          Set a reminder
-        </Button>
-      )}
+    <OnboardingStep
+      step="concerns"
+      title="What do you want to keep an eye on?"
+      // Poke stores the list and shows it back on the plan. Nothing in the app
+      // reorders anything from it yet, so this line does not say that it does.
+      subtitle="Pick as many as you like. Poke keeps the list, and you can log any of them from Today."
+      canContinue={concerns.length > 0}
     >
       <View style={styles.list}>
-        {CONCERN_OPTIONS.map((concern) => (
+        {CONCERN_OPTIONS.map((option) => (
           <SelectionCard
-            key={concern.id}
-            title={concern.label}
-            selected={concerns.includes(concern.id)}
-            onPress={() => toggleConcern(concern.id)}
+            key={option.id}
+            compact
+            title={option.label}
+            selected={concerns.includes(option.id)}
+            onPress={() => toggleConcern(option.id)}
           />
         ))}
       </View>
-    </OnboardingScreen>
+    </OnboardingStep>
   );
 }
 
 const styles = StyleSheet.create({
   list: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
 });
