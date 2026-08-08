@@ -110,7 +110,7 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
       const pro = isPro(info);
       set({ status: pro ? 'pro' : 'free', restoring: false });
       if (pro) return 'restored';
-      set({ error: 'We found no active subscription for this Apple Account.' });
+      set({ error: 'Poke found no active subscription for this Apple Account.' });
       return 'none';
     } catch (caught: unknown) {
       const message = caught instanceof Error ? caught.message : 'The restore did not complete.';
