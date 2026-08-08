@@ -3,7 +3,7 @@
     "name": "Poke",
     "owner": "ovsh-2",
     "slug": "peptide-tracker",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "peptidetracker",
@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "industries.peptide.tracker",
-      "appStoreUrl": "https://apps.apple.com/us/app/the-great-peptide-tracker/id6764757185",
+      "appStoreUrl": "https://apps.apple.com/app/id6764757185",
       "infoPlist": {
         "CFBundleDisplayName": "Poke",
         "ITSAppUsesNonExemptEncryption": false

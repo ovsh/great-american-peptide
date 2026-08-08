@@ -2,9 +2,9 @@
 
 Status, 7 August 2026: **all of this is done.** Version 1.1.0 (build 9) went to
 App Review at 4:15 AM with four items in one submission — the app version, both
-subscriptions and the subscription group. The sections below are kept as the
-record of what exists, not as a to-do list. The one open item is the sandbox
-tester account in §1.6.
+subscriptions and the subscription group. Version 1.2.0 is prepared and waiting
+on that queue; see §6. The sections below are kept as the record of what exists,
+not as a to-do list. The one open item is the sandbox tester account in §1.6.
 
 Scope: everything that must exist in the two consoles before the paywall can sell
 anything. The app code is done and committed; nothing here needs a code change,
@@ -322,6 +322,25 @@ when paid acquisition starts and the 30% actually costs real money.
 ---
 
 ## 6. Submission record
+
+**1.2.0** — prepared 7 August 2026, **not yet submitted**. `app.json` and
+`store.config.json` both read 1.2.0. Content: the per-medication setup flow, the
+computed plan screen, 19 sourced peptide presets with a search, the plain-language
+copy pass, and the rating-prompt policy with schema migration v6.
+
+**Do not submit 1.2.0 while 1.1.0 is in the queue.** App Store Connect holds one
+version in review at a time. Taking 1.1.0 out to make room would also pull the two
+subscriptions and the subscription group out with it, and a first subscription
+cannot be submitted without its group *and* a new app version (§4A step 4). The
+subscription review is the expensive part, and it is already paid for. So:
+
+1. Wait for 1.1.0 to clear review.
+2. Then create the 1.2.0 version in ASC, run `npx eas metadata:push`, attach the
+   build, and submit the version on its own. The subscriptions are already
+   approved by then, so 1.2.0 is a plain app-version submission.
+
+The EAS build may be made and uploaded at any time. It does not touch the 1.1.0
+submission.
 
 **1.1.0 (9)** — submitted 7 August 2026, 4:15 AM. Four items in one submission:
 iOS App 1.1.0, Poke Pro Yearly, Poke Pro Monthly, and the Poke Pro subscription
