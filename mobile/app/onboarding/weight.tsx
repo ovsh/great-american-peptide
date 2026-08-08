@@ -6,12 +6,17 @@ import { Input } from '@/components/Input';
 import { ChoicePill, OnboardingScreen } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
 import type { WeightUnit } from '@/domain/units';
-import { useOnboardingStore } from '@/stores/onboarding';
+import {
+  onboardingTotalSteps,
+  postScheduleStepIndex,
+  useOnboardingStore,
+} from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 const UNITS: readonly WeightUnit[] = ['lb', 'kg'];
 
 export default function WeightScreen() {
+  const medicationIds = useOnboardingStore((state) => state.medicationIds);
   const weight = useOnboardingStore((state) => state.weight);
   const setWeightUnit = useOnboardingStore((state) => state.setWeightUnit);
   const setWeightValue = useOnboardingStore((state) => state.setWeightValue);
@@ -24,13 +29,16 @@ export default function WeightScreen() {
 
   return (
     <OnboardingScreen
-      step={4}
-      backHref="./goal"
+      step={postScheduleStepIndex(medicationIds.length, 'weight')}
+      totalSteps={onboardingTotalSteps(medicationIds.length)}
+      backHref="/onboarding/goal"
       title="Want to add your weight?"
-      subtitle="This gives you a starting point. You can skip it for now."
+      subtitle="Your weight gives the charts a starting point. You can skip this screen."
       footer={(
         <View style={styles.actions}>
-          <Button disabled={!canContinue} onPress={() => router.push('/onboarding/concerns')}>Continue</Button>
+          <Button disabled={!canContinue} onPress={() => router.push('/onboarding/concerns')}>
+            Choose what to watch
+          </Button>
           <Button
             variant="secondary"
             onPress={() => {
@@ -38,7 +46,7 @@ export default function WeightScreen() {
               router.push('/onboarding/concerns');
             }}
           >
-            {"I'll add this later"}
+            Skip this step
           </Button>
         </View>
       )}
@@ -61,7 +69,7 @@ export default function WeightScreen() {
             onChangeText={(value) => setWeightValue('current', value)}
             keyboardType="decimal-pad"
             inputMode="decimal"
-            placeholder="198"
+            placeholder="Enter a number"
           />
         </View>
         <View style={styles.field}>
@@ -71,7 +79,7 @@ export default function WeightScreen() {
             onChangeText={(value) => setWeightValue('goal', value)}
             keyboardType="decimal-pad"
             inputMode="decimal"
-            placeholder="175"
+            placeholder="Enter a number"
           />
         </View>
       </View>

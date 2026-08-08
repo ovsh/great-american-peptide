@@ -3,21 +3,28 @@ import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
-import { CONCERN_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
+import {
+  CONCERN_OPTIONS,
+  onboardingTotalSteps,
+  postScheduleStepIndex,
+  useOnboardingStore,
+} from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 export default function ConcernsScreen() {
   const concerns = useOnboardingStore((state) => state.concerns);
   const toggleConcern = useOnboardingStore((state) => state.toggleConcern);
+  const medicationIds = useOnboardingStore((state) => state.medicationIds);
   return (
     <OnboardingScreen
-      step={5}
-      backHref="./weight"
-      title="Anything you're watching for?"
-      subtitle="Pick any changes you want to keep an eye on."
+      step={postScheduleStepIndex(medicationIds.length, 'concerns')}
+      totalSteps={onboardingTotalSteps(medicationIds.length)}
+      backHref="/onboarding/weight"
+      title="Anything you want to watch?"
+      subtitle="Choose any effect you want on your watch list."
       footer={(
         <Button disabled={concerns.length === 0} onPress={() => router.push('/onboarding/reminders')}>
-          Continue
+          Set a reminder
         </Button>
       )}
     >

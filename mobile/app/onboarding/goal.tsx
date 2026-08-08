@@ -3,19 +3,31 @@ import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
-import { GOAL_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
+import {
+  GOAL_OPTIONS,
+  onboardingTotalSteps,
+  postScheduleStepIndex,
+  useOnboardingStore,
+} from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 export default function GoalScreen() {
   const goalKind = useOnboardingStore((state) => state.goalKind);
   const setGoalKind = useOnboardingStore((state) => state.setGoalKind);
+  const medicationIds = useOnboardingStore((state) => state.medicationIds);
+  const lastScheduleIndex = String(Math.max(0, medicationIds.length - 1));
   return (
     <OnboardingScreen
-      step={3}
-      backHref="./schedule"
-      title="What's the goal?"
-      subtitle="Your answer helps Poke keep the right details up front."
-      footer={<Button disabled={!goalKind} onPress={() => router.push('/onboarding/weight')}>Continue</Button>}
+      step={postScheduleStepIndex(medicationIds.length, 'goal')}
+      totalSteps={onboardingTotalSteps(medicationIds.length)}
+      backHref={{ pathname: '/onboarding/schedule/[index]', params: { index: lastScheduleIndex } }}
+      title="What is your goal?"
+      subtitle="Choose the goal closest to why you started."
+      footer={(
+        <Button disabled={!goalKind} onPress={() => router.push('/onboarding/weight')}>
+          Add your weight
+        </Button>
+      )}
     >
       <View style={styles.list}>
         {GOAL_OPTIONS.map((goal) => (

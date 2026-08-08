@@ -2,25 +2,19 @@ import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { ChevronLeft, Check } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card } from './Card';
 import { Text } from './Text';
 import { colors, radius, spacing } from '../theme';
 
-type OnboardingBackHref =
-  | './'
-  | './taking'
-  | './schedule'
-  | './goal'
-  | './weight'
-  | './concerns'
-  | './reminders';
-
 interface OnboardingScreenProps {
   step: number;
-  backHref?: OnboardingBackHref;
+  // The flow gets one more step for each extra medication, so the caller passes
+  // the total. See `onboardingTotalSteps` in the onboarding store.
+  totalSteps: number;
+  backHref?: Href;
   title?: string;
   subtitle?: string;
   children: ReactNode;
@@ -31,6 +25,7 @@ interface OnboardingScreenProps {
 
 export function OnboardingScreen({
   step,
+  totalSteps,
   backHref,
   title,
   subtitle,
@@ -40,6 +35,7 @@ export function OnboardingScreen({
   bodyStyle,
 }: OnboardingScreenProps) {
   const insets = useSafeAreaInsets();
+  const dotCount = Math.max(1, totalSteps);
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -57,8 +53,8 @@ export function OnboardingScreen({
               <ChevronLeft size={24} color={colors.ink} />
             </Pressable>
           ) : null}
-          <View accessibilityLabel={`Step ${step + 1} of 8`} style={styles.dots}>
-            {Array.from({ length: 8 }, (_, index) => (
+          <View accessibilityLabel={`Step ${step + 1} of ${dotCount}`} style={styles.dots}>
+            {Array.from({ length: dotCount }, (_, index) => (
               <View
                 key={index}
                 style={[

@@ -1,21 +1,16 @@
 import { create } from 'zustand';
 
 import type { GoalKind } from '../db/types';
-import { getPreset, type Route, type Unit } from '../domain/peptides';
+import { getPreset, type FrequencyKind, type Route, type Unit } from '../domain/peptides';
 import { WEEKDAY_OPTIONS, type Weekday } from '../domain/scheduling';
 import type { WeightUnit } from '../domain/units';
 
-export const ONBOARDING_PRESET_IDS = [
-  'semaglutide',
-  'tirzepatide',
-  'retatrutide',
-  'bpc-157',
-  'tb-500',
-  'ghk-cu',
-] as const;
+// The one id that is not a catalog preset. The user types the name instead.
+export const CUSTOM_MEDICATION_ID = 'custom';
 
-export type OnboardingPresetId = (typeof ONBOARDING_PRESET_IDS)[number];
-export type OnboardingMedicationId = OnboardingPresetId | 'custom';
+// A preset id, or CUSTOM_MEDICATION_ID. The picker searches the whole catalog,
+// so this cannot be a fixed union of ids.
+export type OnboardingMedicationId = string;
 export type OnboardingFrequency = 'daily' | 'twice_weekly' | 'weekly';
 export type SideEffectConcern = 'nausea' | 'fatigue' | 'constipation' | 'injection_site' | 'none';
 export type ShotDay = Weekday;
@@ -24,7 +19,7 @@ export const GOAL_OPTIONS: readonly { id: GoalKind; label: string; description: 
   { id: 'weight_loss', label: 'Weight loss', description: 'Keep your shot routine and weight goal together.' },
   { id: 'recovery', label: 'Recovery', description: 'Track the routine that supports your recovery.' },
   { id: 'longevity', label: 'Longevity', description: 'Build a consistent long-term routine.' },
-  { id: 'performance', label: 'Performance', description: 'Keep doses and training days easy to review.' },
+  { id: 'performance', label: 'Performance', description: 'Keep every dose and every date in one log.' },
 ];
 
 export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[] = [
@@ -43,17 +38,14 @@ export type OnboardingGate =
   | { kind: 'complete' }
   | { kind: 'error'; message: string };
 
-export type ScheduleDraft =
-  | { kind: 'unprepared' }
-  | {
-      kind: 'ready';
-      primaryMedicationId: OnboardingMedicationId;
-      doseText: string;
-      unit: Unit;
-      route: Route;
-      frequencyKind: OnboardingFrequency;
-      shotDay: ShotDay;
-    };
+export interface MedicationScheduleDraft {
+  medicationId: OnboardingMedicationId;
+  doseText: string;
+  unit: Unit;
+  route: Route;
+  frequencyKind: OnboardingFrequency;
+  shotDay: ShotDay;
+}
 
 export type WeightDraft =
   | { kind: 'skipped'; unit: WeightUnit }
@@ -66,7 +58,9 @@ export type ReminderDraft =
 export interface OnboardingDraft {
   medicationIds: OnboardingMedicationId[];
   customMedicationName: string;
-  schedule: ScheduleDraft;
+  // One schedule per selected medication, keyed by medication id. Every
+  // selection gets its own screen, so nothing is filled in behind the user.
+  schedules: Record<OnboardingMedicationId, MedicationScheduleDraft>;
   goalKind: GoalKind | null;
   weight: WeightDraft;
   concerns: SideEffectConcern[];
@@ -78,12 +72,12 @@ export interface OnboardingState extends OnboardingDraft {
   setGate: (gate: OnboardingGate) => void;
   toggleMedication: (id: OnboardingMedicationId) => void;
   setCustomMedicationName: (name: string) => void;
-  prepareSchedule: () => void;
-  setScheduleDose: (doseText: string) => void;
-  setScheduleUnit: (unit: Unit) => void;
-  setScheduleRoute: (route: Route) => void;
-  setScheduleFrequency: (frequencyKind: OnboardingFrequency) => void;
-  setShotDay: (shotDay: ShotDay) => void;
+  prepareSchedules: () => void;
+  setScheduleDose: (id: OnboardingMedicationId, doseText: string) => void;
+  setScheduleUnit: (id: OnboardingMedicationId, unit: Unit) => void;
+  setScheduleRoute: (id: OnboardingMedicationId, route: Route) => void;
+  setScheduleFrequency: (id: OnboardingMedicationId, frequencyKind: OnboardingFrequency) => void;
+  setShotDay: (id: OnboardingMedicationId, shotDay: ShotDay) => void;
   setGoalKind: (goalKind: GoalKind) => void;
   setWeightUnit: (unit: WeightUnit) => void;
   setWeightValue: (field: 'current' | 'goal', value: string) => void;
@@ -97,7 +91,7 @@ export interface OnboardingState extends OnboardingDraft {
 const initialDraft: OnboardingDraft = {
   medicationIds: [],
   customMedicationName: '',
-  schedule: { kind: 'unprepared' },
+  schedules: {},
   goalKind: null,
   weight: { kind: 'skipped', unit: 'lb' },
   concerns: [],
@@ -110,47 +104,34 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   setGate: (gate) => set({ gate }),
   toggleMedication: (id) => set((state) => {
     const selected = state.medicationIds.includes(id);
-    const medicationIds: OnboardingMedicationId[] = selected
+    const medicationIds = selected
       ? state.medicationIds.filter((item) => item !== id)
-      : id === 'custom'
-        ? ['custom', ...state.medicationIds]
-        : [...state.medicationIds, id];
-    return { medicationIds, schedule: { kind: 'unprepared' } };
+      : [...state.medicationIds, id];
+    // Keep the draft of anything still selected. Deselecting and reselecting a
+    // medication is a common slip, and losing the dose you typed is annoying.
+    const schedules = selected ? withoutKey(state.schedules, id) : state.schedules;
+    return { medicationIds, schedules };
   }),
   setCustomMedicationName: (customMedicationName) => set({ customMedicationName }),
-  prepareSchedule: () => {
-    const state = get();
-    const primaryMedicationId = state.medicationIds[0];
-    if (!primaryMedicationId) return;
-    if (state.schedule.kind === 'ready' && state.schedule.primaryMedicationId === primaryMedicationId) return;
-    const preset = primaryMedicationId === 'custom' ? undefined : getPreset(primaryMedicationId);
-    set({
-      schedule: {
-        kind: 'ready',
-        primaryMedicationId,
-        doseText: preset ? String(preset.defaultDose) : '',
-        unit: preset?.unit ?? 'mg',
-        route: preset?.defaultRoute ?? 'sc',
-        frequencyKind: 'weekly',
-        shotDay: currentShotDay(),
-      },
-    });
-  },
-  setScheduleDose: (doseText) => set((state) => ({
-    schedule: state.schedule.kind === 'ready' ? { ...state.schedule, doseText } : state.schedule,
-  })),
-  setScheduleUnit: (unit) => set((state) => ({
-    schedule: state.schedule.kind === 'ready' ? { ...state.schedule, unit } : state.schedule,
-  })),
-  setScheduleRoute: (route) => set((state) => ({
-    schedule: state.schedule.kind === 'ready' ? { ...state.schedule, route } : state.schedule,
-  })),
-  setScheduleFrequency: (frequencyKind) => set((state) => ({
-    schedule: state.schedule.kind === 'ready' ? { ...state.schedule, frequencyKind } : state.schedule,
-  })),
-  setShotDay: (shotDay) => set((state) => ({
-    schedule: state.schedule.kind === 'ready' ? { ...state.schedule, shotDay } : state.schedule,
-  })),
+  prepareSchedules: () => set((state) => {
+    const schedules: Record<OnboardingMedicationId, MedicationScheduleDraft> = {};
+    let changed = Object.keys(state.schedules).length !== state.medicationIds.length;
+    for (const id of state.medicationIds) {
+      const existing = state.schedules[id];
+      if (existing) {
+        schedules[id] = existing;
+        continue;
+      }
+      schedules[id] = defaultScheduleDraft(id);
+      changed = true;
+    }
+    return changed ? { schedules } : {};
+  }),
+  setScheduleDose: (id, doseText) => set((state) => patchSchedule(state, id, { doseText })),
+  setScheduleUnit: (id, unit) => set((state) => patchSchedule(state, id, { unit })),
+  setScheduleRoute: (id, route) => set((state) => patchSchedule(state, id, { route })),
+  setScheduleFrequency: (id, frequencyKind) => set((state) => patchSchedule(state, id, { frequencyKind })),
+  setShotDay: (id, shotDay) => set((state) => patchSchedule(state, id, { shotDay })),
   setGoalKind: (goalKind) => set({ goalKind }),
   setWeightUnit: (unit) => set((state) => ({
     weight: state.weight.kind === 'entered'
@@ -183,8 +164,47 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       ? { kind: 'enabled', time: state.reminder.time }
       : { kind: 'skipped', time: state.reminder.time },
   })),
-  resetDraft: () => set({ ...initialDraft }),
+  resetDraft: () => set({ ...initialDraft, schedules: {} }),
 }));
+
+function withoutKey(
+  schedules: Record<OnboardingMedicationId, MedicationScheduleDraft>,
+  id: OnboardingMedicationId,
+): Record<OnboardingMedicationId, MedicationScheduleDraft> {
+  const next = { ...schedules };
+  delete next[id];
+  return next;
+}
+
+function patchSchedule(
+  state: OnboardingState,
+  id: OnboardingMedicationId,
+  patch: Partial<MedicationScheduleDraft>,
+): Partial<OnboardingState> {
+  const existing = state.schedules[id];
+  if (!existing) return {};
+  return { schedules: { ...state.schedules, [id]: { ...existing, ...patch } } };
+}
+
+export function defaultScheduleDraft(id: OnboardingMedicationId): MedicationScheduleDraft {
+  const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
+  return {
+    medicationId: id,
+    doseText: preset ? String(preset.defaultDose) : '',
+    unit: preset?.unit ?? 'mg',
+    route: preset?.defaultRoute ?? 'sc',
+    frequencyKind: preset ? onboardingFrequency(preset.defaultFrequency.kind) : 'weekly',
+    shotDay: currentShotDay(),
+  };
+}
+
+// The catalog has more frequency kinds than onboarding offers. Anything that
+// does not map lands on weekly, and the user confirms it on the schedule screen.
+function onboardingFrequency(kind: FrequencyKind): OnboardingFrequency {
+  if (kind === 'daily') return 'daily';
+  if (kind === 'twice_weekly') return 'twice_weekly';
+  return 'weekly';
+}
 
 function currentShotDay(): ShotDay {
   const day = new Date().getDay();
@@ -196,10 +216,56 @@ export function getOnboardingDraft(state: OnboardingState): OnboardingDraft {
   return {
     medicationIds: state.medicationIds,
     customMedicationName: state.customMedicationName,
-    schedule: state.schedule,
+    schedules: state.schedules,
     goalKind: state.goalKind,
     weight: state.weight,
     concerns: state.concerns,
     reminder: state.reminder,
   };
+}
+
+export function medicationDisplayName(
+  id: OnboardingMedicationId,
+  customMedicationName: string,
+): string {
+  if (id === CUSTOM_MEDICATION_ID) return customMedicationName.trim() || 'Your medication';
+  return getPreset(id)?.name ?? id;
+}
+
+// ---------------------------------------------------------------- Flow ----
+//
+// The flow length changes with the number of medications, because each one gets
+// its own schedule screen. The progress dots and the back links both read from
+// these helpers, so there is one place that knows the order.
+//
+//   0                welcome
+//   1                what are you taking
+//   2 … 2+n-1        one schedule screen per medication
+//   2+n … 2+n+4      goal, weight, concerns, reminders, ready
+
+export const SCHEDULE_STEP_OFFSET = 2;
+export type PostScheduleStep = 'goal' | 'weight' | 'concerns' | 'reminders' | 'ready';
+
+const POST_SCHEDULE_ORDER: readonly PostScheduleStep[] = [
+  'goal',
+  'weight',
+  'concerns',
+  'reminders',
+  'ready',
+];
+
+function medicationCount(count: number): number {
+  return Math.max(1, count);
+}
+
+export function onboardingTotalSteps(count: number): number {
+  return SCHEDULE_STEP_OFFSET + medicationCount(count) + POST_SCHEDULE_ORDER.length;
+}
+
+export function scheduleStepIndex(index: number): number {
+  return SCHEDULE_STEP_OFFSET + index;
+}
+
+export function postScheduleStepIndex(count: number, step: PostScheduleStep): number {
+  return SCHEDULE_STEP_OFFSET + medicationCount(count) + POST_SCHEDULE_ORDER.indexOf(step);
 }

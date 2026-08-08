@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
@@ -5,76 +6,97 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
-import { getPreset } from '@/domain/peptides';
+import { EVIDENCE_LABELS, searchPresets, type PeptidePreset } from '@/domain/peptides';
 import {
-  ONBOARDING_PRESET_IDS,
+  CUSTOM_MEDICATION_ID,
+  onboardingTotalSteps,
   useOnboardingStore,
 } from '@/stores/onboarding';
-import { spacing } from '@/theme';
-
-const PRESETS = ONBOARDING_PRESET_IDS.flatMap((id) => {
-  const preset = getPreset(id);
-  return preset ? [{ id, preset }] : [];
-});
+import { colors, spacing } from '@/theme';
 
 export default function TakingScreen() {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
   const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
   const toggleMedication = useOnboardingStore((state) => state.toggleMedication);
   const setCustomMedicationName = useOnboardingStore((state) => state.setCustomMedicationName);
-  const prepareSchedule = useOnboardingStore((state) => state.prepareSchedule);
-  const customSelected = medicationIds.includes('custom');
-  const canContinue = medicationIds.length > 0 && (!customSelected || customMedicationName.trim().length > 0);
+  const prepareSchedules = useOnboardingStore((state) => state.prepareSchedules);
+  const [query, setQuery] = useState('');
+
+  const customSelected = medicationIds.includes(CUSTOM_MEDICATION_ID);
+  const canContinue = medicationIds.length > 0
+    && (!customSelected || customMedicationName.trim().length > 0);
+
+  // Anything already chosen stays at the top, even when the search text no
+  // longer matches it. A selection must never scroll out of reach.
+  const results = useMemo(() => {
+    const matches = searchPresets(query);
+    const matched = new Set(matches.map((preset) => preset.id));
+    const pinned = searchPresets('')
+      .filter((preset) => medicationIds.includes(preset.id) && !matched.has(preset.id));
+    return [...pinned, ...matches];
+  }, [query, medicationIds]);
 
   return (
     <OnboardingScreen
       step={1}
-      backHref="./"
+      totalSteps={onboardingTotalSteps(medicationIds.length)}
+      backHref="/onboarding"
       title="What are you taking?"
-      subtitle="Choose everything you want to track. You can change this later."
+      subtitle="Search the list, or add your own. You can change this list later."
       footer={(
         <Button
           disabled={!canContinue}
           onPress={() => {
-            prepareSchedule();
-            router.push('/onboarding/schedule');
+            prepareSchedules();
+            router.push({ pathname: '/onboarding/schedule/[index]', params: { index: '0' } });
           }}
         >
-          Continue
+          {medicationIds.length > 1 ? `Set ${medicationIds.length} schedules` : 'Set the schedule'}
         </Button>
       )}
     >
-      <View style={styles.grid}>
-        {PRESETS.map(({ id, preset }) => (
-          <View key={id} style={styles.gridItem}>
-            <SelectionCard
-              compact
-              title={preset.name}
-              description={`${preset.defaultDose} ${preset.unit}`}
-              selected={medicationIds.includes(id)}
-              onPress={() => toggleMedication(id)}
-            />
-          </View>
-        ))}
-        <View style={styles.gridItem}>
-          <SelectionCard
-            compact
-            title="Custom"
-            description="Add your own"
-            selected={customSelected}
-            onPress={() => toggleMedication('custom')}
+      <Input
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search a peptide or a brand name"
+        autoCorrect={false}
+        autoCapitalize="none"
+        returnKeyType="search"
+        accessibilityLabel="Search peptides"
+      />
+
+      <View style={styles.list}>
+        {results.map((preset) => (
+          <PresetCard
+            key={preset.id}
+            preset={preset}
+            selected={medicationIds.includes(preset.id)}
+            onPress={() => toggleMedication(preset.id)}
           />
-        </View>
+        ))}
+
+        {results.length === 0 ? (
+          <Text color={colors.inkMuted}>
+            No match for “{query.trim()}”. Add it as a custom medication.
+          </Text>
+        ) : null}
+
+        <SelectionCard
+          compact
+          title="Custom"
+          description="Not on this list"
+          selected={customSelected}
+          onPress={() => toggleMedication(CUSTOM_MEDICATION_ID)}
+        />
       </View>
 
       {customSelected ? (
         <View style={styles.customField}>
-          <Text variant="smallStrong">What do you call it?</Text>
+          <Text variant="smallStrong">Medication name</Text>
           <Input
-            autoFocus
             value={customMedicationName}
             onChangeText={setCustomMedicationName}
-            placeholder="Medication name"
+            placeholder="Type the name"
             returnKeyType="done"
           />
         </View>
@@ -83,16 +105,32 @@ export default function TakingScreen() {
   );
 }
 
+function PresetCard({
+  preset,
+  selected,
+  onPress,
+}: {
+  preset: PeptidePreset;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <SelectionCard
+      compact
+      title={preset.name}
+      // The evidence tier, not the dose. A dose on a picker card reads like a
+      // recommendation. The dose belongs on the schedule screen, where the user
+      // confirms it.
+      description={EVIDENCE_LABELS[preset.evidence]}
+      selected={selected}
+      onPress={onPress}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  gridItem: {
-    flexBasis: '46%',
-    flexGrow: 1,
-    minWidth: 145,
+  list: {
+    gap: spacing.sm,
   },
   customField: {
     gap: spacing.sm,
