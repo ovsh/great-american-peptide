@@ -3,3 +3,7 @@ node_modules/
 *.log
 .env
 .env.*
+
+# Competitor ad creative kept for internal analysis only. Third-party
+# copyright — never commit, never republish. See mobile/docs/competitor-creative.md
+research/
