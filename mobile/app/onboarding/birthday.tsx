@@ -23,7 +23,7 @@ export default function BirthdayScreen() {
     <OnboardingStep
       step="birthday"
       title="What year were you born?"
-      subtitle="Poke asks for the year, not the date."
+      subtitle="Poke asks for the year only."
       canContinue={valid}
     >
       <View style={styles.field}>

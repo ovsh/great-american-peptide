@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { PanResponder, StyleSheet, View } from 'react-native';
 import type { AccessibilityActionEvent, LayoutChangeEvent } from 'react-native';
 
 import { Text } from './Text';
@@ -72,7 +72,14 @@ export function Slider({
 
   return (
     <View style={styles.root}>
-      <Pressable
+      {/* A plain View, not a Pressable. `Pressable` renders
+          `<View {...restProps} {...eventHandlers}>`, and those event handlers come
+          from `usePressability`. They land after the spread panHandlers and
+          overwrite `onStartShouldSetResponder` and `onResponderGrant`, so the
+          PanResponder below never gets a grant and the slider does not move at all
+          on a device. Do not put a Pressable back here. */}
+      <View
+        accessible
         accessibilityRole="adjustable"
         accessibilityLabel={accessibilityLabel}
         accessibilityValue={{ min, max, now: value, text: format(value) }}
@@ -85,7 +92,7 @@ export function Slider({
         <View style={styles.track} />
         <View style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
         <View style={[styles.thumb, { left: thumbLeft }]} />
-      </Pressable>
+      </View>
       <View style={styles.labels}>
         <Text variant="caption" color={colors.inkMuted}>{format(min)}</Text>
         <Text variant="caption" color={colors.inkMuted}>{format(max)}</Text>

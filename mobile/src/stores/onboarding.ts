@@ -26,7 +26,7 @@ export const JOURNEY_OPTIONS: readonly { id: JourneyStage; label: string; descri
   {
     id: 'starting',
     label: "I'm about to start",
-    description: 'Nothing logged yet, and that is the easiest place to begin.',
+    description: 'Nothing logged yet. That is the easiest place to begin.',
   },
 ];
 
@@ -37,7 +37,7 @@ export const SEX_OPTIONS: readonly { id: Sex; label: string }[] = [
 ];
 
 export const ACTIVITY_OPTIONS: readonly { id: ActivityLevel; label: string; description: string }[] = [
-  { id: 'low', label: 'Mostly seated', description: 'Desk work, and not much walking.' },
+  { id: 'low', label: 'Mostly seated', description: 'Desk work and not much walking.' },
   { id: 'light', label: 'Lightly active', description: 'A walk most days.' },
   { id: 'active', label: 'Active', description: 'You train two or three times a week.' },
   { id: 'very_active', label: 'Very active', description: 'You move nearly every day.' },
@@ -60,10 +60,10 @@ export const LAST_SHOT_OPTIONS: readonly { id: LastShotChoice; label: string }[]
 ];
 
 export const GOAL_OPTIONS: readonly { id: GoalKind; label: string; description: string }[] = [
-  { id: 'weight_loss', label: 'Weight loss', description: 'Your shot routine and your weight goal, in one place.' },
+  { id: 'weight_loss', label: 'Weight loss', description: 'Your shot routine and your weight goal in one place.' },
   { id: 'recovery', label: 'Recovery', description: 'The routine that is carrying your recovery.' },
-  { id: 'longevity', label: 'Longevity', description: 'A routine you can hold for years, not weeks.' },
-  { id: 'performance', label: 'Performance', description: 'Every dose and every date, logged.' },
+  { id: 'longevity', label: 'Longevity', description: 'A routine you can hold for years.' },
+  { id: 'performance', label: 'Performance', description: 'Every dose and every date in one log.' },
 ];
 
 export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[] = [

@@ -16,7 +16,7 @@ import { safeBack } from '@/utils/nav';
 const BENEFITS = [
   {
     icon: Activity,
-    title: 'Your level, day by day',
+    title: 'Your level day by day',
     body: 'See the estimated amount in your body between shots.',
   },
   {

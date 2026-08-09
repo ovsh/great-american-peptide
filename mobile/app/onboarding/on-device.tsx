@@ -31,7 +31,7 @@ export default function OnDeviceScreen() {
     <OnboardingStep
       step="on-device"
       title="Everything stays on this phone"
-      subtitle="Poke asks for no health data from another app, and sends none to one."
+      subtitle="Poke asks for no health data from another app and sends none to one."
     >
       <View style={styles.list}>
         {POINTS.map((point) => (

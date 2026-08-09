@@ -15,7 +15,7 @@ export default function ConcernsScreen() {
       title="What do you want to keep an eye on?"
       // Poke stores the list and shows it back on the plan. Nothing in the app
       // reorders anything from it yet, so this line does not say that it does.
-      subtitle="Pick as many as you like. Poke keeps the list, and you can log any of them from Today."
+      subtitle="Pick as many as you like. Poke keeps the list and you can log any of them from Today."
       canContinue={concerns.length > 0}
     >
       <View style={styles.list}>

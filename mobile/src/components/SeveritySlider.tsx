@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { PanResponder, StyleSheet, View } from 'react-native';
 import type { AccessibilityActionEvent, LayoutChangeEvent } from 'react-native';
 
 import { Text } from './Text';
@@ -57,7 +57,11 @@ export function SeveritySlider({ value, onChange }: SeveritySliderProps) {
 
   return (
     <View style={styles.root}>
-      <Pressable
+      {/* A plain View, not a Pressable. See the same note in `Slider.tsx`:
+          Pressable's own responder handlers overwrite the spread panHandlers, so
+          the drag never starts on a device. Do not put a Pressable back here. */}
+      <View
+        accessible
         accessibilityRole="adjustable"
         accessibilityLabel="Severity"
         accessibilityValue={{ min: MIN, max: MAX, now: value, text: `${value} of ${MAX}` }}
@@ -70,7 +74,7 @@ export function SeveritySlider({ value, onChange }: SeveritySliderProps) {
         <View style={styles.track} />
         <View style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
         <View style={[styles.thumb, { left: thumbLeft }]} />
-      </Pressable>
+      </View>
       <View style={styles.labels}>
         <Text variant="caption" color={colors.inkMuted}>0</Text>
         <Text variant="caption" color={colors.inkMuted}>5</Text>

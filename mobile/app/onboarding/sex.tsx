@@ -16,7 +16,7 @@ export default function SexScreen() {
       // No claim here about what Poke does with it. Poke stores it and shows it
       // back, and it feeds no calculation, so the screen says neither more nor
       // less than that.
-      subtitle="Poke keeps this with your log, and nowhere else."
+      subtitle="Poke keeps this with your log and nowhere else."
       canContinue={sex !== null}
     >
       <View style={styles.list}>
