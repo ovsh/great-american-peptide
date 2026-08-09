@@ -27,4 +27,4 @@ few strings.
   after, apart from the rest. Never quote a button label inside legal text.
 - `grep` a string before you rename it. `store.config.json` `review.notes` names buttons
   App Review must press, `store-assets/app-store/copy/app-store-listing.md` mirrors the
-  listing, and `SPEC-POKE.md:83` names the tagline and the first button.
+  listing, and `SPEC-POKE.md:93` names the tagline and the first button.

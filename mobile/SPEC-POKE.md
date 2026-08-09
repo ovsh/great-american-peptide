@@ -75,29 +75,45 @@ Routes:
 
 ## Onboarding flow (informed by MeAgain teardown)
 
-MeAgain's school: one question per screen → "plan ready" payoff screen echoing the
-user's own answers. We copy the structure, not the hard paywall (their #1 complaint:
-"no free trial", "can't track ANYTHING without membership"). Poke ships no paywall.
+MeAgain's school: one question per screen, then a compute beat, then a "plan ready"
+payoff that reads the user's own answers back. Poke copies the structure and the
+rhythm. Poke does not copy the wall in front of the app. MeAgain's top complaint is
+"no free trial", "can't track ANYTHING without membership". Poke finishes onboarding
+onto Today and raises the paywall over it (`plan.tsx`), so the app sits behind a sheet
+and not behind a purchase. Poke does not copy the in-onboarding rating ask either.
+`src/services/reviewGate.ts` asks for a rating only after real logged use.
 
-Screens (one question each, progress dots on top, Back always works, <60s total):
-1. **Welcome** — wordmark, tagline "One app for your whole routine.", one button "Get started".
-2. **What are you taking?** — preset grid, multi-select (semaglutide, tirzepatide,
-   retatrutide, BPC-157, TB-500, CJC-1295/Ipamorelin, GHK-Cu, custom). Prefills from
-   `src/domain/peptides` presets.
-3. **Dose & schedule** — for the primary med: dose prefilled from preset, frequency
-   (weekly default), next dose day picker. Copy names the real thing: "When's shot day?"
-4. **What's the goal?** — single-select: weight loss / recovery / longevity /
-   performance → `preferences.goal_kind`; tailors Today copy.
-5. **Weight** — current + goal weight, lb/kg toggle, skippable ("I'll add this later").
-6. **Anything you're watching for?** — side-effect concern multi-select (nausea,
-   fatigue, constipation, injection-site reactions, none) → echoed on plan screen,
-   stored `preferences.side_effect_concerns` (JSON).
-7. **Reminders** — default 9:00, day derived from shot day. Accept = request notification
-   permission. Skippable.
-8. **Plan ready** — the payoff: "Your plan is ready." Card echoes their answers:
-   med + dose + shot day + goal + "we'll watch for nausea" line. NO fabricated
-   date-of-goal projection (that's a medical-ish claim we won't fake). Button
-   "Start tracking" → seeds medications, sets `onboarding_completed_at`, lands Today.
+**This section describes the flow as built.** The source of truth is
+`POST_SCHEDULE_ORDER` in `src/stores/onboarding.ts`. Read it before you trust the list
+below. `docs/meagain-onboarding-map.md` holds the frame-by-frame map against the
+recording, and `docs/meagain-onboarding-adaptation.md` names the constraint behind
+every place Poke departs from it.
+
+23 counted steps, one question each, a progress bar on top, Back always works:
+
+- **0 Welcome** (`index`) — the wordmark over a four-slide carousel that opens on
+  "One app for your whole routine", and one button, "Get started". **0 Privacy**
+  (`privacy`). Neither screen is counted.
+- **1 Journey** — starting, taking, or returning. Changes the wording downstream.
+- **2 What are you taking?** (`taking`) — multi-select over `src/domain/peptides`
+  presets, plus one custom name.
+- **3 Schedule** (`schedule/[index]`) — one screen per medication, all sharing step 3.
+  A run of n screens divides one step, so the bar never runs backwards when the user
+  adds a medication. See `scheduleStepIndex`.
+- **4 to 22** — `POST_SCHEDULE_ORDER`: last-shot, why*, sex, birthday, height, weight,
+  goal-weight, pace, consistency*, activity, rotation*, concerns, evidence*, goal,
+  motivation, on-device, reminder-time, notifications, thanks. The four marked \*
+  are interstitials, not questions: they carry the argument between question runs.
+  The array is flat and has no conditionals, so every screen runs whatever the user
+  skips.
+- **Compute** (`compute`) — a 13.8s beat over the answers already in the store. It
+  claims no analysis it does not do.
+- **Plan** (`plan`) — the payoff. Cards read back the schedule, the goal, the concerns,
+  and the half-life with its citation. The projection card appears only when
+  `planProjection` has a current weight, a goal weight and a pace, and it moves live
+  with the pace slider. The disclaimer sits on this screen because the final button is
+  the acceptance: `completeOnboarding` writes `disclaimer_accepted_at` alongside
+  `onboarding_completed_at`.
 
 Gate: root layout redirects to /onboarding when `onboarding_completed_at` is null.
 
