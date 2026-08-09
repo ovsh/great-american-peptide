@@ -1,14 +1,10 @@
-import { StyleSheet, View } from 'react-native';
-
 import { InlineTimePicker } from '@/components/InlineTimePicker';
 import { OnboardingStep } from '@/components/OnboardingStep';
-import { Text } from '@/components/Text';
 import {
   SHOT_DAY_OPTIONS,
   useOnboardingStore,
   type MedicationScheduleDraft,
 } from '@/stores/onboarding';
-import { spacing } from '@/theme';
 
 // The time comes before the permission ask, so the permission sheet arrives with
 // something already agreed behind it. This is the slot the recording spends on
@@ -24,12 +20,9 @@ export default function ReminderTimeScreen() {
     <OnboardingStep
       step="reminder-time"
       title="What time suits you?"
-      subtitle={`Poke can put a reminder ${dayLabel}, at the hour you choose.`}
+      subtitle={`Poke can put a reminder ${dayLabel}.`}
     >
-      <View style={styles.picker}>
-        <Text variant="smallStrong">Reminder time</Text>
-        <InlineTimePicker value={reminder.time} onChange={setReminderTime} />
-      </View>
+      <InlineTimePicker value={reminder.time} onChange={setReminderTime} />
     </OnboardingStep>
   );
 }
@@ -59,9 +52,3 @@ function shotDayLabel(schedules: (MedicationScheduleDraft | undefined)[]): strin
   }
   return 'on your shot days';
 }
-
-const styles = StyleSheet.create({
-  picker: {
-    gap: spacing.sm,
-  },
-});

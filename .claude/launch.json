@@ -13,6 +13,17 @@
       "runtimeArgs": ["expo", "start", "--web", "--port", "8084"],
       "port": 8084,
       "cwd": "mobile"
+    },
+    {
+      "name": "expo-web-alt",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "EXPO_ROUTER_IMPORT_MODE=sync",
+        "EXPO_ROUTER_IMPORT_MODE_WEB=sync",
+        "npx", "expo", "start", "--web", "--port", "8092"
+      ],
+      "port": 8092,
+      "cwd": "mobile"
     }
   ]
 }
