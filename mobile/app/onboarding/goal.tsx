@@ -15,7 +15,7 @@ export default function GoalScreen() {
       title="What brings you to Poke?"
       // Today has no goal-ordered card stack, so this answer does not reorder
       // anything. It appears on the plan card and is written to `goal_kind`.
-      subtitle="Poke puts your goal on your plan and keeps it with your log."
+      subtitle="Poke puts your goal on your plan."
       canContinue={!!goalKind}
     >
       <View style={styles.list}>
@@ -23,8 +23,8 @@ export default function GoalScreen() {
           <SelectionCard
             key={option.id}
             role="radio"
+            compact
             title={option.label}
-            description={option.description}
             selected={goalKind === option.id}
             onPress={() => setGoalKind(option.id)}
           />

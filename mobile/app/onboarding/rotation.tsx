@@ -11,8 +11,8 @@ export default function RotationScreen() {
       step="rotation"
       icon={<RotateCw size={34} color={colors.accent} />}
       title="Poke remembers where the last one went"
-      body="When you log a shot, Poke offers the site that has waited longest. The same spot does not come round twice in a row."
-      note="You can always pick a different site. Poke records the one you used."
+      body="When you log a shot, Poke offers the site that has waited longest."
+      note="Pick a different site whenever you like. Poke records the one you used."
     />
   );
 }

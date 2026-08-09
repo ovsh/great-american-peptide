@@ -16,7 +16,7 @@ export default function MotivationScreen() {
     <OnboardingStep
       step="motivation"
       title="And what is behind that goal?"
-      subtitle="Pick the one closest to true. Poke keeps your answer with your log."
+      subtitle="Pick the one closest to true."
       canContinue={motivation !== null}
     >
       <View style={styles.list}>

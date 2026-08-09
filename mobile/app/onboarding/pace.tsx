@@ -32,7 +32,11 @@ export default function PaceScreen() {
       // date". It no longer does. `POST_SCHEDULE_ORDER` is flat, so this screen
       // runs even when the weight screen was skipped, and a skipped weight means
       // no projection at all. A date promised here is one the plan may not show.
-      subtitle="Pick the pace you are aiming for."
+      //
+      // What is left is no subtitle. The line that stood here, "Pick the pace
+      // you are aiming for", was the title again in different words. The
+      // readout, the slider and the footnote already say everything this screen
+      // has to say.
     >
       <Card padding="xl" style={styles.readout}>
         <Text variant="smallStrong" color={colors.inkMuted}>Your pace</Text>

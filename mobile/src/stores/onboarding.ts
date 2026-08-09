@@ -17,17 +17,12 @@ export type SideEffectConcern = 'nausea' | 'fatigue' | 'constipation' | 'injecti
 export type ShotDay = Weekday;
 export type LastShotChoice = 'today' | 'yesterday' | 'this_week' | 'longer' | 'none';
 
-export const JOURNEY_OPTIONS: readonly { id: JourneyStage; label: string; description: string }[] = [
-  {
-    id: 'taking',
-    label: "I'm already taking something",
-    description: 'You have started. Poke picks up from where you are.',
-  },
-  {
-    id: 'starting',
-    label: "I'm about to start",
-    description: 'Nothing logged yet. That is the easiest place to begin.',
-  },
+// Two labels and no description lines. The recording carries none here either,
+// and the ones written for this screen said nothing the label had not already
+// said.
+export const JOURNEY_OPTIONS: readonly { id: JourneyStage; label: string }[] = [
+  { id: 'taking', label: "I'm already taking something" },
+  { id: 'starting', label: "I'm about to start" },
 ];
 
 export const SEX_OPTIONS: readonly { id: Sex; label: string }[] = [
@@ -59,11 +54,13 @@ export const LAST_SHOT_OPTIONS: readonly { id: LastShotChoice; label: string }[]
   { id: 'none', label: "I haven't had one yet" },
 ];
 
-export const GOAL_OPTIONS: readonly { id: GoalKind; label: string; description: string }[] = [
-  { id: 'weight_loss', label: 'Weight loss', description: 'Your shot routine and your weight goal in one place.' },
-  { id: 'recovery', label: 'Recovery', description: 'The routine that is carrying your recovery.' },
-  { id: 'longevity', label: 'Longevity', description: 'A routine you can hold for years.' },
-  { id: 'performance', label: 'Performance', description: 'Every dose and every date in one log.' },
+// Labels only. Only the label is ever shown again, on the plan card, and a
+// four-word gloss under `Weight loss` tells nobody anything.
+export const GOAL_OPTIONS: readonly { id: GoalKind; label: string }[] = [
+  { id: 'weight_loss', label: 'Weight loss' },
+  { id: 'recovery', label: 'Recovery' },
+  { id: 'longevity', label: 'Longevity' },
+  { id: 'performance', label: 'Performance' },
 ];
 
 export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[] = [

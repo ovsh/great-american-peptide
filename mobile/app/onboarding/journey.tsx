@@ -24,8 +24,8 @@ export default function JourneyScreen() {
       totalSteps={onboardingTotalSteps()}
       backHref="/onboarding/privacy"
       transition={transition}
-      title="Where are you starting from?"
-      subtitle="Either answer is a fine place to be."
+      title="Have you started yet?"
+      subtitle="Your answer changes the next question."
       footer={(
         <Button
           disabled={!journeyStage}
@@ -40,8 +40,8 @@ export default function JourneyScreen() {
           <SelectionCard
             key={option.id}
             role="radio"
+            compact
             title={option.label}
-            description={option.description}
             selected={journeyStage === option.id}
             onPress={() => setJourneyStage(option.id)}
           />

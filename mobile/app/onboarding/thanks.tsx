@@ -17,7 +17,7 @@ export default function ThanksScreen() {
       step="thanks"
       icon={<CircleCheck size={40} color={colors.accent} />}
       title="Thank you for trusting Poke"
-      body="That is everything Poke needs. Give Poke a moment and your plan will be ready."
+      body="That is everything Poke needs."
       note="Every answer you gave stayed on this phone."
       continueLabel="Create my plan"
     />

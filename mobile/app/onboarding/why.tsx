@@ -12,8 +12,8 @@ export default function WhyScreen() {
       step="why"
       icon={<CalendarCheck size={34} color={colors.accent} />}
       title="Poke stays out of your day"
-      body="Poke already knows your dose and your site. Logging a shot takes two taps, and nothing else asks for your attention that day."
-      note="You can log a shot late. Poke keeps the date you enter."
+      body="Poke already knows your dose and your site. Logging a shot takes two taps."
+      note="Log it late and Poke keeps the date you enter."
     />
   );
 }

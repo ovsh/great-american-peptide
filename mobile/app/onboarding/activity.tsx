@@ -13,7 +13,10 @@ export default function ActivityScreen() {
     <OnboardingStep
       step="activity"
       title="How much do you move in a normal week?"
-      subtitle="Poke keeps this with your log. Poke works out no calorie budget from it."
+      // The hedge is the whole line. Poke stores this answer and reads it back
+      // nowhere, so a sentence about where it is kept was padding in front of
+      // the one sentence that carries a claim.
+      subtitle="Poke works out no calorie budget from this."
       canContinue={activityLevel !== null}
     >
       <View style={styles.list}>
