@@ -12,17 +12,17 @@ const PROMISES = [
   {
     id: 'account',
     icon: <UserX size={20} color={colors.accent} />,
-    label: 'No account, and no sign-in.',
+    label: 'Poke asks for no account and no sign-in.',
   },
   {
     id: 'server',
     icon: <ServerOff size={20} color={colors.accent} />,
-    label: 'No server. Poke sends what you log nowhere.',
+    label: 'Poke sends what you log nowhere.',
   },
   {
     id: 'local',
     icon: <Lock size={20} color={colors.accent} />,
-    label: 'Your log lives in this app, on this phone.',
+    label: 'Your log lives on this phone.',
   },
 ];
 

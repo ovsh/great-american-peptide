@@ -71,9 +71,12 @@ export function SeveritySlider({ value, onChange }: SeveritySliderProps) {
         style={styles.control}
         {...responder.panHandlers}
       >
-        <View style={styles.track} />
-        <View style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
-        <View style={[styles.thumb, { left: thumbLeft }]} />
+        {/* Decoration, never a touch target. See the same note in `Slider.tsx`:
+            a thumb that accepts touches makes `locationX` an offset inside the
+            thumb, so grabbing the thumb threw the value to the minimum. */}
+        <View pointerEvents="none" style={styles.track} />
+        <View pointerEvents="none" style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
+        <View pointerEvents="none" style={[styles.thumb, { left: thumbLeft }]} />
       </View>
       <View style={styles.labels}>
         <Text variant="caption" color={colors.inkMuted}>0</Text>

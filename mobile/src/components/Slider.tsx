@@ -89,9 +89,15 @@ export function Slider({
         style={styles.control}
         {...responder.panHandlers}
       >
-        <View style={styles.track} />
-        <View style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
-        <View style={[styles.thumb, { left: thumbLeft }]} />
+        {/* Decoration, never a touch target. `locationX` is measured from the
+            view the touch landed on, so a thumb that accepts touches reports an
+            offset inside the thumb, 0 to 36, instead of a position along the
+            track. Grabbing the thumb then threw the value to the minimum and
+            every later move counted from that wrong origin. Any view added here
+            needs `pointerEvents="none"` for the same reason. */}
+        <View pointerEvents="none" style={styles.track} />
+        <View pointerEvents="none" style={[styles.fill, { width: thumbLeft + THUMB_SIZE / 2 }]} />
+        <View pointerEvents="none" style={[styles.thumb, { left: thumbLeft }]} />
       </View>
       <View style={styles.labels}>
         <Text variant="caption" color={colors.inkMuted}>{format(min)}</Text>

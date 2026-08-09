@@ -17,6 +17,7 @@ export { BodyDiagram } from './BodyDiagram';
 export { SyringeViz } from './SyringeViz';
 export { BottomSheet } from './BottomSheet';
 export { InlineTimePicker } from './InlineTimePicker';
+export { WheelPicker } from './WheelPicker';
 export { LogActionSheet } from './LogActionSheet';
 export { SeveritySlider } from './SeveritySlider';
 export { MonthGrid } from './MonthGrid';

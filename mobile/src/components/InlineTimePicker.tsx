@@ -1,10 +1,17 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { ChevronDown, ChevronUp } from 'lucide-react-native';
 
 import { Text } from './Text';
+import { WHEEL_FRAME_HEIGHT, WHEEL_ITEM_HEIGHT, WheelPicker } from './WheelPicker';
 import { colors, radius, spacing } from '../theme';
 
 type Meridiem = 'AM' | 'PM';
+
+const HOURS = Array.from({ length: 12 }, (_, index) => index + 1);
+// Every minute, not every fifth. `log-shot` passes the real time a shot was
+// taken, so 09:07 has to land on a row.
+const MINUTES = Array.from({ length: 60 }, (_, index) => index);
+/** The band sits on the middle row, so it starts half a frame less half a row down. */
+const BAND_TOP = (WHEEL_FRAME_HEIGHT - WHEEL_ITEM_HEIGHT) / 2;
 
 interface TimeParts {
   hour: number;
@@ -22,33 +29,38 @@ export function InlineTimePicker({ value, onChange, label = 'Reminder time' }: I
   const time = parseTime(value);
 
   const update = (next: TimeParts) => onChange(formatTime(next));
-  const shiftHour = (delta: number) => {
-    const hour = ((time.hour - 1 + delta + 12) % 12) + 1;
-    update({ ...time, hour });
-  };
-  const shiftMinute = (delta: number) => {
-    const minute = (Math.round(time.minute / 5) * 5 + delta + 60) % 60;
-    update({ ...time, minute });
-  };
 
   return (
     <View
       accessibilityLabel={`${label}, ${displayTime(time)}`}
       style={styles.picker}
     >
-      <TimeWheel
-        label="Hour"
-        value={String(time.hour)}
-        onDecrease={() => shiftHour(-1)}
-        onIncrease={() => shiftHour(1)}
-      />
-      <Text variant="h2" color={colors.inkMuted}>:</Text>
-      <TimeWheel
-        label="Minute"
-        value={String(time.minute).padStart(2, '0')}
-        onDecrease={() => shiftMinute(-5)}
-        onIncrease={() => shiftMinute(5)}
-      />
+      {/* One band across both wheels, the way an iOS picker draws it. The
+          wheels are `bare` because two bands side by side would leave a seam
+          at the colon. */}
+      <View style={styles.wheels}>
+        <View pointerEvents="none" style={styles.band} />
+        <View style={styles.column}>
+          <WheelPicker
+            bare
+            values={HOURS}
+            value={time.hour}
+            onChange={(hour) => update({ ...time, hour })}
+            accessibilityLabel={`${label} hour`}
+          />
+        </View>
+        <Text variant="h2" color={colors.inkMuted}>:</Text>
+        <View style={styles.column}>
+          <WheelPicker
+            bare
+            values={MINUTES}
+            value={time.minute}
+            onChange={(minute) => update({ ...time, minute })}
+            format={(minute) => String(minute).padStart(2, '0')}
+            accessibilityLabel={`${label} minute`}
+          />
+        </View>
+      </View>
       <View style={styles.periods}>
         {(['AM', 'PM'] as const).map((meridiem) => {
           const selected = time.meridiem === meridiem;
@@ -68,40 +80,6 @@ export function InlineTimePicker({ value, onChange, label = 'Reminder time' }: I
           );
         })}
       </View>
-    </View>
-  );
-}
-
-function TimeWheel({
-  label,
-  value,
-  onDecrease,
-  onIncrease,
-}: {
-  label: string;
-  value: string;
-  onDecrease: () => void;
-  onIncrease: () => void;
-}) {
-  return (
-    <View style={styles.wheel}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Increase ${label.toLocaleLowerCase()}`}
-        onPress={onIncrease}
-        style={styles.wheelButton}
-      >
-        <ChevronUp size={18} color={colors.inkMuted} />
-      </Pressable>
-      <Text variant="h2" align="center">{value}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Decrease ${label.toLocaleLowerCase()}`}
-        onPress={onDecrease}
-        style={styles.wheelButton}
-      >
-        <ChevronDown size={18} color={colors.inkMuted} />
-      </Pressable>
     </View>
   );
 }
@@ -129,27 +107,33 @@ function displayTime(time: TimeParts): string {
 
 const styles = StyleSheet.create({
   picker: {
-    minHeight: 152,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    overflow: 'hidden',
   },
-  wheel: {
-    width: 56,
+  wheels: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
   },
-  wheelButton: {
-    width: 44,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+  band: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: BAND_TOP,
+    height: WHEEL_ITEM_HEIGHT,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSoft,
+  },
+  column: {
+    width: 64,
   },
   periods: {
     gap: spacing.xs,
