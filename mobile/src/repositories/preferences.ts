@@ -32,6 +32,8 @@ const PREFERENCE_COLUMNS = [
   'motivation',
   'weekly_pace',
   'last_shot_at',
+  // Schema version 8.
+  'tester_pro_at',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {
@@ -63,4 +65,15 @@ export async function updateGoalWeight(goalWeight: number | null): Promise<void>
 
 export async function markOnboardingComplete(): Promise<void> {
   await updatePreferences({ onboarding_completed_at: Date.now(), disclaimer_accepted_at: Date.now() });
+}
+
+/** When a tester code unlocked Poke Pro on this device, or null. */
+export async function getTesterProAt(): Promise<number | null> {
+  const row = await getPreferences();
+  return row.tester_pro_at;
+}
+
+/** Pass a timestamp to grant tester access and null to take it back. */
+export async function setTesterProAt(at: number | null): Promise<void> {
+  await updatePreferences({ tester_pro_at: at });
 }

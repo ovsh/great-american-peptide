@@ -1,7 +1,9 @@
 import { Platform } from 'react-native';
+import { listInjections } from '../repositories/injections';
 import { listMedications } from '../repositories/medications';
 import { getPreferences } from '../repositories/preferences';
 import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
+import { startOfDay } from '../utils/date';
 
 type ExpoNotifications = typeof import('expo-notifications');
 
@@ -59,7 +61,18 @@ export async function refreshScheduledReminders(): Promise<void> {
     });
     if (!schedule) continue;
 
-    for (const dose of nextScheduledDoses(schedule, now, 6)) {
+    const doses = nextScheduledDoses(schedule, now, 6);
+    if (doses.length === 0) continue;
+
+    // A dose the user already logged needs no reminder. The schedule holds one dose
+    // per medication per day, so a shot on the same local day answers that dose.
+    // Without this, a shot at 07:30 still gets the 09:00 reminder.
+    const loggedFrom = Math.min(...doses.map((dose) => dose.scheduledDay));
+    const logged = await listInjections({ medicationId: med.id, fromMs: loggedFrom });
+    const loggedDays = new Set(logged.map((injection) => startOfDay(injection.taken_at)));
+
+    for (const dose of doses) {
+      if (loggedDays.has(dose.scheduledDay)) continue;
       try {
         await Notifications.scheduleNotificationAsync({
           content: {

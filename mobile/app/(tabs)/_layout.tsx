@@ -18,16 +18,25 @@ const TAB_ITEMS: readonly { name: string; label: string; icon: LucideIcon }[] = 
 ];
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      tabBar={(props) => <PokeTabBar {...props} />}
-    >
-      <Tabs.Screen name="index" options={{ title: 'Today' }} />
-      <Tabs.Screen name="progress" options={{ title: 'Progress' }} />
-      <Tabs.Screen name="history" options={{ title: 'History' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-    </Tabs>
+    <View style={styles.root}>
+      <Tabs
+        screenOptions={{ headerShown: false }}
+        tabBar={(props) => <PokeTabBar {...props} />}
+      >
+        <Tabs.Screen name="index" options={{ title: 'Today' }} />
+        <Tabs.Screen name="progress" options={{ title: 'Progress' }} />
+        <Tabs.Screen name="history" options={{ title: 'History' }} />
+        <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      </Tabs>
+      {/* Every tab scrolls its own title, so there is no bar to hide behind and a
+          scrolled card runs into the clock. One band of the page colour across the
+          inset holds the card back. It takes no touches, so the list under it keeps
+          the full height of the screen to scroll in. */}
+      <View pointerEvents="none" style={[styles.statusScrim, { height: insets.top }]} />
+    </View>
   );
 }
 
@@ -88,6 +97,17 @@ function PokeTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  statusScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background,
+  },
   bar: {
     minHeight: 72,
     flexDirection: 'row',

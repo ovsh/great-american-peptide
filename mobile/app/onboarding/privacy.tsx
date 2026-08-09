@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
-import { onboardingTotalSteps } from '@/stores/onboarding';
+import { onboardingTotalSteps, useOnboardingStore } from '@/stores/onboarding';
 import { colors, radius, spacing } from '@/theme';
 
 const PROMISES = [
@@ -30,12 +30,15 @@ const PROMISES = [
 // before it asks for a single one, and the order is the point: you are told what
 // happens to the answers first, and then you are asked.
 export default function PrivacyScreen() {
+  // Null on a first run, and set again on a run that came back here through the
+  // back chevron, so the bar keeps whatever length the answer already gave it.
+  const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const transition = useOnboardingTransition();
 
   return (
     <OnboardingScreen
       step={0}
-      totalSteps={onboardingTotalSteps()}
+      totalSteps={onboardingTotalSteps(journeyStage)}
       backHref="/onboarding"
       transition={transition}
       title="Before Poke asks you anything"

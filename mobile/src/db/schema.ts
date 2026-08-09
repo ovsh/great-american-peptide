@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -127,5 +127,12 @@ export const MIGRATIONS: { version: number; up: string }[] = [
       ALTER TABLE preferences ADD COLUMN weekly_pace REAL;
       ALTER TABLE preferences ADD COLUMN last_shot_at INTEGER;
     `,
+  },
+  {
+    // Poke Pro for an early tester, granted by a code instead of a payment. A
+    // timestamp rather than a flag, so the row also says when the grant started.
+    // Null means no code is active, which is the only state a paying user is in.
+    version: 8,
+    up: `ALTER TABLE preferences ADD COLUMN tester_pro_at INTEGER;`,
   },
 ];

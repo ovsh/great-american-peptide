@@ -15,9 +15,13 @@ import { colors, spacing } from '@/theme';
 
 export default function CalculatorScreen() {
   const { width } = useWindowDimensions();
-  const [materialMg, setMaterialMg] = useState('5');
-  const [diluentMl, setDiluentMl] = useState('2');
-  const [aliquotMcg, setAliquotMcg] = useState('250');
+  // Every field starts empty and no field carries a number as a placeholder.
+  // `review.notes` tells App Review that this screen "suggests nothing and it
+  // fills nothing in for the user". A vial mass and a diluent volume on first
+  // paint would read as Poke proposing a dilution.
+  const [materialMg, setMaterialMg] = useState('');
+  const [diluentMl, setDiluentMl] = useState('');
+  const [aliquotMcg, setAliquotMcg] = useState('');
 
   const result = useMemo(
     () => reconstitution({
@@ -78,7 +82,7 @@ export default function CalculatorScreen() {
                   value={materialMg}
                   onChangeText={setMaterialMg}
                   keyboardType="decimal-pad"
-                  placeholder="5"
+                  placeholder="Enter a number"
                   placeholderTextColor={colors.inkSubtle}
                   style={styles.numInput}
                 />
@@ -92,7 +96,7 @@ export default function CalculatorScreen() {
                   value={diluentMl}
                   onChangeText={setDiluentMl}
                   keyboardType="decimal-pad"
-                  placeholder="2"
+                  placeholder="Enter a number"
                   placeholderTextColor={colors.inkSubtle}
                   style={styles.numInput}
                 />
@@ -181,8 +185,10 @@ export default function CalculatorScreen() {
             </Card>
           ) : (
             <Card padding="lg" variant="muted">
-              <Text variant="small" color={colors.inkMuted}>
-                Enter the vial material and the diluent volume. Poke then shows the concentration.
+              <Text variant="smallStrong" color={colors.inkMuted}>No calculation yet</Text>
+              <Text variant="small" color={colors.inkMuted} style={{ marginTop: spacing.xs }}>
+                Enter the vial material in mg and the diluent volume in mL. Poke then shows the
+                concentration. Add an aliquot amount and Poke also shows the volume in mL.
               </Text>
             </Card>
           )}

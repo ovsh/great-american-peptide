@@ -15,7 +15,15 @@ import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 import { Pill } from '@/components/Pill';
 import { MedVialIcon } from '@/components/MedVialIcon';
 
-import { peptidePresets, type PeptidePreset, type FrequencyKind, type Route, type Unit } from '@/domain/peptides';
+import {
+  EVIDENCE_LABELS,
+  getPreset,
+  peptidePresets,
+  type PeptidePreset,
+  type FrequencyKind,
+  type Route,
+  type Unit,
+} from '@/domain/peptides';
 import { WEEKDAY_OPTIONS, isWeekday, type Weekday } from '@/domain/scheduling';
 import { ProLock } from '@/components/ProLock';
 import {
@@ -29,6 +37,7 @@ import { createMedicationAndRefresh, updateMedicationAndRefresh } from '@/servic
 import { useAppStore } from '@/stores/app';
 import { isProNow, useIsPro } from '@/stores/entitlement';
 import { safeBack } from '@/utils/nav';
+import { twiceWeeklyScheduleNote } from '@/utils/schedule';
 import { colors, spacing, radius } from '@/theme';
 
 type EditableFrequency = Exclude<FrequencyKind, 'custom'>;
@@ -61,6 +70,7 @@ export default function AddMedicationScreen() {
   const pro = useIsPro();
   // The route is reachable directly, so the screen checks the limit itself.
   const [atFreeLimit, setAtFreeLimit] = useState(false);
+  const selectedPreset = presetId ? getPreset(presetId) : undefined;
 
   useEffect(() => {
     if (editingId || pro) { setAtFreeLimit(false); return; }
@@ -99,17 +109,22 @@ export default function AddMedicationScreen() {
       });
   }, [editingId]);
 
+  // A preset fills in what a published source says and nothing else. The dose
+  // field stays empty: the user types the dose, Poke does not offer one. The
+  // onboarding schedule screen works the same way.
   const pickPreset = (p: PeptidePreset) => {
     setPresetId(p.id);
     setName(p.name);
-    setDose(String(p.defaultDose));
+    setDose('');
     setUnit(p.unit);
     setRoute(p.defaultRoute);
     setFreq(editableFrequency(p.defaultFrequency.kind));
     setFreqValue(p.defaultFrequency.value ? String(p.defaultFrequency.value) : '');
     setWeekday(currentWeekday());
-    setHalfLife(String(p.halfLifeHours));
-    setTmax(String(p.tmaxHours));
+    // An unsourced preset carries no half-life and no Tmax. `String(null)` wrote
+    // the word "null" into the field and NaN into the database.
+    setHalfLife(p.halfLifeHours === null ? '' : String(p.halfLifeHours));
+    setTmax(p.tmaxHours === null ? '' : String(p.tmaxHours));
     setStep('config');
   };
 
@@ -131,6 +146,14 @@ export default function AddMedicationScreen() {
     if (!name.trim()) { Alert.alert('Enter a medication name'); return; }
     const d = parseFloat(dose);
     if (!Number.isFinite(d) || d <= 0) { Alert.alert('Enter a dose above zero'); return; }
+    // An empty box used to fall through `parseInt('') || 1` and save a daily
+    // schedule, with a daily reminder, that the user never chose. Poke asks for
+    // the interval instead.
+    const interval = parseInt(freqValue, 10);
+    if (freq === 'every_n_days' && (!Number.isFinite(interval) || interval < 1)) {
+      Alert.alert('Enter a number of days above zero');
+      return;
+    }
     setSubmitting(true);
     try {
       const input = {
@@ -140,9 +163,9 @@ export default function AddMedicationScreen() {
         defaultUnit: unit,
         defaultRoute: route,
         frequencyKind: freq,
-        frequencyValue: freq === 'every_n_days' ? parseInt(freqValue, 10) || 1 : freq === 'daily' ? null : weekday,
-        halfLifeHours: halfLife ? parseFloat(halfLife) : null,
-        tmaxHours: tmax ? parseFloat(tmax) : null,
+        frequencyValue: freq === 'every_n_days' ? interval : freq === 'daily' ? null : weekday,
+        halfLifeHours: optionalHours(halfLife),
+        tmaxHours: optionalHours(tmax),
       } satisfies Omit<NewMedication, 'colorIndex'>;
       if (editingId) {
         await updateMedicationAndRefresh(editingId, input);
@@ -211,8 +234,11 @@ export default function AddMedicationScreen() {
                   <MedVialIcon size={36} colorIndex={idx} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text variant="bodyStrong">{p.name}</Text>
+                    {/* The evidence tier, not the dose. A dose on a picker card
+                        reads like a recommendation. The dose belongs on the next
+                        screen, where the user types it. */}
                     <Text variant="caption" color={colors.inkMuted}>
-                      {p.defaultDose} {p.unit} · {p.defaultRoute.toUpperCase()} · t½ {p.halfLifeHours}h
+                      {EVIDENCE_LABELS[p.evidence]}
                     </Text>
                   </View>
                   <Pill tone="neutral">{p.category}</Pill>
@@ -250,9 +276,10 @@ export default function AddMedicationScreen() {
                 value={dose}
                 onChangeText={setDose}
                 keyboardType="decimal-pad"
-                placeholder="0.0"
+                placeholder="Enter a number"
                 placeholderTextColor={colors.inkSubtle}
                 style={styles.doseInput}
+                accessibilityLabel="Default dose"
               />
               <View style={{ width: spacing.md }} />
               <TimeRangeToggle
@@ -261,6 +288,9 @@ export default function AddMedicationScreen() {
                 onChange={setUnit}
               />
             </View>
+            <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
+              Poke records the dose you enter. Poke does not propose a dose.
+            </Text>
           </Field>
 
           <Field label="Route">
@@ -289,9 +319,9 @@ export default function AddMedicationScreen() {
                   value={freqValue}
                   onChangeText={setFreqValue}
                   keyboardType="number-pad"
-                  placeholder="3"
                   placeholderTextColor={colors.inkSubtle}
                   style={styles.smallInput}
+                  accessibilityLabel="Days between shots"
                 />
                 <Text variant="small" color={colors.inkMuted}>days</Text>
               </View>
@@ -299,7 +329,7 @@ export default function AddMedicationScreen() {
           </Field>
 
           {freq === 'weekly' || freq === 'twice_weekly' ? (
-            <Field label="Shot day">
+            <Field label={freq === 'twice_weekly' ? 'First shot day' : 'Shot day'}>
               <View style={styles.weekdayRow}>
                 {WEEKDAY_OPTIONS.map((day) => {
                   const active = weekday === day.value;
@@ -316,6 +346,13 @@ export default function AddMedicationScreen() {
                   );
                 })}
               </View>
+              {/* Twice a week picks the second day for the user. Name it here,
+                  before the save, rather than in a reminder they did not expect. */}
+              {freq === 'twice_weekly' ? (
+                <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: spacing.xs }}>
+                  {twiceWeeklyScheduleNote(weekday)}
+                </Text>
+              ) : null}
             </Field>
           ) : null}
 
@@ -324,13 +361,23 @@ export default function AddMedicationScreen() {
               value={halfLife}
               onChangeText={setHalfLife}
               keyboardType="decimal-pad"
-              placeholder="48"
+              placeholder="Enter a number"
               placeholderTextColor={colors.inkSubtle}
               style={styles.doseInput}
+              accessibilityLabel="Half-life in hours"
             />
             <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
               Poke uses the half-life to draw the fall of the level curve.
             </Text>
+            {/* The one number a preset fills in is a cited one, so the citation
+                travels with it. */}
+            {selectedPreset ? (
+              <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
+                {selectedPreset.evidence === 'unsourced'
+                  ? `${selectedPreset.source} Poke draws no level curve without a half-life.`
+                  : `Source: ${selectedPreset.source}`}
+              </Text>
+            ) : null}
           </Field>
 
           <Field label="Time to peak in hours (optional)" divider={false}>
@@ -338,9 +385,10 @@ export default function AddMedicationScreen() {
               value={tmax}
               onChangeText={setTmax}
               keyboardType="decimal-pad"
-              placeholder="1"
+              placeholder="Enter a number"
               placeholderTextColor={colors.inkSubtle}
               style={styles.doseInput}
+              accessibilityLabel="Time to peak in hours"
             />
             <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: 4 }}>
               The time from the shot to the peak level. Most SC peptides peak in 0.5 to 2 hours.
@@ -369,6 +417,13 @@ function weekdayFromTimestamp(timestamp: number): Weekday {
 
 function editableFrequency(frequency: FrequencyKind): EditableFrequency {
   return frequency === 'custom' ? 'daily' : frequency;
+}
+
+// Half-life and Tmax are optional, so an empty or unreadable field is null and
+// never NaN. A NaN half-life reaches SQLite and the level curve reads it back.
+function optionalHours(text: string): number | null {
+  const value = parseFloat(text);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 const styles = StyleSheet.create({

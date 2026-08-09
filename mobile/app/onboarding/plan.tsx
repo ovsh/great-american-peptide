@@ -27,9 +27,11 @@ import {
   useOnboardingStore,
 } from '@/stores/onboarding';
 import { colors, radius, spacing } from '@/theme';
+import { fmtClock } from '@/utils/date';
 
 const CURVE_CARDS = 2;
 const CHART_HEIGHT = 148;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The reveal. Recording step 28.
@@ -226,7 +228,7 @@ export default function PlanScreen() {
           value={concernLabels.length > 0 ? concernLabels.join(' · ') : 'Nothing right now'}
         />
         {reminder.kind === 'enabled' ? (
-          <PlanRow label="Reminder" value={`Every shot day at ${reminder.time}`} />
+          <PlanRow label="Reminder" value={`Every shot day at ${fmtClock(reminder.time)}`} />
         ) : null}
       </Card>
     </OnboardingScreen>
@@ -270,7 +272,7 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
           <Text variant="display">{longDate(live.reachesAt)}</Text>
           <Text color={colors.inkMuted}>
             {formatWeight(distance)} {unit} to {verb} at {formatPace(live.pace)} a week
-            is {formatWeeks(live.weeks)}.
+            is {formatSpan(live.reachesAt)}.
           </Text>
         </>
       ) : (
@@ -370,7 +372,6 @@ function CurveCard({ medication }: { medication: PlanMedication }) {
             width={width}
             height={CHART_HEIGHT}
             color={colors.chartLine}
-            yLabel={(value) => `${round(value)}`}
             xLabel={(t) => weekLabel(t, curve.points[0]?.t ?? t)}
             xTickCount={5}
             yTickCount={3}
@@ -399,17 +400,24 @@ function formatWeight(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatWeeks(weeks: number): string {
-  const rounded = Math.max(1, Math.round(weeks));
-  if (rounded < 9) return rounded === 1 ? 'one week' : `${rounded} weeks`;
-  const months = Math.round(weeks / 4.345);
-  return months === 1 ? 'about a month' : `about ${months} months`;
-}
-
-function round(value: number): string {
-  if (value >= 100) return value.toFixed(0);
-  if (value >= 10) return value.toFixed(1);
-  return value.toFixed(2);
+/**
+ * How far off the printed date is, in a unit the reader can check against it.
+ *
+ * The date carries the raw division out to the hour. A week count that rounds on
+ * its own then contradicts it: at 1.6 lb a week over 6 lb the card printed "4
+ * weeks" above a date 26 days away. So measure the span from the date the card
+ * already shows, and the two cannot disagree. Days are exact against a calendar.
+ * Weeks read better and are used only where the span is whole weeks. Past two
+ * months a day count stops meaning anything, and "about" carries the rounding.
+ */
+function formatSpan(reachesAt: number): string {
+  const days = Math.max(1, Math.round((startOfDay(reachesAt) - startOfDay(Date.now())) / DAY_MS));
+  if (days >= 56) {
+    const months = Math.round(days / 30.44);
+    return months === 1 ? 'about a month' : `about ${months} months`;
+  }
+  if (days % 7 === 0) return days === 7 ? 'one week' : `${days / 7} weeks`;
+  return days === 1 ? 'one day' : `${days} days`;
 }
 
 function startOfDay(timestamp: number): number {
@@ -419,7 +427,7 @@ function startOfDay(timestamp: number): number {
 }
 
 function countdownLabel(at: number): string {
-  const days = Math.round((startOfDay(at) - startOfDay(Date.now())) / (24 * 60 * 60 * 1000));
+  const days = Math.round((startOfDay(at) - startOfDay(Date.now())) / DAY_MS);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;

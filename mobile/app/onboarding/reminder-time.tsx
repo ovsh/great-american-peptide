@@ -22,7 +22,9 @@ export default function ReminderTimeScreen() {
       title="What time suits you?"
       subtitle={`Poke can put a reminder ${dayLabel}.`}
     >
-      <InlineTimePicker value={reminder.time} onChange={setReminderTime} />
+      {/* Five minute rows. A reminder is a time somebody picks, not a time
+          somebody records, so the whole hour is one flick away. */}
+      <InlineTimePicker value={reminder.time} onChange={setReminderTime} minuteStep={5} />
     </OnboardingStep>
   );
 }

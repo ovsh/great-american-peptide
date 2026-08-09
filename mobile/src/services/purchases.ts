@@ -51,9 +51,7 @@ export function revenueCatApiKey(): string | null {
 async function loadModule(): Promise<PurchasesModule | null> {
   if (Platform.OS === 'web') return null;
   if (!modulePromise) {
-    modulePromise = Promise.resolve()
-      .then(() => require('react-native-purchases') as PurchasesModule)
-      .catch(() => null);
+    modulePromise = import('react-native-purchases').catch(() => null);
   }
   return modulePromise;
 }

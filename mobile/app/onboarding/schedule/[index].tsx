@@ -10,14 +10,15 @@ import { useOnboardingTransition } from '@/components/onboardingTransition';
 import { getPreset, type Route, type Unit } from '@/domain/peptides';
 import {
   CUSTOM_MEDICATION_ID,
-  POST_SCHEDULE_ROUTES,
   SHOT_DAY_OPTIONS,
+  firstPostScheduleHref,
   medicationDisplayName,
   onboardingTotalSteps,
   scheduleStepIndex,
   type OnboardingFrequency,
   useOnboardingStore,
 } from '@/stores/onboarding';
+import { twiceWeeklyScheduleNote } from '@/utils/schedule';
 import { colors, spacing } from '@/theme';
 
 const FREQUENCIES: readonly { id: OnboardingFrequency; label: string }[] = [
@@ -41,6 +42,7 @@ export default function ScheduleScreen() {
   const index = Number.parseInt(params.index ?? '0', 10);
 
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
+  const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const schedules = useOnboardingStore((state) => state.schedules);
   const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
   const prepareSchedules = useOnboardingStore((state) => state.prepareSchedules);
@@ -56,7 +58,7 @@ export default function ScheduleScreen() {
   }, [prepareSchedules]);
 
   const total = medicationIds.length;
-  const totalSteps = onboardingTotalSteps();
+  const totalSteps = onboardingTotalSteps(journeyStage);
   const step = scheduleStepIndex(Number.isFinite(index) ? index : 0, total);
   const medicationId = Number.isInteger(index) && index >= 0 ? medicationIds[index] : undefined;
   const schedule = medicationId ? schedules[medicationId] : undefined;
@@ -85,9 +87,10 @@ export default function ScheduleScreen() {
 
   const goNext = () => {
     if (isLast) {
-      // The first screen of the post-schedule run. Its name lives in one place,
-      // so adding a step at the front of that run cannot orphan this jump.
-      transition.go(POST_SCHEDULE_ROUTES['last-shot']);
+      // The first screen of the post-schedule run, whichever screen that is for
+      // this journey stage. Naming a step here would send a user who has not
+      // started to a question their stage already answered.
+      transition.go(firstPostScheduleHref(journeyStage));
       return;
     }
     transition.go({ pathname: '/onboarding/schedule/[index]', params: { index: String(index + 1) } });
@@ -181,6 +184,13 @@ export default function ScheduleScreen() {
               />
             ))}
           </View>
+          {/* Twice a week picks the second day for the user. Name it while the
+              day is still under their finger, rather than after the plan is built. */}
+          {schedule.frequencyKind === 'twice_weekly' ? (
+            <Text variant="small" color={colors.inkMuted}>
+              {twiceWeeklyScheduleNote(schedule.shotDay)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 

@@ -7,9 +7,24 @@ import { colors, radius, spacing } from '../theme';
 type Meridiem = 'AM' | 'PM';
 
 const HOURS = Array.from({ length: 12 }, (_, index) => index + 1);
-// Every minute, not every fifth. `log-shot` passes the real time a shot was
-// taken, so 09:07 has to land on a row.
-const MINUTES = Array.from({ length: 60 }, (_, index) => index);
+
+/**
+ * Which minutes get a row.
+ *
+ * `log-shot` records the real time a shot was taken, so it leaves the step at 1
+ * and 09:07 lands on a row. A reminder is a time somebody picks, and sixty rows
+ * put 7:30 four hard flicks away from 7:00, so those screens pass 5.
+ *
+ * The current minute always gets a row, whatever the step. A reminder set to
+ * 7:28 on an older build has to stay reachable on the wheel that now steps by
+ * five, rather than silently reading as the first row.
+ */
+function minuteValues(step: number, current: number): readonly number[] {
+  const grid: number[] = [];
+  for (let minute = 0; minute < 60; minute += step) grid.push(minute);
+  if (grid.includes(current)) return grid;
+  return [...grid, current].sort((a, b) => a - b);
+}
 /** The band sits on the middle row, so it starts half a frame less half a row down. */
 const BAND_TOP = (WHEEL_FRAME_HEIGHT - WHEEL_ITEM_HEIGHT) / 2;
 
@@ -23,10 +38,18 @@ interface InlineTimePickerProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  /** Minutes between rows. See `minuteValues`. */
+  minuteStep?: number;
 }
 
-export function InlineTimePicker({ value, onChange, label = 'Reminder time' }: InlineTimePickerProps) {
+export function InlineTimePicker({
+  value,
+  onChange,
+  label = 'Reminder time',
+  minuteStep = 1,
+}: InlineTimePickerProps) {
   const time = parseTime(value);
+  const minutes = minuteValues(minuteStep, time.minute);
 
   const update = (next: TimeParts) => onChange(formatTime(next));
 
@@ -53,7 +76,7 @@ export function InlineTimePicker({ value, onChange, label = 'Reminder time' }: I
         <View style={styles.column}>
           <WheelPicker
             bare
-            values={MINUTES}
+            values={minutes}
             value={time.minute}
             onChange={(minute) => update({ ...time, minute })}
             format={(minute) => String(minute).padStart(2, '0')}
@@ -103,6 +126,17 @@ function formatTime(time: TimeParts): string {
 
 function displayTime(time: TimeParts): string {
   return `${time.hour}:${String(time.minute).padStart(2, '0')} ${time.meridiem}`;
+}
+
+/**
+ * A stored `HH:mm` as the clock a person reads.
+ *
+ * A settings row that opens this picker has to print the saved time, and it
+ * reads it through the same parser the wheels use, so the row and the wheels
+ * can never disagree about what is saved.
+ */
+export function clockLabel(value: string): string {
+  return displayTime(parseTime(value));
 }
 
 const styles = StyleSheet.create({

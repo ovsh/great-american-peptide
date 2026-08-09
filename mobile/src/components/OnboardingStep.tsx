@@ -58,15 +58,18 @@ export function OnboardingStep({
   contentStyle,
 }: OnboardingStepProps) {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
+  // The run is shorter for a user who has not started, so the index, the total
+  // and both targets read the order for that stage rather than the flat one.
+  const stage = useOnboardingStore((state) => state.journeyStage);
   const transition = useOnboardingTransition();
   const count = medicationIds.length;
-  const advance = () => transition.go(nextHref(step));
+  const advance = () => transition.go(nextHref(stage, step));
 
   return (
     <OnboardingScreen
-      step={postScheduleStepIndex(step)}
-      totalSteps={onboardingTotalSteps()}
-      backHref={previousHref(count, step)}
+      step={postScheduleStepIndex(stage, step)}
+      totalSteps={onboardingTotalSteps(stage)}
+      backHref={previousHref(stage, count, step)}
       transition={transition}
       title={title}
       subtitle={subtitle}

@@ -1,8 +1,10 @@
 import { Platform, Share } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 
+import { getBodySite } from '../domain/bodySites';
 import { buildExportCsv, exportFileName } from '../domain/exportCsv';
 import { sideEffectLabel } from '../domain/sideEffects';
+import type { InjectionRow } from '../db/types';
 import { listInjections } from '../repositories/injections';
 import { listMeasurements } from '../repositories/measurements';
 import { listMedications } from '../repositories/medications';
@@ -13,6 +15,17 @@ export type ExportOutcome =
   | { kind: 'dismissed' }
   | { kind: 'empty' }
   | { kind: 'failed'; message: string };
+
+/**
+ * `SC · Upper left abdomen`. The CSV has no route column, so the route rides in
+ * the detail column with the site. An id Poke no longer knows stays as it is
+ * rather than becoming a blank cell.
+ */
+function injectionDetail(row: InjectionRow): string {
+  const route = row.route.toUpperCase();
+  if (!row.site_id) return route;
+  return `${route} · ${getBodySite(row.site_id)?.label ?? row.site_id}`;
+}
 
 export async function exportHistory(now = Date.now()): Promise<ExportOutcome> {
   try {
@@ -29,7 +42,10 @@ export async function exportHistory(now = Date.now()): Promise<ExportOutcome> {
 
     const csv = buildExportCsv({
       medications,
-      injections,
+      // The file writes `site_id` into the detail column, and a clinician reads
+      // the file without knowing Poke. So the column carries the route and the
+      // site label instead of the storage key.
+      injections: injections.map((row) => ({ ...row, site_id: injectionDetail(row) })),
       weights,
       // The store keeps effects as a parsed shape; the file wants the label a
       // human reads.

@@ -1,43 +1,42 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Input } from '@/components/Input';
 import { OnboardingStep } from '@/components/OnboardingStep';
 import { Text } from '@/components/Text';
-import { useOnboardingStore } from '@/stores/onboarding';
+import { WeightPicker } from '@/components/WeightPicker';
+import { WEIGHT_REST, useOnboardingStore } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
 
 export default function GoalWeightScreen() {
   const weight = useOnboardingStore((state) => state.weight);
   const setWeightValue = useOnboardingStore((state) => state.setWeightValue);
 
-  const current = Number.parseFloat(weight.currentText);
-  const goal = Number.parseFloat(weight.goalText);
-  const canContinue = Number.isFinite(goal) && goal > 0;
-  const distance = Number.isFinite(current) && canContinue ? Math.abs(current - goal) : null;
+  const distance = weight.current !== null && weight.goal !== null
+    ? Math.abs(weight.current - weight.goal)
+    : null;
 
   return (
     <OnboardingStep
       step="goal-weight"
       title="What is your goal weight?"
       subtitle="Poke measures the distance between the two numbers."
-      canContinue={canContinue}
+      canContinue={weight.goal !== null}
       secondary={{
         label: 'Skip this',
         onPress: (advance) => {
-          setWeightValue('goal', '');
+          setWeightValue('goal', null);
           advance();
         },
       }}
     >
       <View style={styles.field}>
-        <Input
-          size="lg"
-          value={weight.goalText}
-          onChangeText={(value) => setWeightValue('goal', value)}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
-          placeholder={`Your goal in ${weight.unit}`}
-          returnKeyType="done"
+        <WeightPicker
+          unit={weight.unit}
+          value={weight.goal}
+          // The wheel rests on the weight the user has just given, so the scroll
+          // starts from where they are. Resting it below that would be Poke
+          // pointing at a target, and Poke does not pick the target.
+          rest={weight.current ?? WEIGHT_REST[weight.unit]}
+          onChange={(value) => setWeightValue('goal', value)}
           accessibilityLabel="Goal weight"
         />
         {distance !== null ? (

@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Input } from '@/components/Input';
+import { HeightPicker } from '@/components/HeightPicker';
 import { ChoicePill } from '@/components/OnboardingScreen';
 import { OnboardingStep } from '@/components/OnboardingStep';
 import type { HeightUnit } from '@/domain/units';
@@ -8,7 +8,7 @@ import { useOnboardingStore } from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 const UNITS: readonly { id: HeightUnit; label: string }[] = [
-  { id: 'in', label: 'inches' },
+  { id: 'in', label: 'feet and inches' },
   { id: 'cm', label: 'cm' },
 ];
 
@@ -16,10 +16,6 @@ export default function HeightScreen() {
   const height = useOnboardingStore((state) => state.height);
   const setHeightUnit = useOnboardingStore((state) => state.setHeightUnit);
   const setHeightValue = useOnboardingStore((state) => state.setHeightValue);
-
-  const value = height.valueText;
-  const parsed = Number.parseFloat(value);
-  const canContinue = Number.isFinite(parsed) && parsed > 0;
 
   return (
     <OnboardingStep
@@ -29,29 +25,23 @@ export default function HeightScreen() {
       // weight pair: height plus weight is a BMI, and a BMI is a formula, not a
       // guess about a body.
       subtitle="Poke needs your height and your weight for a BMI. Skip it and Poke shows no BMI."
-      canContinue={canContinue}
-      // The skip clears the field rather than setting a flag. An empty string is
-      // the only record of a skip anywhere in the draft, so a user who types a
-      // height, goes back, then skips does not leave a stale number behind.
+      // The wheel rests on a middle row so it does not open on 4 ft 0 in, and it
+      // writes nothing until a finger settles it. A BMI on the plan card built
+      // from a row the user never touched would be a made-up number.
+      canContinue={height.value !== null}
+      // The skip clears the answer rather than setting a flag. Null is the only
+      // record of a skip anywhere in the draft, so a user who sets a height,
+      // goes back, then skips does not leave a stale number behind.
       secondary={{
         label: 'Skip this',
         onPress: (advance) => {
-          setHeightValue('');
+          setHeightValue(null);
           advance();
         },
       }}
     >
       <View style={styles.field}>
-        <Input
-          size="lg"
-          value={value}
-          onChangeText={setHeightValue}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
-          placeholder={height.unit === 'in' ? 'Your height in inches' : 'Your height in cm'}
-          returnKeyType="done"
-          accessibilityLabel="Height"
-        />
+        <HeightPicker unit={height.unit} value={height.value} onChange={setHeightValue} />
         <View style={styles.units}>
           {UNITS.map((unit) => (
             <ChoicePill

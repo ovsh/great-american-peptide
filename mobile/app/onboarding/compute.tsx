@@ -15,6 +15,7 @@ import {
 } from '@/stores/onboarding';
 import { getPreset, hasPublishedHalfLife } from '@/domain/peptides';
 import { colors, onboardingMotion, radius, spacing } from '@/theme';
+import { fmtClock } from '@/utils/date';
 
 const RING_SIZE = 176;
 const RING_STROKE = 10;
@@ -198,9 +199,9 @@ export function computeLines(draft: OnboardingDraft): string[] {
 
   lines.push('Working out the first four injection sites in the rotation');
 
-  const current = Number.parseFloat(draft.weight.currentText);
-  const goal = Number.parseFloat(draft.weight.goalText);
-  if (Number.isFinite(current) && Number.isFinite(goal) && current !== goal) {
+  const current = draft.weight.current;
+  const goal = draft.weight.goal;
+  if (current !== null && goal !== null && current !== goal) {
     lines.push(`Mapping ${format(current)} ${draft.weight.unit} to ${format(goal)} ${draft.weight.unit} at your pace`);
   }
 
@@ -212,7 +213,7 @@ export function computeLines(draft: OnboardingDraft): string[] {
   // refused the OS permission, sets no reminder, and a line that says otherwise
   // is the one kind of claim this list exists to avoid.
   if (draft.reminder.kind === 'enabled') {
-    lines.push(`Setting your reminder for ${draft.reminder.time}`);
+    lines.push(`Setting your reminder for ${fmtClock(draft.reminder.time)}`);
   }
 
   return lines;

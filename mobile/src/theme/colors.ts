@@ -36,7 +36,24 @@ export const colors = {
   blue: '#4A9FE8',
   cardShadow: '#111418',
 
-  med: ['#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C', '#2FB47C'] as const,
+  /**
+   * One colour per medication, picked by `color_index`.
+   *
+   * The Americana purge replaced all six hues with the accent green, so every
+   * medication drew the same dot and the calendar showed two shots on a day
+   * without saying which two. A dot on a day cell carries no name, so this ramp
+   * is the only thing that separates them.
+   *
+   * `amber` is weight and `violet` is a side effect everywhere else in the app,
+   * so neither belongs here. A medication is an identity, not a kind of entry,
+   * and one hue cannot mean both. Index 0 stays the accent, because one
+   * medication is the common case and a shot is green.
+   *
+   * The order is the order `nextColorIndex` hands out. The closest pair sits
+   * furthest apart in that order, so the sixth medication is the first one that
+   * has to lean on lightness rather than hue.
+   */
+  med: ['#2FB47C', '#4A9FE8', '#D9639B', '#7A9E2E', '#5457C4', '#2A8F9E'] as const,
 } as const;
 
 export type Color = keyof typeof colors;

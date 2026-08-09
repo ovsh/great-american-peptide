@@ -12,7 +12,8 @@ import { spacing } from '@/theme';
 
 // Step 1, and the only branch in the flow. The answer changes the wording of the
 // medication question on the next screen, exactly as it does in the recording:
-// "taking" against "plan to use". Nothing else in the run depends on it.
+// "taking" against "plan to use". It also takes the last-shot question out of
+// the run for a user who has not started. See `postScheduleOrder`.
 export default function JourneyScreen() {
   const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const setJourneyStage = useOnboardingStore((state) => state.setJourneyStage);
@@ -21,7 +22,7 @@ export default function JourneyScreen() {
   return (
     <OnboardingScreen
       step={1}
-      totalSteps={onboardingTotalSteps()}
+      totalSteps={onboardingTotalSteps(journeyStage)}
       backHref="/onboarding/privacy"
       transition={transition}
       title="Have you started yet?"

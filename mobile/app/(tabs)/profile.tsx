@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Info, Pill, Scale, Share2, Sparkles, Star, Target } from 'lucide-react-native';
+import { Bell, ChevronRight, Info, KeyRound, Pill, Scale, Share2, Sparkles, Star, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { InlineTimePicker } from '@/components/InlineTimePicker';
+import { clockLabel, InlineTimePicker } from '@/components/InlineTimePicker';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
@@ -24,7 +24,13 @@ import { ensureNotificationPermission, refreshScheduledReminders } from '@/servi
 import { openManageSubscriptions } from '@/services/purchases';
 import { maybePromptForReview, openWriteReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
-import { useEntitlementStore, useIsPro, usePaywallEnabled, type DevOverride } from '@/stores/entitlement';
+import {
+  useEntitlementStore,
+  useIsPro,
+  usePaywallEnabled,
+  useTesterProAt,
+  type DevOverride,
+} from '@/stores/entitlement';
 import { openPaywall } from '@/components/ProLock';
 import { colors, spacing } from '@/theme';
 
@@ -37,13 +43,17 @@ export default function ProfileScreen() {
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const pro = useIsPro();
   const paywallEnabled = usePaywallEnabled();
   const restoring = useEntitlementStore((state) => state.restoring);
   const restore = useEntitlementStore((state) => state.restore);
+  const clearError = useEntitlementStore((state) => state.clearError);
+  const storeStatus = useEntitlementStore((state) => state.status);
   const devOverride = useEntitlementStore((state) => state.devOverride);
   const setDevOverride = useEntitlementStore((state) => state.setDevOverride);
+  const testerProAt = useTesterProAt();
 
   const load = useCallback(async () => {
     const row = await getPreferences();
@@ -135,11 +145,59 @@ export default function ProfileScreen() {
     }
   };
 
+  // The alert is where this outcome is shown, so the stored message is cleared
+  // as soon as it is read. Left set, it reappears later on the paywall, under a
+  // purchase the user never attempted.
   const runRestore = async () => {
     const outcome = await restore();
-    if (outcome === 'restored') Alert.alert('Poke Pro is active', 'Your subscription is back on this device.');
-    else if (outcome === 'none') Alert.alert('No subscription found', 'Poke found no active subscription for this Apple Account.');
+    const message = useEntitlementStore.getState().error;
+    clearError();
+    if (outcome === 'restored') {
+      Alert.alert('Poke Pro is active', 'Your subscription is back on this device.');
+    } else if (outcome === 'none') {
+      Alert.alert('No subscription found', 'Poke found no active subscription for this Apple Account.');
+    } else {
+      Alert.alert('Poke could not restore your subscription', message ?? 'Try again.');
+    }
   };
+
+  /**
+   * What this row may claim. `useIsPro` is true for three different reasons and
+   * only one of them is a purchase, so a tester and a subscriber were both told
+   * to manage a subscription in an Apple Account. The tester has none, and the
+   * tap left them on an App Store page with nothing on it.
+   *
+   * The order matches `accessFromState`: a tester grant wins over the store, so
+   * it is read first here too. The third case is a store Poke asked and could
+   * not reach, which unlocks every feature without selling anything.
+   */
+  const subscription = testerProAt !== null
+    ? {
+      title: 'Poke Pro',
+      detail: 'A tester code turned Poke Pro on',
+      action: 'Open tester access',
+      onPress: () => router.push('/redeem'),
+    }
+    : storeStatus === 'pro'
+      ? {
+        title: 'Poke Pro',
+        detail: 'Active · manage in your Apple Account',
+        action: 'Manage subscription',
+        onPress: openManageSubscriptions,
+      }
+      : pro
+        ? {
+          title: 'Poke Pro',
+          detail: 'Poke could not reach the App Store',
+          action: 'See Poke Pro',
+          onPress: openPaywall,
+        }
+        : {
+          title: 'Get Poke Pro',
+          detail: 'Levels, trends and export',
+          action: 'See Poke Pro',
+          onPress: openPaywall,
+        };
 
   return (
     <View style={styles.root}>
@@ -151,16 +209,14 @@ export default function ProfileScreen() {
             <Card padding="xs" style={styles.groupCard}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={pro ? 'Manage subscription' : 'See Poke Pro'}
-                onPress={() => (pro ? openManageSubscriptions() : openPaywall())}
+                accessibilityLabel={subscription.action}
+                onPress={subscription.onPress}
                 style={({ pressed }) => [styles.row, styles.divider, pressed && styles.pressed]}
               >
                 <View style={styles.rowIcon}><Sparkles size={20} color={colors.accent} /></View>
                 <View style={styles.rowCopy}>
-                  <Text variant="bodyStrong">{pro ? 'Poke Pro' : 'Get Poke Pro'}</Text>
-                  <Text variant="small" color={colors.inkMuted}>
-                    {pro ? 'Active · manage in your Apple Account' : 'Levels, trends and export'}
-                  </Text>
+                  <Text variant="bodyStrong">{subscription.title}</Text>
+                  <Text variant="small" color={colors.inkMuted}>{subscription.detail}</Text>
                 </View>
                 <ChevronRight size={19} color={colors.inkSubtle} />
               </Pressable>
@@ -206,11 +262,25 @@ export default function ProfileScreen() {
                 thumbColor={colors.surface}
               />
             </View>
+            {/* The wheels used to sit open on this page, inside its ScrollView.
+                A wheel takes every vertical drag that starts on it, so scrolling
+                past the Reminders card moved the saved time and said nothing.
+                Behind a row it cannot catch a scroll, and it matches the two
+                rows below it. */}
             {preferences?.notifications_enabled === 1 ? (
-              <View style={styles.pickerRow}>
-                <Text variant="smallStrong">Reminder time</Text>
-                <InlineTimePicker value={preferences.reminder_time} onChange={setReminderTime} />
-              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit reminder time"
+                onPress={() => setTimeOpen(true)}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              >
+                <View style={styles.rowIcon} />
+                <View style={styles.rowCopy}>
+                  <Text variant="bodyStrong">Reminder time</Text>
+                  <Text variant="small" color={colors.inkMuted}>{clockLabel(preferences.reminder_time)}</Text>
+                </View>
+                <ChevronRight size={19} color={colors.inkSubtle} />
+              </Pressable>
             ) : null}
           </Card>
         </SettingsSection>
@@ -292,6 +362,17 @@ export default function ProfileScreen() {
           </Card>
         </SettingsSection>
 
+        {/* The only way into /redeem. The paywall never links here: a buyer
+            reading a price must not be shown a way around it. */}
+        <SettingsSection label="Testers">
+          <SettingsRow
+            icon={<KeyRound size={20} color={colors.inkMuted} />}
+            label="Tester access"
+            detail={testerProAt === null ? 'Enter a code from Poke' : 'A code keeps Poke Pro on'}
+            onPress={() => router.push('/redeem')}
+          />
+        </SettingsSection>
+
         {__DEV__ ? (
           <SettingsSection label="Developer">
             <Card padding="xs" style={styles.groupCard}>
@@ -311,6 +392,21 @@ export default function ProfileScreen() {
           </SettingsSection>
         ) : null}
       </ScrollView>
+
+      <BottomSheet visible={timeOpen} title="Reminder time" onClose={() => setTimeOpen(false)}>
+        <View style={styles.timeSheet}>
+          {/* Five minute rows, the same grid the onboarding screen uses.
+              A time already saved off the grid keeps its own row. */}
+          <InlineTimePicker
+            value={preferences?.reminder_time ?? '09:00'}
+            onChange={setReminderTime}
+            minuteStep={5}
+          />
+          {/* The wheel saves each turn, so this closes the sheet and nothing
+              else. A label that said "Save" would name work already done. */}
+          <Button onPress={() => setTimeOpen(false)}>Done</Button>
+        </View>
+      </BottomSheet>
 
       <BottomSheet visible={goalOpen} title="Goal weight" onClose={() => setGoalOpen(false)}>
         <View style={styles.goalSheet}>
@@ -335,6 +431,22 @@ export default function ProfileScreen() {
               <Text variant="h2">Poke</Text>
               <Text variant="small" color={colors.inkMuted}>A private log for your routine.</Text>
             </View>
+          </View>
+          {/* The row that opens this sheet says "Privacy and medical disclaimer",
+              and until now the sheet carried only the second half. Privacy is the
+              reason a lot of people install Poke, so the one place they go looking
+              for it should say it. Every line here is checkable: the package list
+              holds no analytics SDK, `src/` and `app/` make no network call, and
+              the only dependency that reaches a server is RevenueCat, which
+              carries a purchase receipt and never the log. */}
+          <View style={styles.disclaimer}>
+            <Text variant="bodyStrong">Privacy</Text>
+            <Text color={colors.inkMuted}>
+              Your log stays on this device. Poke has no account and no sign-in. Poke sends no health data anywhere.
+            </Text>
+            <Text variant="small" color={colors.inkMuted}>
+              Poke keeps no copy on a server, so export your history before you remove the app.
+            </Text>
           </View>
           <View style={styles.disclaimer}>
             <Text variant="bodyStrong">Medical disclaimer</Text>
@@ -467,6 +579,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   goalSheet: {
+    gap: spacing.md,
+  },
+  timeSheet: {
     gap: spacing.md,
   },
   pressed: {

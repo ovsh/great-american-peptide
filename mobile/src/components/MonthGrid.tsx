@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import {
@@ -15,40 +15,46 @@ import {
 
 import { Card } from './Card';
 import { Text } from './Text';
-import type { InjectionRow, MedicationRow } from '../db/types';
+import type { MedicationRow } from '../db/types';
 import { colors, radius, spacing } from '../theme';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
 
 interface MonthGridProps {
-  injections: readonly InjectionRow[];
+  /**
+   * The month on screen. The parent owns it, because the parent reads that one
+   * month out of the database. The grid used to hold the month itself and take
+   * a capped list of every shot ever logged, so a user past the cap read empty
+   * squares over months that hold shots.
+   */
+  month: Date;
+  onMonthChange: (month: Date) => void;
+  /** Which medications have a shot on each day, keyed `yyyy-MM-dd`. */
+  dotsByDay: ReadonlyMap<string, readonly string[]>;
   medications: Readonly<Record<string, MedicationRow>>;
   selected: Date;
   onSelect: (date: Date) => void;
 }
 
-export function MonthGrid({ injections, medications, selected, onSelect }: MonthGridProps) {
-  const [cursor, setCursor] = useState(() => startOfMonth(selected));
+export function MonthGrid({
+  month,
+  onMonthChange,
+  dotsByDay,
+  medications,
+  selected,
+  onSelect,
+}: MonthGridProps) {
+  const cursor = startOfMonth(month);
   const days = useMemo(() => {
-    const first = startOfMonth(cursor);
+    const first = startOfMonth(month);
     const padding = Array.from({ length: getDay(first) }, () => null);
-    return [...padding, ...eachDayOfInterval({ start: first, end: endOfMonth(cursor) })];
-  }, [cursor]);
-  const dotsByDay = useMemo(() => {
-    const result = new Map<string, Set<string>>();
-    for (const injection of injections) {
-      const key = format(injection.taken_at, 'yyyy-MM-dd');
-      const medicationIds = result.get(key) ?? new Set<string>();
-      medicationIds.add(injection.medication_id);
-      result.set(key, medicationIds);
-    }
-    return result;
-  }, [injections]);
+    return [...padding, ...eachDayOfInterval({ start: first, end: endOfMonth(first) })];
+  }, [month]);
 
   const moveMonth = (amount: number) => {
-    const next = addMonths(cursor, amount);
-    setCursor(next);
-    if (!isSameMonth(selected, next)) onSelect(startOfMonth(next));
+    const next = startOfMonth(addMonths(cursor, amount));
+    onMonthChange(next);
+    if (!isSameMonth(selected, next)) onSelect(next);
   };
 
   return (
@@ -100,7 +106,7 @@ export function MonthGrid({ injections, medications, selected, onSelect }: Month
               </View>
               <View style={styles.dots}>
                 {medicationIds
-                  ? Array.from(medicationIds).slice(0, 3).map((medicationId) => {
+                  ? medicationIds.slice(0, 3).map((medicationId) => {
                       const medication = medications[medicationId];
                       const color = medication
                         ? colors.med[medication.color_index % colors.med.length] ?? colors.accent

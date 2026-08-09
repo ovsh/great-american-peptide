@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, Linking, StyleSheet, View } from 'react-native';
 import { Bell } from 'lucide-react-native';
 
 import { OnboardingStep } from '@/components/OnboardingStep';
@@ -7,6 +7,7 @@ import { Text } from '@/components/Text';
 import { ensureNotificationPermission } from '@/services/notifications';
 import { medicationDisplayName, useOnboardingStore } from '@/stores/onboarding';
 import { colors, radius, spacing } from '@/theme';
+import { fmtClock } from '@/utils/date';
 
 export default function NotificationsScreen() {
   const reminder = useOnboardingStore((state) => state.reminder);
@@ -14,6 +15,7 @@ export default function NotificationsScreen() {
   const setReminderEnabled = useOnboardingStore((state) => state.setReminderEnabled);
   const preview = useNotificationPreview();
   const [requesting, setRequesting] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // The permission sheet has to open on a press, so the fade starts only after
@@ -26,11 +28,12 @@ export default function NotificationsScreen() {
     try {
       const granted = await ensureNotificationPermission();
       setReminderEnabled(granted);
+      setDenied(!granted);
       if (granted) {
         advance();
         return;
       }
-      setMessage('Poke has no permission to send notifications. You can continue without a reminder, and turn it on later in Profile.');
+      setMessage('Poke has no permission to send notifications. You can open the Settings app to allow it, or continue without a reminder.');
     } catch {
       setReminderEnabled(false);
       setMessage('Poke could not turn on notifications here. You can continue without a reminder.');
@@ -38,6 +41,24 @@ export default function NotificationsScreen() {
       setRequesting(false);
     }
   };
+
+  // iOS shows the permission sheet once and never again, so after a denial the
+  // Settings app is the only place the answer can change. Ask again when the
+  // user comes back, otherwise the screen would still be saying no to somebody
+  // who has just said yes. A second request on a denied app opens nothing.
+  useEffect(() => {
+    if (!denied) return;
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void ensureNotificationPermission().then((granted) => {
+        if (!granted) return;
+        setReminderEnabled(true);
+        setDenied(false);
+        setMessage(null);
+      });
+    });
+    return () => listener.remove();
+  }, [denied, setReminderEnabled]);
 
   return (
     <OnboardingStep
@@ -47,13 +68,24 @@ export default function NotificationsScreen() {
       // two-medication run gets two notifications. The singular claim was true
       // for one medication and false for everyone else.
       subtitle={medicationCount > 1
-        ? `One notification for each medication on its shot day, at ${reminder.time}. Poke sends nothing else.`
-        : `One notification on your shot day, at ${reminder.time}. Poke sends nothing else.`}
-      continueLabel={requesting ? 'Checking permission' : 'Turn on reminders'}
+        ? `One notification for each medication on its shot day, at ${fmtClock(reminder.time)}. Poke sends nothing else.`
+        : `One notification on your shot day, at ${fmtClock(reminder.time)}. Poke sends nothing else.`}
+      // Once iOS has been told no, pressing "Turn on reminders" again opens
+      // nothing and changes nothing. The button names the one thing left that
+      // can change the answer, and the skip below it says the flow carries on.
+      continueLabel={requesting
+        ? 'Checking permission'
+        : denied ? 'Open the Settings app' : 'Turn on reminders'}
       canContinue={!requesting}
-      onContinue={(advance) => { void ask(advance); }}
+      onContinue={(advance) => {
+        if (denied) {
+          void Linking.openSettings();
+          return;
+        }
+        void ask(advance);
+      }}
       secondary={{
-        label: 'Not now',
+        label: denied ? 'Continue without a reminder' : 'Not now',
         onPress: (advance) => {
           setReminderEnabled(false);
           advance();

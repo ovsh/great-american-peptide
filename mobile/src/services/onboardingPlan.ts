@@ -12,12 +12,15 @@
 //
 // This module holds the math so the screen only draws it.
 
+import { isSameDay } from 'date-fns';
+
 import { bodySites } from '../domain/bodySites';
 import { getPreset, hasPublishedHalfLife, type Route, type Unit } from '../domain/peptides';
 import { levelTrajectory, type DoseEvent } from '../domain/pk';
 import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
 import { recommendNextSite } from '../domain/rotation';
 import { bmi, bmiCategory } from '../domain/units';
+import { startOfDay } from '../utils/date';
 import {
   CUSTOM_MEDICATION_ID,
   SHOT_DAY_OPTIONS,
@@ -143,10 +146,9 @@ export function planProjection(
   weeklyPace: number,
   now: number,
 ): PlanProjection | null {
-  const current = Number.parseFloat(weight.currentText);
-  const goal = Number.parseFloat(weight.goalText);
+  const { current, goal } = weight;
   const pace = Math.abs(weeklyPace);
-  if (!Number.isFinite(current) || !Number.isFinite(goal)) return null;
+  if (current === null || goal === null) return null;
   if (current <= 0 || goal <= 0 || current === goal) return null;
   if (!Number.isFinite(pace) || pace <= 0) return null;
 
@@ -164,12 +166,12 @@ export function planProjection(
   };
 }
 
-// BMI from the two numbers the user typed, through the same `domain/units`
+// BMI from the two numbers the user chose, through the same `domain/units`
 // function the rest of the app uses. No height, no BMI, and no card.
 function body(draft: OnboardingDraft): PlanBody | null {
-  const weight = Number.parseFloat(draft.weight.currentText);
-  const height = Number.parseFloat(draft.height.valueText);
-  if (!Number.isFinite(weight) || !Number.isFinite(height)) return null;
+  const weight = draft.weight.current;
+  const height = draft.height.value;
+  if (weight === null || height === null) return null;
   if (weight <= 0 || height <= 0) return null;
 
   const value = bmi(weight, draft.weight.unit, height, draft.height.unit);
@@ -185,13 +187,23 @@ function planMedication(
 ): PlanMedication {
   const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
   const dose = Number.parseFloat(schedule.doseText);
-  const doses = upcomingDoses(id, schedule, draft.reminder.time, now, dose);
   // The last-shot answer is worth asking only if it changes something. It does:
   // a dose already in the body puts the curve above zero at week one instead of
   // starting it from a flat line the user knows is wrong. Only the two answers
   // that name an exact day are used. See `lastShotAt` in `services/onboarding`.
   const prior = priorDose(draft.lastShot, now, dose);
+  // A shot taken today is today's shot, and the calendar still names today, so
+  // one of the two has to go or the plan counts one dose twice: the curve opens
+  // on a peak nobody dosed for, and the card offers a shot the user has just
+  // said they took. The answer beats the calendar, because the answer happened.
+  const scheduled = upcomingDoses(id, schedule, draft.reminder.time, now, dose);
+  const doses = prior
+    ? scheduled.filter((event) => !isSameDay(event.takenAt, prior.takenAt))
+    : scheduled;
   const curveDoses = prior ? [prior, ...doses] : doses;
+  // What the next four weeks hold, counting a shot already taken today and not
+  // one taken yesterday. Both are in the curve. Only one is in the window.
+  const windowStart = startOfDay(now);
 
   return {
     id,
@@ -199,8 +211,8 @@ function planMedication(
     doseLabel: `${schedule.doseText.trim()} ${schedule.unit}`,
     scheduleLabel: scheduleLabel(schedule),
     nextShotAt: doses[0]?.takenAt ?? null,
-    shotsInFourWeeks: doses.length,
-    curve: preset && hasPublishedHalfLife(preset) && doses.length > 0
+    shotsInFourWeeks: curveDoses.filter((event) => event.takenAt >= windowStart).length,
+    curve: preset && hasPublishedHalfLife(preset) && curveDoses.length > 0
       ? buildCurve(curveDoses, preset.halfLifeHours, preset.tmaxHours, schedule.unit, now)
       : null,
     evidenceNote: preset

@@ -11,6 +11,7 @@ import { Text } from '@/components/Text';
 import {
   SIDE_EFFECT_PRESETS,
   makeCustomSideEffect,
+  sideEffectLabel,
   type SideEffect,
   type SideEffectPresetId,
 } from '@/domain/sideEffects';
@@ -23,11 +24,28 @@ type EffectChoice =
   | { kind: 'preset'; id: SideEffectPresetId }
   | { kind: 'custom' };
 
+/** The bottom of the scale the slider draws. It is a real answer, never a default. */
+const SEVERITY_MIN = 0;
+
+/**
+ * A typed label that reads as a preset becomes that preset. The storage key of a
+ * custom effect differs from the preset id, so "Nausea" typed by hand would count
+ * as a second effect on Progress. Match here, at the caller, and leave the key alone.
+ */
+function presetForLabel(value: string): SideEffect | null {
+  const typed = value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  if (!typed) return null;
+  const preset = SIDE_EFFECT_PRESETS.find((option) => option.label.toLocaleLowerCase() === typed);
+  return preset ? { kind: 'preset', id: preset.id } : null;
+}
+
 export default function LogSideEffectScreen() {
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [choice, setChoice] = useState<EffectChoice>({ kind: 'preset', id: 'nausea' });
   const [customEffect, setCustomEffect] = useState('');
-  const [severity, setSeverity] = useState(3);
+  // Null until the user sets it. `severity` is NOT NULL in the table and 0 is a real
+  // answer on the scale, so an untouched slider must not reach the row at all.
+  const [severity, setSeverity] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -37,12 +55,13 @@ export default function LogSideEffectScreen() {
     if (returnTimer.current) clearTimeout(returnTimer.current);
   }, []);
 
+  const typedPreset = choice.kind === 'custom' ? presetForLabel(customEffect) : null;
   const effect: SideEffect | null = choice.kind === 'preset'
     ? { kind: 'preset', id: choice.id }
-    : makeCustomSideEffect(customEffect);
+    : typedPreset ?? makeCustomSideEffect(customEffect);
 
   const save = async () => {
-    if (saving || !effect) return;
+    if (saving || !effect || severity === null) return;
     setSaving(true);
     try {
       await createSideEffect({
@@ -103,14 +122,21 @@ export default function LogSideEffectScreen() {
             </Pressable>
           </View>
           {choice.kind === 'custom' ? (
-            <Input
-              autoFocus
-              value={customEffect}
-              onChangeText={setCustomEffect}
-              placeholder="Name the side effect"
-              accessibilityLabel="Custom side effect"
-              maxLength={60}
-            />
+            <>
+              <Input
+                autoFocus
+                value={customEffect}
+                onChangeText={setCustomEffect}
+                placeholder="Name the side effect"
+                accessibilityLabel="Custom side effect"
+                maxLength={60}
+              />
+              {typedPreset ? (
+                <Text variant="caption" color={colors.inkMuted}>
+                  Poke logs this as {sideEffectLabel(typedPreset)}.
+                </Text>
+              ) : null}
+            </>
           ) : null}
         </View>
 
@@ -120,9 +146,23 @@ export default function LogSideEffectScreen() {
               <Text variant="smallStrong">Severity</Text>
               <Text variant="small" color={colors.inkMuted}>Drag to set 0 through 10.</Text>
             </View>
-            <Text accessibilityLiveRegion="polite" style={styles.severityValue}>{severity}</Text>
+            {severity === null ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                variant="smallStrong"
+                color={colors.inkMuted}
+                style={styles.severityUnset}
+              >
+                Not set
+              </Text>
+            ) : (
+              <Text accessibilityLiveRegion="polite" style={styles.severityValue}>{severity}</Text>
+            )}
           </View>
-          <SeveritySlider value={severity} onChange={setSeverity} />
+          <SeveritySlider value={severity ?? SEVERITY_MIN} onChange={setSeverity} />
+          {severity === null ? (
+            <Text variant="caption" color={colors.inkMuted}>Poke saves the side effect after you set the severity.</Text>
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -142,7 +182,9 @@ export default function LogSideEffectScreen() {
             <Text variant="smallStrong" color={colors.accent}>Saved</Text>
           </View>
         ) : null}
-        <Button disabled={saving || !effect} onPress={save}>{saving ? 'Saving' : 'Log side effect'}</Button>
+        <Button disabled={saving || !effect || severity === null} onPress={save}>
+          {saving ? 'Saving' : 'Log side effect'}
+        </Button>
       </ScrollView>
     </View>
   );
@@ -192,6 +234,12 @@ const styles = StyleSheet.create({
   },
   severityCopy: {
     gap: 2,
+  },
+  // The unset readout holds the height of the number it replaces, so the section
+  // does not jump the moment the user sets a severity.
+  severityUnset: {
+    lineHeight: 46,
+    textAlign: 'right',
   },
   severityValue: {
     minWidth: 44,

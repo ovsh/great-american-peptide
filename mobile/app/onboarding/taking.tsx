@@ -41,7 +41,7 @@ export default function TakingScreen() {
   return (
     <OnboardingScreen
       step={2}
-      totalSteps={onboardingTotalSteps()}
+      totalSteps={onboardingTotalSteps(journeyStage)}
       backHref="/onboarding/journey"
       transition={transition}
       // The wording follows the answer on the previous screen, the way the

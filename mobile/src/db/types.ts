@@ -90,6 +90,8 @@ export interface PreferencesRow {
   /** Weight change per week the user chose on the pace screen, in `weight_unit`. */
   weekly_pace: number | null;
   last_shot_at: number | null;
+  /** When a tester code unlocked Poke Pro on this device. Null when no code is active. */
+  tester_pro_at: number | null;
   updated_at: number;
 }
 

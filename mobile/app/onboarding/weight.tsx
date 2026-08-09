@@ -1,10 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Input } from '@/components/Input';
 import { ChoicePill } from '@/components/OnboardingScreen';
 import { OnboardingStep } from '@/components/OnboardingStep';
+import { WeightPicker } from '@/components/WeightPicker';
 import type { WeightUnit } from '@/domain/units';
-import { useOnboardingStore } from '@/stores/onboarding';
+import { WEIGHT_REST, useOnboardingStore } from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
 const UNITS: readonly WeightUnit[] = ['lb', 'kg'];
@@ -14,32 +14,29 @@ export default function WeightScreen() {
   const setWeightUnit = useOnboardingStore((state) => state.setWeightUnit);
   const setWeightValue = useOnboardingStore((state) => state.setWeightValue);
 
-  const parsed = Number.parseFloat(weight.currentText);
-  const canContinue = Number.isFinite(parsed) && parsed > 0;
-
   return (
     <OnboardingStep
       step="weight"
       title="What do you weigh right now?"
       subtitle="This is your starting point. You can change this number whenever you weigh yourself."
-      canContinue={canContinue}
+      // The resting row is a place to start scrolling from and not an answer.
+      // The plan card draws a line between this number and the goal, so Continue
+      // waits until the wheel has been settled.
+      canContinue={weight.current !== null}
       secondary={{
         label: 'Skip this',
         onPress: (advance) => {
-          setWeightValue('current', '');
+          setWeightValue('current', null);
           advance();
         },
       }}
     >
       <View style={styles.field}>
-        <Input
-          size="lg"
-          value={weight.currentText}
-          onChangeText={(value) => setWeightValue('current', value)}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
-          placeholder={`Your weight in ${weight.unit}`}
-          returnKeyType="done"
+        <WeightPicker
+          unit={weight.unit}
+          value={weight.current}
+          rest={WEIGHT_REST[weight.unit]}
+          onChange={(value) => setWeightValue('current', value)}
           accessibilityLabel="Current weight"
         />
         <View style={styles.units}>

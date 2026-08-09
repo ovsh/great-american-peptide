@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Check, ChevronRight, Flame, Plus, Syringe } from 'lucide-react-native';
 import { format, isSameDay } from 'date-fns';
@@ -7,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { CardPager } from '@/components/CardPager';
+import { ProLock } from '@/components/ProLock';
 import { Sparkline } from '@/components/Sparkline';
 import { Text } from '@/components/Text';
 import type {
@@ -31,10 +40,14 @@ import { getPreferences } from '@/repositories/preferences';
 import { maybePromptForReview } from '@/services/review';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
+import { useIsPro } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { endOfDay, fmtTime, startOfDay } from '@/utils/date';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The reading column. `styles.content` caps itself here, and so does one page. */
+const CONTENT_MAX_WIDTH = 600;
 
 type TodayDoseAction =
   | { kind: 'none' }
@@ -47,21 +60,26 @@ interface MedicationSummary {
   nextAt: number;
   level: number | null;
   weekLevels: number[];
+  /** The one action this medication offers today. It rides with the card. */
+  action: TodayDoseAction;
 }
 
 interface TodayDashboard {
-  medication: MedicationSummary | null;
+  medications: MedicationSummary[];
   weight: MeasurementRow | null;
   weightSeries: number[];
   weightUnit: WeightUnit;
   sideEffect: SideEffectLog | null;
-  action: TodayDoseAction;
   streak: ScheduleStreak;
 }
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const dataVersion = useAppStore((state) => state.dataVersion);
+  // The level is the paid part of this screen. `app/_layout.tsx` holds the first
+  // paint until the entitlement settles, so this is an answer and never a guess.
+  const pro = useIsPro();
   const [medications, setMedications] = useState<MedicationRow[]>([]);
   const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
@@ -96,9 +114,22 @@ export default function TodayScreen() {
   }, [dataVersion, load]);
 
   const dashboard = useMemo(
-    () => buildDashboard({ medications, injections, weights, preferences, sideEffects, now: Date.now() }),
-    [injections, medications, preferences, sideEffects, weights],
+    () => buildDashboard({
+      medications,
+      injections,
+      weights,
+      preferences,
+      sideEffects,
+      estimateLevels: pro,
+      now: Date.now(),
+    }),
+    [injections, medications, preferences, pro, sideEffects, weights],
   );
+
+  // The pager needs a page width before it can snap to one. The column already
+  // fixes that width, so read it from the window rather than from `onLayout`:
+  // a measured width costs one blank frame, and that frame is the hero card.
+  const pageWidth = Math.max(0, Math.min(windowWidth, CONTENT_MAX_WIDTH) - spacing.screen * 2);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -126,14 +157,7 @@ export default function TodayScreen() {
       >
         <TodayHeader streak={dashboard.streak.current} />
 
-        {dashboard.medication ? (
-          <>
-            <MedicationCard summary={dashboard.medication} />
-            <DoseAction action={dashboard.action} />
-          </>
-        ) : (
-          <EmptyMedication />
-        )}
+        <MedicationSection medications={dashboard.medications} pageWidth={pageWidth} pro={pro} />
 
         <View style={styles.tiles}>
           <WeightTile dashboard={dashboard} />
@@ -150,6 +174,7 @@ function buildDashboard({
   weights,
   preferences,
   sideEffects,
+  estimateLevels,
   now,
 }: {
   medications: MedicationRow[];
@@ -157,20 +182,18 @@ function buildDashboard({
   weights: MeasurementRow[];
   preferences: PreferencesRow | null;
   sideEffects: SideEffectLog[];
+  /** False on a free account, where the card prints no level to compute one for. */
+  estimateLevels: boolean;
   now: number;
 }): TodayDashboard {
   const reminderTime = preferences?.reminder_time ?? '09:00';
+  const endOfToday = endOfDay(now);
   const summaries = medications.map((medication): MedicationSummary => {
     const medicationInjections = injections[medication.id] ?? [];
-    const doses = medicationInjections.map((injection) => ({ takenAt: injection.taken_at, dose: injection.dose }));
     const halfLife = medication.half_life_hours;
-    const tmax = halfLife ? tmaxOrDefault(halfLife, medication.tmax_hours) : 0;
-    const level = halfLife ? estimatedLevelAt(doses, halfLife, tmax, now) : null;
-    const weekLevels = halfLife
-      ? Array.from({ length: 7 }, (_, index) => (
-          estimatedLevelAt(doses, halfLife, tmax, now - (6 - index) * DAY_MS)
-        ))
-      : [];
+    const estimate = estimateLevels && halfLife
+      ? estimateLevelSeries(medicationInjections, halfLife, medication.tmax_hours, now)
+      : { level: null, weekLevels: [] };
     const schedule = medicationScheduleFromStored({
       medicationId: medication.id,
       frequencyKind: medication.frequency_kind,
@@ -178,22 +201,29 @@ function buildDashboard({
       createdAt: medication.created_at,
       reminderTime,
     });
+    const latestShot = medicationInjections[0];
+    // A shot logged at 5 am sits before the 9 am reminder, so today's slot is
+    // still in the future and the card named it "today" next to its own
+    // "Logged" pill. That dose is taken, so the next one is the slot after it.
+    const upcoming = schedule ? nextScheduledDoses(schedule, now, 2) : [];
+    const takenAlready = latestShot !== undefined
+      && upcoming[0] !== undefined
+      && isSameDay(upcoming[0].scheduledAt, latestShot.taken_at);
+    const nextAt = (takenAlready ? upcoming[1]?.scheduledAt : upcoming[0]?.scheduledAt) ?? now;
     return {
       medication,
       injections: medicationInjections,
-      nextAt: schedule ? nextScheduledDoses(schedule, now, 1)[0]?.scheduledAt ?? now : now,
-      level,
-      weekLevels,
+      nextAt,
+      level: estimate.level,
+      weekLevels: estimate.weekLevels,
+      action: latestShot && isSameDay(latestShot.taken_at, now)
+        ? { kind: 'logged', injection: latestShot }
+        : nextAt <= endOfToday
+          ? { kind: 'due', medicationId: medication.id }
+          : { kind: 'none' },
     };
-  }).sort((a, b) => a.nextAt - b.nextAt);
+  }).sort(byTodayThenName);
 
-  const medication = summaries[0] ?? null;
-  const latestShot = medication?.injections[0];
-  const action: TodayDoseAction = latestShot && isSameDay(latestShot.taken_at, now)
-    ? { kind: 'logged', injection: latestShot }
-    : medication && medication.nextAt <= endOfDay(now)
-      ? { kind: 'due', medicationId: medication.medication.id }
-      : { kind: 'none' };
   const weightUnit = preferences?.weight_unit ?? 'lb';
   const weightSeries = weights
     .slice()
@@ -216,14 +246,59 @@ function buildDashboard({
   }) ?? { current: 0, best: 0, weeks: [] };
 
   return {
-    medication,
+    medications: summaries,
     weight: weights[0] ?? null,
     weightSeries,
     weightUnit,
     sideEffect: sideEffects[0] ?? null,
-    action,
     streak,
   };
+}
+
+/**
+ * The estimated level now, and the same estimate on each of the last seven days.
+ * Eight passes over every shot a medication has, which is why the caller skips
+ * this whole call when the card behind the lock will not print any of it.
+ */
+function estimateLevelSeries(
+  medicationInjections: readonly InjectionRow[],
+  halfLifeHours: number,
+  tmaxHours: number | null,
+  now: number,
+): { level: number; weekLevels: number[] } {
+  const doses = medicationInjections.map((injection) => ({ takenAt: injection.taken_at, dose: injection.dose }));
+  const tmax = tmaxOrDefault(halfLifeHours, tmaxHours);
+  return {
+    level: estimatedLevelAt(doses, halfLifeHours, tmax, now),
+    weekLevels: Array.from({ length: 7 }, (_, index) => (
+      estimatedLevelAt(doses, halfLifeHours, tmax, now - (6 - index) * DAY_MS)
+    )),
+  };
+}
+
+/**
+ * Card order. Two groups, and each group runs A to Z.
+ *
+ * First group: every medication with business today, which is a shot due today
+ * or a shot already logged today. Today is what the screen is for, so the card
+ * you see without a swipe is a card you can act on.
+ *
+ * A logged shot stays in the first group on purpose. If a shot moved its card to
+ * the back the moment you logged it, the cards would slide under your finger on
+ * the way back from the log screen and you would be looking at a medication you
+ * did not choose.
+ *
+ * Everything else falls to the second group, so a weekly medication four days out
+ * sits behind the daily one instead of in front of it. Sorting by the next dose
+ * alone is what hid the weekly medication in the first place: a daily shot is
+ * always sooner.
+ *
+ * A to Z inside each group, because the medication list and the picker are
+ * already A to Z, and because it holds still from one day to the next.
+ */
+function byTodayThenName(a: MedicationSummary, b: MedicationSummary): number {
+  const rank = (summary: MedicationSummary) => (summary.action.kind === 'none' ? 1 : 0);
+  return rank(a) - rank(b) || a.medication.name.localeCompare(b.medication.name);
 }
 
 function TodayHeader({ streak }: { streak: number }) {
@@ -243,34 +318,115 @@ function TodayHeader({ streak }: { streak: number }) {
   );
 }
 
-function MedicationCard({ summary }: { summary: MedicationSummary }) {
-  const { medication, level, weekLevels, nextAt } = summary;
+function MedicationSection({
+  medications,
+  pageWidth,
+  pro,
+}: {
+  medications: MedicationSummary[];
+  pageWidth: number;
+  pro: boolean;
+}) {
+  // The card the pager opens on after a shot. The order is A to Z, so without
+  // this the card you land on after logging is the medication whose name sorts
+  // first rather than the one you injected.
+  const focusMedicationId = useAppStore((state) => state.focusMedicationId);
+  const setFocusMedication = useAppStore((state) => state.setFocusMedication);
+
+  if (medications.length === 0) return <EmptyMedication pro={pro} />;
+  // One medication keeps the plain column. A pager around a single card would
+  // draw a row of one dot, and one dot says nothing.
+  if (medications.length === 1) return <MedicationPage summary={medications[0]} pro={pro} />;
+  return (
+    <CardPager
+      pageWidth={pageWidth}
+      pageName="Medication"
+      focusKey={focusMedicationId}
+      onUserScroll={() => setFocusMedication(null)}
+    >
+      {medications.map((summary) => (
+        <MedicationPage key={summary.medication.id} summary={summary} pro={pro} />
+      ))}
+    </CardPager>
+  );
+}
+
+/**
+ * The card and the one action that belongs to it, in that order.
+ *
+ * On a free account the level comes off the card and the lock takes it, below
+ * the action rather than above it: the shot is what the user came for, and a
+ * paid offer does not stand between a card and its own button.
+ */
+function MedicationPage({ summary, pro }: { summary: MedicationSummary; pro: boolean }) {
+  return (
+    <View style={styles.medicationPage}>
+      <MedicationCard summary={summary} pro={pro} />
+      <DoseAction action={summary.action} medicationName={summary.medication.name} />
+      {!pro && summary.medication.half_life_hours ? (
+        <ProLock
+          title="Your level day by day"
+          body="Poke estimates the amount in your body from the shots you logged. Poke draws that estimate for each of the last seven days."
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function MedicationCard({ summary, pro }: { summary: MedicationSummary; pro: boolean }) {
+  const { medication, level, weekLevels } = summary;
   return (
     <Card style={styles.medicationCard}>
       <View style={styles.medicationHead}>
-        <Text variant="small" color={colors.inkMuted}>Estimated current level</Text>
+        <Text variant="small" color={colors.inkMuted}>
+          {pro ? 'Estimated current level' : 'Next shot'}
+        </Text>
         <View style={styles.medicationChip}>
           <Text variant="caption" color={colors.accent}>{medication.name}</Text>
         </View>
       </View>
-      <View style={styles.levelRow}>
-        <Text style={styles.levelValue}>{level === null ? '—' : formatLevel(level, medication.default_unit)}</Text>
-        <Text variant="bodyStrong" color={colors.inkMuted}>{level === null ? 'No estimate' : medication.default_unit}</Text>
-      </View>
-      {weekLevels.length === 7 ? <WeekBars levels={weekLevels} /> : null}
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={`View ${medication.name} level details`}
-        onPress={() => router.push({ pathname: '/reports/level', params: { medicationId: medication.id } })}
-        style={styles.nextDose}
-      >
-        <View style={styles.nextDoseCopy}>
-          <Text variant="smallStrong">Shot day is {format(nextAt, 'EEEE')} · {countdownLabel(nextAt)}</Text>
-          <Text variant="caption" color={colors.inkMuted}>{medication.default_dose} {medication.default_unit}</Text>
-        </View>
-        <ChevronRight size={18} color={colors.inkSubtle} />
-      </Pressable>
+      {pro ? (
+        <>
+          <View style={styles.levelRow}>
+            <Text style={styles.levelValue}>{level === null ? '—' : formatLevel(level, medication.default_unit)}</Text>
+            <Text variant="bodyStrong" color={colors.inkMuted}>{level === null ? 'No estimate' : medication.default_unit}</Text>
+          </View>
+          {weekLevels.length === 7 ? <WeekBars levels={weekLevels} /> : null}
+        </>
+      ) : null}
+      <NextDose summary={summary} pro={pro} />
     </Card>
+  );
+}
+
+/**
+ * The medication name and the next shot day are free, so this row reads the same
+ * on both sides of the paywall. Only the tap changes: `/reports/level` locks the
+ * number this card no longer prints, so a free account does not travel to a
+ * second lock. The lock under the card is the one tap to the paywall.
+ */
+function NextDose({ summary, pro }: { summary: MedicationSummary; pro: boolean }) {
+  const { medication, nextAt } = summary;
+  const cadence = cadenceLabel(medication, nextAt);
+  const copy = (
+    <View style={styles.nextDoseCopy}>
+      {cadence === null ? null : (
+        <Text variant="smallStrong">{cadence} · {countdownLabel(nextAt)}</Text>
+      )}
+      <Text variant="caption" color={colors.inkMuted}>{medication.default_dose} {medication.default_unit}</Text>
+    </View>
+  );
+  if (!pro) return <View style={styles.nextDosePlain}>{copy}</View>;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`View ${medication.name} level details`}
+      onPress={() => router.push({ pathname: '/reports/level', params: { medicationId: medication.id } })}
+      style={styles.nextDose}
+    >
+      {copy}
+      <ChevronRight size={18} color={colors.inkSubtle} />
+    </Pressable>
   );
 }
 
@@ -302,11 +458,14 @@ function WeekBars({ levels }: { levels: number[] }) {
   );
 }
 
-function DoseAction({ action }: { action: TodayDoseAction }) {
+function DoseAction({ action, medicationName }: { action: TodayDoseAction; medicationName: string }) {
   if (action.kind === 'none') return null;
   if (action.kind === 'due') {
     return (
       <Button
+        // The card above names the medication, so the button stays short. A
+        // screen reader reads the button on its own, so that label names it.
+        accessibilityLabel={`Log ${medicationName} shot`}
         leadingIcon={<Syringe size={21} color={colors.inkInverse} />}
         onPress={() => router.push({ pathname: '/log-shot', params: { medicationId: action.medicationId } })}
       >
@@ -315,24 +474,31 @@ function DoseAction({ action }: { action: TodayDoseAction }) {
     );
   }
   const site = action.injection.site_id ? getBodySite(action.injection.site_id) : undefined;
+  const time = fmtTime(action.injection.taken_at).toLocaleLowerCase();
   return (
     <View style={styles.loggedRow}>
       <View style={styles.loggedIcon}>
         <Check size={18} strokeWidth={2.5} color={colors.accent} />
       </View>
       <Text variant="smallStrong" style={styles.loggedText}>
-        Logged {fmtTime(action.injection.taken_at).toLocaleLowerCase()}
+        Logged {time}
         {site ? ` · ${site.label.toLocaleLowerCase()}` : ''}
       </Text>
     </View>
   );
 }
 
-function EmptyMedication() {
+function EmptyMedication({ pro }: { pro: boolean }) {
   return (
     <Card style={styles.emptyCard}>
       <Text variant="h2">Add your medication.</Text>
-      <Text color={colors.inkMuted}>Poke will put your next shot and estimated level here.</Text>
+      {/* A free account never sees the level on this card, so the promise on the
+          empty card only names what that account will get. */}
+      <Text color={colors.inkMuted}>
+        {pro
+          ? 'Poke will put your next shot and estimated level here.'
+          : 'Poke will put your next shot day here.'}
+      </Text>
       <Button onPress={() => router.push('/medications/new')}>Add medication</Button>
     </Card>
   );
@@ -396,13 +562,46 @@ function SideEffectTile({ sideEffect }: { sideEffect: SideEffectLog | null }) {
   );
 }
 
+/**
+ * How often the shot comes round, in the words of the schedule that was saved.
+ *
+ * The row named the weekday of the next dose whatever the frequency, so a daily
+ * medication read "Shot day is Sunday" on a Sunday and "Shot day is Monday" the
+ * next morning. Only a weekly schedule has one day to name.
+ *
+ * Null is the medication that carries no schedule, where a weekday and a
+ * countdown would both be invented. `medicationScheduleFromStored` returns null
+ * for the same row, so the card and the reminder agree on which medication has
+ * no next dose.
+ */
+function cadenceLabel(medication: MedicationRow, nextAt: number): string | null {
+  switch (medication.frequency_kind) {
+    case 'weekly':
+      return `Shot day is ${format(nextAt, 'EEEE')}`;
+    case 'twice_weekly':
+      // Two days, and the edit screen is where both are named. One of them here
+      // would read as the only one.
+      return 'Twice a week';
+    case 'daily':
+      return 'Every day';
+    case 'every_n_days':
+      return medication.frequency_value !== null && medication.frequency_value > 1
+        ? `Every ${medication.frequency_value} days`
+        : 'Every day';
+    case 'custom':
+      return null;
+  }
+}
+
 function countdownLabel(timestamp: number): string {
   const days = Math.round((startOfDay(timestamp) - startOfDay(Date.now())) / DAY_MS);
   if (days < -1) return `${Math.abs(days)} days overdue`;
   if (days === -1) return '1 day overdue';
   if (days === 0) return 'today';
   if (days === 1) return 'tomorrow';
-  return `${days} days`;
+  // "Sunday · 7 days" read as how long the week is. The preposition is what
+  // turns the number back into a date.
+  return `in ${days} days`;
 }
 
 function formatLevel(value: number, unit: MedicationRow['default_unit']): string {
@@ -424,11 +623,16 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 600,
+    maxWidth: CONTENT_MAX_WIDTH,
     alignSelf: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.screen,
     paddingBottom: 112,
+  },
+  // The same gap the column puts between its own children, so one medication
+  // looks the way it looked before the pager existed.
+  medicationPage: {
+    gap: spacing.md,
   },
   header: {
     minHeight: 64,
@@ -501,6 +705,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.divider,
+  },
+  // No divider and no tap target: on a free account this row is the body of the
+  // card rather than a row under a chart.
+  nextDosePlain: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   nextDoseCopy: {
     flex: 1,

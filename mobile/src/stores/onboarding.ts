@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import type { ActivityLevel, GoalKind, JourneyStage, Sex } from '../db/types';
 import { getPreset, type FrequencyKind, type Route, type Unit } from '../domain/peptides';
 import { WEEKDAY_OPTIONS, type Weekday } from '../domain/scheduling';
-import type { HeightUnit, WeightUnit } from '../domain/units';
+import { cmToIn, inToCm, kgToLb, lbToKg, type HeightUnit, type WeightUnit } from '../domain/units';
 
 // The one id that is not a catalog preset. The user types the name instead.
 export const CUSTOM_MEDICATION_ID = 'custom';
@@ -38,9 +38,15 @@ export const ACTIVITY_OPTIONS: readonly { id: ActivityLevel; label: string; desc
   { id: 'very_active', label: 'Very active', description: 'You move nearly every day.' },
 ];
 
+// These five are the user talking, not Poke, so they keep their contractions the
+// way `LAST_SHOT_OPTIONS` does. "No contractions" governs Poke's own voice, and a
+// person picking the line closest to true does not say "I have started before".
+// Every one of them is a sentence the user could say out loud about themselves.
+// The health option used to be the exception, a fragment about a clinician, and
+// it broke the read halfway down the list.
 export const MOTIVATION_OPTIONS: readonly { id: string; label: string }[] = [
   { id: 'energy', label: 'I want my energy back' },
-  { id: 'health', label: 'A number my clinician wants to see' },
+  { id: 'health', label: 'I want a better number at my next appointment' },
   { id: 'clothes', label: 'I want to feel right in my own clothes' },
   { id: 'longevity', label: "I'm playing the long game" },
   { id: 'consistency', label: "I've started before, and I want it to stick this time" },
@@ -81,6 +87,35 @@ export const PACE_MIN_LB = 0.2;
 export const PACE_MAX_LB = 2;
 export const PACE_DEFAULT_LB = 1;
 
+/**
+ * The ends of the height and weight wheels.
+ *
+ * The pickers build their rows from these and the store clamps to them when a
+ * unit switch converts an answer, so a number can never sit off the wheel that
+ * shows it. Each pair covers the same span twice: 48 to 95 inches is 4 ft 0 in
+ * to 7 ft 11 in, and 122 to 241 is that same span in whole centimetres.
+ */
+export const HEIGHT_BOUNDS: Record<HeightUnit, { min: number; max: number }> = {
+  in: { min: 48, max: 95 },
+  cm: { min: 122, max: 241 },
+};
+
+export const WEIGHT_BOUNDS: Record<WeightUnit, { min: number; max: number }> = {
+  lb: { min: 60, max: 600 },
+  kg: { min: 27, max: 273 },
+};
+
+/**
+ * Where each wheel rests before it is touched.
+ *
+ * A wheel that opens on row zero opens on 4 ft 0 in, which is nobody's first
+ * guess at their own height and reads as a broken screen. Nothing computes from
+ * these and none of them reaches the draft: the wheel writes only once a finger
+ * has settled it, so Continue stays off until the user has really answered.
+ */
+export const HEIGHT_REST: Record<HeightUnit, number> = { in: 67, cm: 170 };
+export const WEIGHT_REST: Record<WeightUnit, number> = { lb: 180, kg: 82 };
+
 export type OnboardingGate =
   | { kind: 'checking' }
   | { kind: 'required' }
@@ -97,17 +132,23 @@ export interface MedicationScheduleDraft {
 }
 
 // Current weight, goal weight and height each get their own screen and each can
-// be skipped on its own, so "skipped" cannot be a property of the group. An
-// empty string is the skip, and every reader parses the fields independently.
+// be skipped on its own, so "skipped" cannot be a property of the group. Null is
+// the skip, and every reader tests the fields independently.
+//
+// These are numbers rather than strings because a wheel hands over a row and not
+// a keystroke. There is no half-typed state to hold, so there is nothing left
+// for a reader to parse and nothing for two readers to parse differently.
 export interface WeightDraft {
   unit: WeightUnit;
-  currentText: string;
-  goalText: string;
+  /** In `unit`, to one decimal place. */
+  current: number | null;
+  goal: number | null;
 }
 
 export interface HeightDraft {
   unit: HeightUnit;
-  valueText: string;
+  /** In `unit`, whole inches or whole centimetres. */
+  value: number | null;
 }
 
 export type ReminderDraft =
@@ -151,10 +192,10 @@ export interface OnboardingState extends OnboardingDraft {
   setSex: (sex: Sex) => void;
   setBirthYearText: (value: string) => void;
   setHeightUnit: (unit: HeightUnit) => void;
-  setHeightValue: (value: string) => void;
+  setHeightValue: (value: number | null) => void;
   setGoalKind: (goalKind: GoalKind) => void;
   setWeightUnit: (unit: WeightUnit) => void;
-  setWeightValue: (field: 'current' | 'goal', value: string) => void;
+  setWeightValue: (field: 'current' | 'goal', value: number | null) => void;
   setPace: (pace: number) => void;
   setActivityLevel: (level: ActivityLevel) => void;
   toggleConcern: (concern: SideEffectConcern) => void;
@@ -172,8 +213,8 @@ const initialDraft: OnboardingDraft = {
   lastShot: null,
   sex: null,
   birthYearText: '',
-  height: { unit: 'in', valueText: '' },
-  weight: { unit: 'lb', currentText: '', goalText: '' },
+  height: { unit: 'in', value: null },
+  weight: { unit: 'lb', current: null, goal: null },
   pace: PACE_DEFAULT_LB,
   activityLevel: null,
   concerns: [],
@@ -186,7 +227,14 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   ...initialDraft,
   gate: { kind: 'checking' },
   setGate: (gate) => set({ gate }),
-  setJourneyStage: (journeyStage) => set({ journeyStage }),
+  // A user who has not started has exactly one true answer to the last-shot
+  // question, so the stage writes it and `postScheduleOrder` drops the screen.
+  // Going back and answering `taking` clears it again, because the answer that
+  // was inferred is not an answer this user gave.
+  setJourneyStage: (journeyStage) => set({
+    journeyStage,
+    lastShot: journeyStage === 'starting' ? 'none' : null,
+  }),
   toggleMedication: (id) => set((state) => {
     const selected = state.medicationIds.includes(id);
     const medicationIds = selected
@@ -220,11 +268,20 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setLastShot: (lastShot) => set({ lastShot }),
   setSex: (sex) => set({ sex }),
   setBirthYearText: (birthYearText) => set({ birthYearText }),
-  setHeightUnit: (unit) => set((state) => ({ height: { ...state.height, unit } })),
-  setHeightValue: (valueText) => set((state) => ({ height: { ...state.height, valueText } })),
+  // A unit switch converts the answer, it does not clear it and it does not
+  // relabel it. 70 inches is 178 cm, and a wheel that read 70 cm after the
+  // switch would be showing a different person.
+  setHeightUnit: (unit) => set((state) => ({
+    height: { unit, value: convertHeight(state.height.value, state.height.unit, unit) },
+  })),
+  setHeightValue: (value) => set((state) => ({ height: { ...state.height, value } })),
   setGoalKind: (goalKind) => set({ goalKind }),
   setWeightUnit: (unit) => set((state) => ({
-    weight: { ...state.weight, unit },
+    weight: {
+      unit,
+      current: convertWeight(state.weight.current, state.weight.unit, unit),
+      goal: convertWeight(state.weight.goal, state.weight.unit, unit),
+    },
     // The pace is stored in the weight unit, so switching units has to carry it
     // over. Otherwise "1 lb a week" silently becomes "1 kg a week", which is a
     // different plan and a much sooner date.
@@ -232,8 +289,8 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   })),
   setWeightValue: (field, value) => set((state) => ({
     weight: field === 'current'
-      ? { ...state.weight, currentText: value }
-      : { ...state.weight, goalText: value },
+      ? { ...state.weight, current: value }
+      : { ...state.weight, goal: value },
   })),
   setPace: (pace) => set({ pace }),
   setActivityLevel: (activityLevel) => set({ activityLevel }),
@@ -257,6 +314,25 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
 }));
 
 const LB_PER_KG = 2.20462;
+
+// Both conversions round to the step the wheel offers and then clamp to the
+// wheel's ends, so the converted answer always lands on a row. A stored number
+// the wheel cannot show is a number the user cannot correct.
+function convertHeight(value: number | null, from: HeightUnit, to: HeightUnit): number | null {
+  if (value === null || from === to) return value;
+  const converted = to === 'cm' ? inToCm(value) : cmToIn(value);
+  return clampToBounds(Math.round(converted), HEIGHT_BOUNDS[to]);
+}
+
+function convertWeight(value: number | null, from: WeightUnit, to: WeightUnit): number | null {
+  if (value === null || from === to) return value;
+  const converted = to === 'kg' ? lbToKg(value) : kgToLb(value);
+  return clampToBounds(Math.round(converted * 10) / 10, WEIGHT_BOUNDS[to]);
+}
+
+function clampToBounds(value: number, bounds: { min: number; max: number }): number {
+  return Math.min(bounds.max, Math.max(bounds.min, value));
+}
 
 function convertPace(pace: number, from: WeightUnit, to: WeightUnit): number {
   if (from === to) return pace;
@@ -292,10 +368,11 @@ export function defaultScheduleDraft(id: OnboardingMedicationId): MedicationSche
   const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
   return {
     medicationId: id,
-    // Empty, never `preset.defaultDose`. `store.config.json` `review.notes`
-    // tells App Review that Poke never proposes a number, and a dose field that
-    // opens on 0.25 proposes one louder than a placeholder would. The unit, the
-    // route and the frequency below are not doses, so they keep their defaults.
+    // Empty. The preset carries no dose to read, because `store.config.json`
+    // `review.notes` tells App Review that Poke never proposes a number, and a
+    // dose field that opens on 0.25 proposes one louder than a placeholder
+    // would. The unit, the route and the frequency below are not doses, so they
+    // keep their defaults.
     doseText: '',
     unit: preset?.unit ?? 'mg',
     route: preset?.defaultRoute ?? 'sc',
@@ -416,6 +493,21 @@ export const POST_SCHEDULE_ORDER: readonly PostScheduleStep[] = [
   'thanks',
 ];
 
+/**
+ * The run, for one journey stage.
+ *
+ * `starting` drops the last-shot question. The screen before it asked whether
+ * the user had started, so asking a user who said no when their last shot was
+ * reads as a flow that did not listen. `setJourneyStage` writes `none` instead,
+ * which is what that user would have picked.
+ */
+export function postScheduleOrder(stage: JourneyStage | null): readonly PostScheduleStep[] {
+  return stage === 'starting' ? STARTING_ORDER : POST_SCHEDULE_ORDER;
+}
+
+const STARTING_ORDER: readonly PostScheduleStep[] =
+  POST_SCHEDULE_ORDER.filter((step) => step !== 'last-shot');
+
 export const POST_SCHEDULE_ROUTES: Record<PostScheduleStep, Href> = {
   'last-shot': '/onboarding/last-shot',
   why: '/onboarding/why',
@@ -442,8 +534,8 @@ function medicationCount(count: number): number {
   return Math.max(1, count);
 }
 
-export function onboardingTotalSteps(): number {
-  return SCHEDULE_STEP_OFFSET + 1 + POST_SCHEDULE_ORDER.length;
+export function onboardingTotalSteps(stage: JourneyStage | null): number {
+  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage).length;
 }
 
 /**
@@ -457,8 +549,8 @@ export function scheduleStepIndex(index: number, count: number): number {
   return SCHEDULE_STEP_OFFSET + index / medicationCount(count);
 }
 
-export function postScheduleStepIndex(step: PostScheduleStep): number {
-  return SCHEDULE_STEP_OFFSET + 1 + POST_SCHEDULE_ORDER.indexOf(step);
+export function postScheduleStepIndex(stage: JourneyStage | null, step: PostScheduleStep): number {
+  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage).indexOf(step);
 }
 
 /**
@@ -466,9 +558,14 @@ export function postScheduleStepIndex(step: PostScheduleStep): number {
  * forward path reads. The first post-schedule step falls back onto the last
  * schedule screen, whose index depends on how many medications were chosen.
  */
-export function previousHref(count: number, step: PostScheduleStep): Href {
-  const index = POST_SCHEDULE_ORDER.indexOf(step);
-  const previous = index > 0 ? POST_SCHEDULE_ORDER[index - 1] : undefined;
+export function previousHref(
+  stage: JourneyStage | null,
+  count: number,
+  step: PostScheduleStep,
+): Href {
+  const order = postScheduleOrder(stage);
+  const index = order.indexOf(step);
+  const previous = index > 0 ? order[index - 1] : undefined;
   if (previous) return POST_SCHEDULE_ROUTES[previous];
   return {
     pathname: '/onboarding/schedule/[index]',
@@ -476,9 +573,19 @@ export function previousHref(count: number, step: PostScheduleStep): Href {
   };
 }
 
+/**
+ * The first screen of the post-schedule run. The schedule screens jump here,
+ * and they read the order rather than a step name, because the first step is
+ * not the same step for every journey stage.
+ */
+export function firstPostScheduleHref(stage: JourneyStage | null): Href {
+  return POST_SCHEDULE_ROUTES[postScheduleOrder(stage)[0]];
+}
+
 /** The screen after `step`. The last one leads to the compute beat. */
-export function nextHref(step: PostScheduleStep): Href {
-  const index = POST_SCHEDULE_ORDER.indexOf(step);
-  const next = POST_SCHEDULE_ORDER[index + 1];
+export function nextHref(stage: JourneyStage | null, step: PostScheduleStep): Href {
+  const order = postScheduleOrder(stage);
+  const index = order.indexOf(step);
+  const next = order[index + 1];
   return next ? POST_SCHEDULE_ROUTES[next] : '/onboarding/compute';
 }

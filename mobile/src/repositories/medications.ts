@@ -105,6 +105,47 @@ export async function setMedicationStatus(id: string, status: 'active' | 'paused
   await db.runAsync(`UPDATE medications SET status = ?, updated_at = ? WHERE id = ?`, [status, Date.now(), id]);
 }
 
+/**
+ * How many injection rows name each medication, keyed by medication id. Every
+ * medication appears, and one with no shots reads 0.
+ *
+ * Soft-deleted shots count. `injections.medication_id` has no foreign key and no
+ * cascade, so the row survives the medication and still names it. Counting only
+ * the live rows would let a delete strand the rest.
+ */
+export async function countInjectionsByMedication(): Promise<Record<string, number>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string; n: number }>(
+    `SELECT m.id AS id, COUNT(i.id) AS n
+       FROM medications m
+       LEFT JOIN injections i ON i.medication_id = m.id
+      GROUP BY m.id`,
+  );
+  const counts: Record<string, number> = {};
+  for (const row of rows) counts[row.id] = row.n;
+  return counts;
+}
+
+/**
+ * Hard delete, and the only one in the app. Archive is the primitive for a
+ * medication with history; this is for one that was added by mistake and never
+ * used. The `NOT EXISTS` clause makes the rule a property of the write rather
+ * than of the screen, so a caller cannot delete a medication with shots on it.
+ *
+ * Returns true when a row went. False means the medication still has injections
+ * and the caller should archive it instead.
+ */
+export async function deleteMedicationIfUnused(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `DELETE FROM medications
+      WHERE id = ?
+        AND NOT EXISTS (SELECT 1 FROM injections WHERE medication_id = ?)`,
+    [id, id],
+  );
+  return result.changes > 0;
+}
+
 export async function nextColorIndex(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM medications`);

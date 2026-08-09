@@ -19,7 +19,7 @@ import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
-import { useEntitlementStore } from '@/stores/entitlement';
+import { useEntitlementSettled, useEntitlementStore } from '@/stores/entitlement';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
 
@@ -58,6 +58,12 @@ export default function RootLayout() {
   const gate = useOnboardingStore((state) => state.gate);
   const setGate = useOnboardingStore((state) => state.setGate);
   const setReady = useAppStore((state) => state.setReady);
+  const entitlementSettled = useEntitlementSettled();
+  // A screen that renders a lock, or the paid chart behind it, before Poke has
+  // asked the App Store shows a decision Poke has not made. So the first paint
+  // waits for the answer. The wait is capped inside the entitlement store. The
+  // database error screen does not wait, because it has more to say than this.
+  const entitlementPending = !entitlementSettled && gate.kind !== 'error';
 
   useEffect(() => {
     if (gate.kind !== 'checking') return;
@@ -85,12 +91,12 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (fontsReady && gate.kind !== 'checking') {
+    if (fontsReady && gate.kind !== 'checking' && !entitlementPending) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsReady, gate.kind]);
+  }, [fontsReady, gate.kind, entitlementPending]);
 
-  if (!fontsReady || gate.kind === 'checking') {
+  if (!fontsReady || gate.kind === 'checking' || entitlementPending) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.accent} />
@@ -139,6 +145,7 @@ export default function RootLayout() {
           <Stack.Screen name="medications" options={{ presentation: 'card' }} />
           <Stack.Screen name="reports" options={{ presentation: 'card' }} />
           <Stack.Screen name="calculator" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="redeem" options={{ presentation: 'card' }} />
           {/* Full screen, not a card: the offer needs the whole height for the
               benefits, both prices and the renewal disclosure. */}
           <Stack.Screen name="paywall" options={{ presentation: 'fullScreenModal' }} />

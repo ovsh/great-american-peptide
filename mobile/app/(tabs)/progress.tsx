@@ -26,6 +26,7 @@ import {
 } from '@/domain/sideEffects';
 import {
   computeMedicationScheduleStreak,
+  SCHEDULE_GRACE_DAYS,
   type ScheduleStreak,
 } from '@/domain/streaks';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
@@ -70,19 +71,30 @@ export default function ProgressScreen() {
   const [selectedEffect, setSelectedEffect] = useState<SideEffect | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      listMeasurements('weight', { limit: 365 }),
-      getPreferences(),
-      listMedications(),
-      listInjections({ limit: 1000 }),
-      listSideEffects({ fromMs: sideEffectWindowStart(Date.now()) }),
-    ]).then(([weightRows, preferenceRow, medicationRows, injectionRows, sideEffectRows]) => {
+    let live = true;
+    (async () => {
+      const [weightRows, preferenceRow, medicationRows, sideEffectRows] = await Promise.all([
+        listMeasurements('weight', { limit: 365 }),
+        getPreferences(),
+        listMedications(),
+        listSideEffects({ fromMs: sideEffectWindowStart(Date.now()) }),
+      ]);
+      const active = medicationRows.filter((medication) => medication.status === 'active');
+      // Best streak scores every scheduled dose since a medication started, so
+      // the read is bounded by each medication rather than by a row count. A
+      // shared 1000 row cap dropped the oldest weeks and decayed the best streak.
+      const injectionRows = (await Promise.all(active.map((medication) => listInjections({
+        medicationId: medication.id,
+        fromMs: streakWindowStart(medication.created_at),
+      })))).flat();
+      if (!live) return;
       setWeights(weightRows);
       setPreferences(preferenceRow);
-      setMedications(medicationRows.filter((medication) => medication.status === 'active'));
+      setMedications(active);
       setInjections(injectionRows);
       setSideEffects(sideEffectRows);
-    }).catch(() => {});
+    })().catch(() => {});
+    return () => { live = false; };
   }, [dataVersion]);
 
   const unit = preferences?.weight_unit ?? 'lb';
@@ -118,6 +130,9 @@ export default function ProgressScreen() {
   );
   const chartWidth = Math.max(220, Math.min(width, 600) - spacing.screen * 2 - spacing.xl * 2);
   const latest = points[points.length - 1];
+  // `points` holds the selected range only, and a free account is pinned to 7d.
+  // A user with months of weights behind that clamp must not read "No weight yet".
+  const loggedBefore = weights.length > 0;
 
   return (
     <View style={styles.root}>
@@ -130,7 +145,9 @@ export default function ProgressScreen() {
               <Text variant="smallStrong">Weight</Text>
               <View style={styles.currentRow}>
                 <Text style={styles.currentValue}>{latest ? latest.v.toFixed(1) : '—'}</Text>
-                <Text variant="small" color={colors.inkMuted}>{latest ? unit : 'No weight yet'}</Text>
+                <Text variant="small" color={colors.inkMuted}>
+                  {latest ? unit : loggedBefore ? 'None in this range' : 'No weight yet'}
+                </Text>
               </View>
             </View>
             <TimeRangeToggle
@@ -151,13 +168,14 @@ export default function ProgressScreen() {
               includeZero={false}
               color={colors.amber}
               fillColor="rgba(232,161,60,0.12)"
-              yLabel={(value) => value.toFixed(0)}
               xLabel={(timestamp) => format(timestamp, 'M/d')}
               xTickCount={4}
             />
           ) : (
             <View style={styles.chartEmpty}>
-              <Text color={colors.inkMuted}>Log two weights to see your trend.</Text>
+              <Text color={colors.inkMuted} style={styles.chartEmptyCopy}>
+                {emptyChartCopy(points.length, loggedBefore, effectiveRange)}
+              </Text>
               <Button size="sm" onPress={() => router.push('/log-weight')}>Log weight</Button>
             </View>
           )}
@@ -284,9 +302,22 @@ function StreakCard({ streak }: { streak: ScheduleStreak }) {
   );
 }
 
+function rangeDays(range: ProgressRange): number {
+  return range === '7d' ? 7 : range === '30d' ? 30 : 90;
+}
+
+/**
+ * Each branch is a different truth. A weight logged outside the selected range
+ * is still a weight, so the empty chart names the range and not the history.
+ */
+function emptyChartCopy(pointCount: number, loggedBefore: boolean, range: ProgressRange): string {
+  if (pointCount === 1) return 'Log one more weight to see your trend.';
+  if (loggedBefore) return `No weight in the last ${rangeDays(range)} days.`;
+  return 'Log two weights to see your trend.';
+}
+
 function weightPoints(weights: readonly MeasurementRow[], unit: WeightUnit, range: ProgressRange): WeightPoint[] {
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
-  const since = Date.now() - days * DAY_MS;
+  const since = Date.now() - rangeDays(range) * DAY_MS;
   return weights
     .filter((weight) => weight.taken_at >= since)
     .slice()
@@ -321,6 +352,17 @@ function countEffects(sideEffects: readonly SideEffectLog[]): { effect: SideEffe
   }
   return Array.from(counts.values())
     .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * A shot counts for a scheduled dose from one grace day before it, so the read
+ * opens that far ahead of the day the medication started.
+ */
+function streakWindowStart(createdAt: number): number {
+  const date = new Date(createdAt);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - SCHEDULE_GRACE_DAYS);
+  return date.getTime();
 }
 
 function sideEffectWindowStart(now: number): number {
@@ -377,6 +419,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
+  },
+  chartEmptyCopy: {
+    textAlign: 'center',
   },
   summaryCard: {
     gap: spacing.lg,

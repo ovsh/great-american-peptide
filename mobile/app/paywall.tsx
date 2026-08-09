@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Activity, Check, FileDown, Layers, TrendingUp, X } from 'lucide-react-native';
 
@@ -9,7 +9,7 @@ import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { PRIVACY_URL, TERMS_URL } from '@/config/legal';
 import { buildPlanOptions, type PlanId, type PlanOption } from '@/domain/plans';
-import { useEntitlementStore } from '@/stores/entitlement';
+import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
 
@@ -60,8 +60,14 @@ export default function PaywallScreen() {
 
   const plans = buildPlanOptions(offering);
   const plan = plans.find((option) => option.id === selected) ?? plans[0];
-  const storeReady = availability?.kind === 'ready' && plan.pkg !== null;
+  // `canSell` is whether Poke can sell anything here at all. `storeReady` is
+  // whether the App Store priced this plan. Only the second one may be sold,
+  // and only the second one may state a price.
+  const canSell = availability?.kind === 'ready';
+  const storeReady = canSell && plan.pkg !== null;
   const busy = purchasing || restoring;
+  const action = ctaAction(canSell, storeReady, offeringState, purchasing);
+  const message = storeMessage(canSell, offeringState, plan.pkg !== null);
 
   const dismiss = () => {
     clearError();
@@ -69,12 +75,22 @@ export default function PaywallScreen() {
   };
 
   const confirm = async () => {
-    if (!plan.pkg) {
-      dismiss();
-      return;
-    }
+    // The button reaches this only in the `buy` state, where the package exists.
+    if (!plan.pkg) return;
     const outcome = await buy(plan.pkg);
     if (outcome.kind === 'purchased') dismiss();
+  };
+
+  const runAction = () => {
+    if (action === 'buy') {
+      confirm().catch(() => {});
+      return;
+    }
+    if (action === 'retry') {
+      loadOffering().catch(() => {});
+      return;
+    }
+    if (action === 'close') dismiss();
   };
 
   const tryRestore = async () => {
@@ -153,27 +169,29 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {offeringState === 'error' || !storeReady ? (
-          <Text variant="caption" color={colors.inkMuted} align="center">
-            {storeReadyMessage(availability?.kind === 'ready', offeringState)}
-          </Text>
+        {message ? (
+          <Text variant="caption" color={colors.inkMuted} align="center">{message}</Text>
         ) : null}
 
         {error ? (
           <Text variant="small" color={colors.danger} align="center" selectable>{error}</Text>
         ) : null}
 
-        <Button disabled={busy} onPress={confirm}>
-          {ctaLabel(plan, storeReady, purchasing)}
+        <Button disabled={busy || action === 'waiting'} onPress={runAction}>
+          {ctaLabel(action, plan)}
         </Button>
-        {fromOnboarding ? (
+        {fromOnboarding && action !== 'close' ? (
           <Button variant="ghost" size="sm" disabled={busy} onPress={dismiss}>
             Keep using the free version
           </Button>
         ) : null}
-        <Text variant="caption" color={colors.inkSubtle} align="center">
-          {renewalCopy(plan)}
-        </Text>
+        {/* Only when the App Store priced this plan. The renewal terms are the
+            one line that must never carry a number Poke made up. */}
+        {storeReady ? (
+          <Text variant="caption" color={colors.inkSubtle} align="center">
+            {renewalCopy(plan)}
+          </Text>
+        ) : null}
         <View style={styles.legalRow}>
           <LegalLink label="Terms" url={TERMS_URL} />
           <Text variant="caption" color={colors.inkSubtle}>·</Text>
@@ -245,9 +263,31 @@ function LegalLink({ label, url }: { label: string; url: string }) {
   );
 }
 
-function ctaLabel(plan: PlanOption, storeReady: boolean, purchasing: boolean): string {
-  if (purchasing) return 'Purchasing';
-  if (!storeReady) return 'Continue';
+/**
+ * What the one large button does. The label is derived from this and never
+ * chosen on its own, so the button cannot promise a purchase it will not make.
+ */
+type CtaAction = 'buy' | 'retry' | 'close' | 'waiting' | 'purchasing';
+
+function ctaAction(
+  canSell: boolean,
+  storeReady: boolean,
+  offeringState: OfferingState,
+  purchasing: boolean,
+): CtaAction {
+  if (purchasing) return 'purchasing';
+  // Nothing is for sale here, so the button leaves rather than pretends.
+  if (!canSell) return 'close';
+  if (storeReady) return 'buy';
+  if (offeringState === 'idle' || offeringState === 'loading') return 'waiting';
+  return 'retry';
+}
+
+function ctaLabel(action: CtaAction, plan: PlanOption): string {
+  if (action === 'purchasing') return 'Purchasing';
+  if (action === 'waiting') return 'Loading the prices';
+  if (action === 'retry') return 'Try again';
+  if (action === 'close') return 'Close';
   return plan.trialLabel ? 'Start free trial' : `Subscribe for ${plan.priceLabel}`;
 }
 
@@ -261,14 +301,29 @@ function renewalCopy(plan: PlanOption): string {
   return `${lead} The subscription renews on its own until you cancel it in your Apple Account settings.`;
 }
 
-function storeReadyMessage(configured: boolean, offeringState: string): string {
-  if (!configured) {
+/**
+ * Null when the App Store priced the chosen plan and there is nothing to
+ * explain. Otherwise it names which prices on screen the store has not
+ * confirmed, so the rows above are never read as an offer.
+ */
+function storeMessage(
+  canSell: boolean,
+  offeringState: OfferingState,
+  planOnSale: boolean,
+): string | null {
+  if (!canSell) {
     return Platform.OS === 'web'
       ? 'Purchases do not run in the web preview. Use the iOS build to test purchases.'
       : 'This build has no subscription connection. Every Pro feature stays unlocked.';
   }
-  if (offeringState === 'loading') return 'Loading the current prices.';
-  return 'Poke could not reach the App Store. Check your connection and try again.';
+  if (offeringState === 'idle' || offeringState === 'loading') {
+    return 'Poke is loading the current prices.';
+  }
+  if (offeringState === 'error') {
+    return 'Poke could not reach the App Store. The prices above are not confirmed. Check your connection.';
+  }
+  if (!planOnSale) return 'The App Store does not offer this plan today. Pick the other plan above.';
+  return null;
 }
 
 const styles = StyleSheet.create({

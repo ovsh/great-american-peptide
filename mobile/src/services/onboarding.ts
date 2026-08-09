@@ -1,17 +1,24 @@
+import type { MedicationRow } from '../db/types';
 import type { PreferencesPatch } from '../repositories/preferences';
 import type { NewMedication } from '../repositories/medications';
 import { CUSTOM_MEDICATION_ID, type OnboardingDraft, type OnboardingMedicationId } from '../stores/onboarding';
 import { getPreset } from '../domain/peptides';
+import { createInjection, listInjections } from '../repositories/injections';
 import { createMeasurement, latestMeasurement } from '../repositories/measurements';
 import {
   createMedication,
+  FREE_MEDICATION_LIMIT,
   listMedications,
   nextColorIndex,
   setMedicationStatus,
   updateMedicationDefaults,
 } from '../repositories/medications';
 import { updatePreferences } from '../repositories/preferences';
+import { isProNow } from '../stores/entitlement';
+import { endOfDay, startOfDay } from '../utils/date';
 import { refreshScheduledReminders } from './notifications';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface MedicationSeed {
   selectionId: OnboardingMedicationId;
@@ -75,6 +82,18 @@ function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
   });
 }
 
+/** The row this seed already has, when setup runs a second time. */
+function findMedication(
+  medications: readonly MedicationRow[],
+  seed: MedicationSeed,
+): MedicationRow | undefined {
+  if (seed.selectionId === CUSTOM_MEDICATION_ID) {
+    return medications.find((medication) => medication.preset_id === null
+      && medication.name.trim().toLocaleLowerCase() === seed.medication.name.trim().toLocaleLowerCase());
+  }
+  return medications.find((medication) => medication.preset_id === seed.selectionId);
+}
+
 export async function completeOnboarding(draft: OnboardingDraft): Promise<void> {
   const seeds = medicationSeeds(draft);
   if (!draft.goalKind) throw new Error('Choose your goal.');
@@ -85,24 +104,52 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
     : '09:00';
   const now = Date.now();
   const existingMedications = await listMedications(true);
+  const matched = seeds.map((seed) => ({ seed, existing: findMedication(existingMedications, seed) }));
 
-  for (const seed of seeds) {
-    const existing = existingMedications.find((medication) => {
-      if (seed.selectionId === CUSTOM_MEDICATION_ID) {
-        return medication.preset_id === null
-          && medication.name.trim().toLocaleLowerCase() === seed.medication.name.trim().toLocaleLowerCase();
-      }
-      return medication.preset_id === seed.selectionId;
-    });
+  /**
+   * How many of the medications the user named Poke switches on.
+   *
+   * The free tier carries one medication and the App Store listing says so.
+   * `medications/new.tsx` held that line and this door did not, so anyone who
+   * named three medications during setup kept three of them for nothing.
+   *
+   * Poke saves every medication the user named. They answered honestly about
+   * their own regimen and Poke throws none of it away. The ones past the limit
+   * are saved archived: an archived medication keeps its name, its dose, its
+   * schedule and its half-life, it draws no card, it sends no reminder, and
+   * `countActiveMedications` does not count it, which is the same rule the
+   * other door applies. Setup itself stays clear of the paywall.
+   * `onboarding/plan.tsx` raises one after the user lands on Today.
+   *
+   * Medications the user already had and did not name here hold their own
+   * places, so a second pass through setup cannot lift the limit.
+   */
+  const claimed = new Set(matched.flatMap(({ existing }) => (existing ? [existing.id] : [])));
+  const outsideActive = existingMedications
+    .filter((medication) => medication.status !== 'archived' && !claimed.has(medication.id))
+    .length;
+  const activeAllowance = isProNow()
+    ? seeds.length
+    : Math.max(0, FREE_MEDICATION_LIMIT - outsideActive);
+
+  let activeCount = 0;
+  const saved: { id: string; seed: MedicationSeed }[] = [];
+  for (const { seed, existing } of matched) {
+    const status: MedicationRow['status'] = activeCount < activeAllowance ? 'active' : 'archived';
+    if (status === 'active') activeCount += 1;
     if (existing) {
       await updateMedicationDefaults(existing.id, seed.medication);
-      if (existing.status !== 'active') await setMedicationStatus(existing.id, 'active');
+      if (existing.status !== status) await setMedicationStatus(existing.id, status);
+      saved.push({ id: existing.id, seed });
       continue;
     }
     const colorIndex = await nextColorIndex();
     const created = await createMedication({ ...seed.medication, colorIndex });
-    existingMedications.push(created);
+    if (status !== 'active') await setMedicationStatus(created.id, status);
+    saved.push({ id: created.id, seed });
   }
+
+  await recordLastShot(draft, saved, now);
 
   // Every question the flow asks lands somewhere. A question whose answer goes
   // nowhere is a question Poke should not be asking. The medication and schedule
@@ -129,11 +176,11 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
   };
 
   // Current weight, goal weight and height each have their own screen and each
-  // can be skipped on its own, so each is parsed on its own. An unreadable or
-  // skipped field leaves its column alone rather than writing a zero.
-  const currentWeight = parseOptionalPositive(draft.weight.currentText);
-  const goalWeight = parseOptionalPositive(draft.weight.goalText);
-  const height = parseOptionalPositive(draft.height.valueText);
+  // can be skipped on its own, so each is tested on its own. A skipped field
+  // leaves its column alone rather than writing a zero.
+  const currentWeight = positive(draft.weight.current);
+  const goalWeight = positive(draft.weight.goal);
+  const height = positive(draft.height.value);
 
   if (currentWeight !== null) {
     const latest = await latestMeasurement('weight');
@@ -160,9 +207,8 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
   await refreshScheduledReminders().catch(() => {});
 }
 
-function parseOptionalPositive(value: string): number | null {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+function positive(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function parseOptionalInt(value: string): number | null {
@@ -179,6 +225,55 @@ function parseOptionalInt(value: string): number | null {
  */
 function lastShotAt(choice: OnboardingDraft['lastShot'], now: number): number | null {
   if (choice === 'today') return now;
-  if (choice === 'yesterday') return now - 24 * 60 * 60 * 1000;
+  if (choice === 'yesterday') return now - DAY_MS;
   return null;
+}
+
+/**
+ * The shot the user says they already took, written as a shot.
+ *
+ * Setup asked when the last shot was, drew a curve from the answer, and then
+ * dropped it. So the app opened on "Log today's shot" for a user who had just
+ * said they took it, the level card started from nothing, and the first real
+ * shot they logged got no interval before it.
+ *
+ * Everything in the row is theirs: the dose, the unit and the route are what
+ * they typed on the schedule screen. Nothing is invented. The site is left
+ * empty, because they were not asked which one, and `lastSiteUseFor` skips a
+ * row with no site, so the rotation is untouched. The note says where the row
+ * came from, in the same words the setup weight uses.
+ *
+ * Only the two answers that name an exact day are written. A second pass
+ * through setup on the same day finds the first pass's row and adds nothing.
+ */
+async function recordLastShot(
+  draft: OnboardingDraft,
+  saved: { id: string; seed: MedicationSeed }[],
+  now: number,
+): Promise<void> {
+  const takenAt = lastShotAt(draft.lastShot, now);
+  if (takenAt === null) return;
+
+  for (const { id, seed } of saved) {
+    const schedule = draft.schedules[seed.selectionId];
+    if (!schedule) continue;
+    const dose = positive(Number.parseFloat(schedule.doseText));
+    if (dose === null) continue;
+    const already = await listInjections({
+      medicationId: id,
+      fromMs: startOfDay(takenAt),
+      toMs: endOfDay(takenAt),
+      limit: 1,
+    });
+    if (already.length > 0) continue;
+    await createInjection({
+      medicationId: id,
+      dose,
+      unit: schedule.unit,
+      route: schedule.route,
+      siteId: null,
+      takenAt,
+      notes: 'Added during setup',
+    });
+  }
 }
