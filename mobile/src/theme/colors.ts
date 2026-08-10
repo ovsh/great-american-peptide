@@ -10,7 +10,7 @@ export const colors = {
   inkInverse: '#FFFFFF',
 
   success: '#2FB47C',
-  successDeep: '#2FB47C',
+  successDeep: '#147A52',
   successSoft: '#E7F6EF',
 
   warning: '#E8A13C',

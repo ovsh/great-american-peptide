@@ -79,9 +79,9 @@ function PokeTabBar({ state, navigation }: BottomTabBarProps) {
                 }}
                 style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
               >
-                <Icon size={24} strokeWidth={1.8} color={active ? colors.accent : colors.inkSubtle} />
+                <Icon size={24} strokeWidth={1.8} color={active ? colors.successDeep : colors.inkMuted} />
                 <Text
-                  color={active ? colors.accent : colors.inkSubtle}
+                  color={active ? colors.successDeep : colors.inkMuted}
                   style={styles.label}
                 >
                   {item.label}

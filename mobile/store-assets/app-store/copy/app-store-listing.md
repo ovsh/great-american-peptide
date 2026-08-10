@@ -1,10 +1,10 @@
 # Poke — App Store listing copy
 
-Version 1.2.0. The subscription shipped in 1.1.0, so the description still
+Version 1.2.2. The subscription shipped in 1.1.0, so the description still
 carries the full guideline 3.1.2 disclosure and the review notes still answer the
 two questions Apple always asks a paid health app: how do we get in, and is this
-a medical device. 1.2.0 adds a longer setup flow, a searchable medication list
-and a source line on every half-life.
+a medical device. 1.2.2 adds the guided setup, a searchable medication list,
+a source line on every half-life and the rebuilt Today screen.
 
 Field limits, so nothing is written that cannot be pasted:
 name 30, subtitle 30, promotional text 170, keywords 100, description 4000.
@@ -127,59 +127,66 @@ cards on a 13 inch screen leave the slide nearly empty.
 
 ## What is new in this version
 
-SETUP NOW BUILDS A PLAN
-Poke asks about every medication you take, not only the first one. Each medication gets its own dose, its own schedule and its own shot day.
+TODAY, REBUILT
+Switch between medications from a compact row. The selected medication shows the next shot, dose, schedule and last shot without a large image. When a shot is due, Log shot fills the bottom edge of the card so the action is easy to find.
 
-At the end of setup Poke shows what it worked out. You see your next shot day. You see your estimated level over the next four weeks. You see the first injection sites the rotation will offer. Every number comes from what you typed and from a published half-life. Poke predicts nothing about your body and gives no goal date.
+ESTIMATED LEVELS, CLEARER
+The level card uses the shots you logged. Free shows a blurred preview of the seven-day estimate. Poke Pro shows the exact estimate and opens the full details. An estimate is not a measurement and is not a basis for changing a dose.
+
+TRACK TODAY
+Weight and side effects now sit in one clean list.
+
+SETUP NOW BUILDS A PLAN
+Poke asks about every medication you take, then shows the next shot day, estimated level plan and first sites in the injection rotation. Optional height, weight, goal weight and reminder questions each have a skip.
 
 A LONGER LIST, AND A SEARCH
-The medication list holds 19 entries now, up from 10. You can search it by generic name or by brand name. Anything the list does not hold still goes in as a custom medication.
+The medication list now holds 19 entries and supports generic-name and brand-name searches.
 
 HALF-LIVES THAT NAME THEIR SOURCE
-Every half-life in Poke now names where it comes from, and you can read that source on screen. Where no human study exists Poke says so and draws no curve. Two entries lost their curve for this reason. A missing curve is better than a wrong one.
+Every half-life names its source. Where no human study exists, Poke draws no curve.
 
-SMALLER THINGS
-Poke uses plainer words on every screen. Poke asks for a rating at most three times a year, and never during setup.
+Poke gives no medical advice, diagnosis, treatment guidance or dose recommendation.
 
 ## App Review notes
 
-Paste this into App Store Connect → Version → App Review Information → Notes.
+Paste this into App Store Connect > Version > App Review Information > Notes.
 
 NO ACCOUNT IS NEEDED
-Poke has no user accounts, no sign-in and no server. Poke sends nothing anywhere. All data lives in a local database on the device. There is no demo account to supply because there is nothing to sign in to. Open the app and the setup flow starts.
+Poke has no accounts, sign-in or server. All data stays in a local database on the device. There is no demo account. Open the app and finish setup.
 
-HOW TO SEE THE PAID FEATURES
-Poke Pro is an auto-renewable subscription in the group "Poke Pro", sold through RevenueCat over StoreKit 2.
+HOW TO REVIEW POKE PRO
+Poke Pro is an auto-renewable subscription in the Poke Pro group, sold through RevenueCat and StoreKit 2.
 
-1. Finish the setup flow. The paywall opens on its own at the end of it. The paywall can be dismissed, and the free features work without buying anything.
-2. To reach the paywall again later: Profile tab → Subscription → "Get Poke Pro". Any locked feature opens it too: the Progress tab, the level chart on a medication card in the Today tab, "Export history" in the Profile tab, or adding a second medication in Profile → Medications.
-3. Buy either plan with the sandbox Apple Account. Sandbox purchases are free. The yearly plan carries a 1-month free trial for new subscribers.
-4. The paywall closes and every Pro screen unlocks at once. "Restore purchases" sits in the top bar of the paywall and in Profile → Subscription.
+1. Finish setup. The paywall opens at the end and can be closed.
+2. To open it later: Profile > Subscription > Get Poke Pro. The Progress tab, the blurred level preview on Today, Export history and adding a second medication also open it.
+3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month free trial for new subscribers.
+4. The paywall closes and Pro unlocks at once. Restore purchases is on the paywall and in Profile.
 
-If the sandbox store is unreachable for any reason, the app unlocks every feature rather than showing a locked screen you cannot buy your way out of. So a failed store connection will not block the review.
+If the sandbox store cannot be reached, the app unlocks all features so review is not blocked.
 
-FREE VERSUS PAID
-Free, permanently: log a shot, next shot day, full history, one medication, one reminder.
-Pro: estimated level curve, progress and trend charts, more than one medication, CSV export.
+FREE AND PRO
+Free: shot logging, next shot, full history, one medication and one reminder.
+Pro: exact estimated level charts, progress charts, more than one medication and CSV export.
 
-PLEASE READ: MEDICAL POSITIONING
-Poke is a personal record-keeping app. It is not a medical device and it makes no clinical claim.
+MEDICAL POSITIONING
+Poke is a personal record. It is not a medical device and makes no clinical claim.
 
-- Poke does not recommend, calculate or suggest a dose. Poke records the dose the user says they took. Poke never proposes a number.
-- Poke does not diagnose, treat or give treatment guidance, and Poke gives no administration instructions.
-- The "level" chart is an estimate drawn from two things the user typed in: the shots they logged and a half-life value they set. The chart is labelled on screen as an estimate and marked "not for dosing". The chart is not a measurement of anything in the body.
-- The reconstitution screen is a unit conversion. A mass and a volume go in, and a concentration comes out. It is labelled on screen "For laboratory research and educational calculations only. Not for clinical, patient, medical, injection, or dosing use." It suggests nothing and it fills nothing in for the user.
-- The first-run setup states, above the button that finishes it, that Poke gives no medical advice, no diagnosis and no dose instructions, and that the user should speak to their clinician. A full disclaimer also sits in Profile.
-- No drug brand names are used anywhere in the app or in this listing. Only generic medication names the user selects for their own log.
+- Poke records the dose the user enters. It never recommends, calculates or suggests a dose.
+- Poke gives no diagnosis, treatment guidance or administration instructions.
+- A level chart is an estimate from the shots the user logged and the published half-life on file. Poke shows the half-life source. The estimate is not a measurement and is not a basis for changing a dose.
+- Where no human half-life study exists, Poke says so and draws no curve.
+- The reconstitution screen is a unit conversion for laboratory research and educational calculations only. It gives no dose instruction.
+- Setup and Profile show the full disclaimer and tell the user to speak to a clinician.
+- Medications are stored and shown by generic name. Brand names work only as search terms and in a half-life source title.
 
-WHAT CHANGED IN 1.2.0
-The setup flow now asks about each medication on its own screen, so it runs a few screens longer when the user picks more than one. The last setup screen shows a summary that Poke calculates from what the user typed: the next shot date, an estimated level curve over four weeks, and the first sites in the injection rotation. It holds no prediction, no goal date and no outcome claim.
+WHAT CHANGED IN 1.2.2
+Today now uses a compact medication rail and one selected-medication card. The next shot is the primary block. A due shot has a full-width Log shot action. Free shows the real seven-day estimate shape behind a blur, with no exact values exposed. Pro removes the blur. A medication without a cited half-life gets no chart or level offer.
 
-Every half-life in the app now names a published source, and the app prints that source on screen next to the medication. Where no human pharmacokinetic study exists, the app says so and draws no curve at all. Two entries lost their curve in this version for that reason. This tightens the medical framing rather than loosening it.
+Setup is now a 23-step guided flow. It asks about each medication, then optional profile and tracking questions. Before the summary it shows a progress screen for about 14 seconds. The summary uses only the answers entered and published half-lives.
 
-The medication list grew from 10 generic names to 19, and it is searchable. No drug brand name appears in the app. Brand names are accepted as search terms only, so a user who knows one can find the generic name, and the app then stores and shows the generic name.
+If the user enters a current weight, goal weight and weekly rate, Poke divides the distance by that rate and prints a date. The screen says: "That date is your distance divided by the pace you set. It is arithmetic on two numbers you typed. It is not a forecast, and no model of your body stands behind it. Move the pace above and watch the date move with it. Speak to your clinician about the pace that suits you." If weight data is skipped, no date appears.
 
-Version 1.0 of this app was approved with this framing, and version 1.1.0 was submitted with it. Version 1.2.0 does not change what the app claims to do.
+The medication list has 19 generic entries and search. Every half-life names its published source. Nothing in 1.2.2 changes what Poke claims to do.
 
 CONTACT
 support@peptide.industries
