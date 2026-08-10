@@ -330,6 +330,11 @@ action, a real blurred level preview for Free, the exact level chart for Pro, an
 one Track today list for weight and side effects. The level preview uses only the
 user's logged shots. A medication without a cited half-life gets no chart.
 
+Build 14 was built from commit `dd61862` and uploaded on 10 August 2026. Apple
+processed it successfully. It is available to internal TestFlight testers. EAS
+build `48bcecd7-a996-4a88-b64e-4b78e35190b4`; EAS submission
+`2eca447f-cdb0-4774-b268-99e4315868f3`.
+
 **1.2.1** — prepared 8 August 2026, **never submitted**. Superseded by 1.2.2 on
 10 August 2026. It contained the onboarding rebuild (23 counted steps, the
 compute beat, and the plan reveal with a live pace slider and a projected date),
@@ -349,17 +354,26 @@ cannot be submitted without its group *and* a new app version (§4A step 4). The
 subscription review is the expensive part, and it is already paid for. So:
 
 1. Wait for 1.1.0 to clear review.
-2. Then create the 1.2.2 version in ASC, run `npx eas metadata:push`, attach the
-   build, and submit the version on its own. The subscriptions are already
-   approved by then, so 1.2.2 is a plain app-version submission.
+2. Then create the 1.2.2 version in ASC, run
+   `npx -y eas-cli@21.7.0 metadata:push`, attach build 14, and submit the version
+   on its own. The subscriptions are already approved by then, so 1.2.2 is a
+   plain app-version submission.
 
 The EAS build may be made and uploaded at any time. It does not touch the 1.1.0
-submission.
+submission. Use EAS CLI 21.7.0 or later for metadata. Earlier clients reject
+Apple's current age-rating fields.
+
+Do not run the metadata push before 1.1.0 clears. On 10 August 2026, a check
+showed that the command can rename the queued 1.1.0 version instead of creating a
+second version. The queued version was restored from commit `6f1e92b`, and its
+state, build, review copy, and screenshots were checked again.
 
 **1.1.0 (9)** — submitted 7 August 2026, 4:15 AM. Four items in one submission:
 iOS App 1.1.0, Poke Pro Yearly, Poke Pro Monthly, and the Poke Pro subscription
-group. Status: Waiting for Review. Release option: **automatic on approval**.
-Age rating kept, not reset. Sign-in not required.
+group. Status checked 10 August 2026: Waiting for Review, with build 9 still
+attached. Review submission `29bef750-ed72-415f-a788-aa1a7495def0`. Release
+option: **automatic on approval**. Age rating kept, not reset. Sign-in not
+required.
 
 The listing was renamed in this version: `Poke: Peptide & GLP-1 Log`, subtitle
 `Shot log, levels and trends`, categories Health & Fitness and Medical. Name,
