@@ -1,487 +1,292 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
-import { Trash2 } from 'lucide-react-native';
+// History — the month board.
+//
+// A list answers "what did I take on the 4th". A month answers "am I actually
+// doing this", which is why this tab gets opened. So there is no list, no
+// List/Calendar toggle and no month cursor: months stack in one continuous
+// scroll, oldest above, and the only thing you select is a day.
+//
+// The month label at the top is a label, not a control. The one control beside
+// it is the Today chip, and it goes quiet when you are already on today.
+// Tapping a day raises the half sheet; the board never reflows under the finger.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/Button';
-import { Card } from '@/components/Card';
-import { MonthGrid } from '@/components/MonthGrid';
-import { Text } from '@/components/Text';
-import type { InjectionRow, MedicationRow } from '@/db/types';
-import { getBodySite } from '@/domain/bodySites';
-import { formatDose } from '@/domain/units';
+import { Text } from '../../src/components/Text';
+import { HistoryDaySheet } from '../../src/components/history-day-sheet';
 import {
-  listInjectionMarks,
-  listInjections,
-  softDeleteInjection,
-  type InjectionMark,
-} from '@/repositories/injections';
-import { listMedications } from '@/repositories/medications';
-import { refreshScheduledReminders } from '@/services/notifications';
-import { useAppStore } from '@/stores/app';
-import { colors, radius, spacing } from '@/theme';
-import { endOfDay, fmtDayLabel, fmtTime, startOfDay } from '@/utils/date';
+  HistoryMonthSection,
+  monthLabel,
+  monthSectionHeight,
+} from '../../src/components/history-month-section';
+import type { MedicationRow } from '../../src/db/types';
+import {
+  addLocalMonths,
+  monthStartsBetween,
+  startOfLocalMonth,
+  type BoardDay,
+} from '../../src/domain/historyBoard';
+import type { WeightUnit } from '../../src/domain/units';
+import { listMedications } from '../../src/repositories/medications';
+import { getPreferences } from '../../src/repositories/preferences';
+import { useAppStore } from '../../src/stores/app';
+import { colors, radius, spacing } from '../../src/theme';
 
-type HistoryMode = 'list' | 'calendar';
-
-interface HistoryDay {
-  key: string;
-  label: string;
-  at: number;
-  injections: InjectionRow[];
-}
-
+/** The gap above the first month, matching the gap between months. */
+const LIST_TOP = 10;
+/** Clear of the tab bar and the centre button. */
+const LIST_BOTTOM = 112;
 /**
- * How many shots the list reads at a time.
+ * How far back the board scrolls before the first medication existed.
  *
- * The screen used to read 500 shots once and hand the same rows to the list and
- * to the calendar. Two daily medications pass 500 in under a year, so the older
- * months drew empty and the day under them said the user had logged nothing.
- * The calendar now reads the month it shows, and the list reads a page and says
- * how many shots it is showing.
+ * Onboarding can record a last shot taken before the medication row was
+ * written, so the board opens one month earlier than the oldest medication
+ * rather than ending exactly on it.
  */
-const PAGE_SIZE = 200;
+const LEAD_MONTHS = 1;
+/** A guard on a bad `created_at`: the board is a treatment log, not an archive. */
+const MAX_MONTHS = 72;
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const dataVersion = useAppStore((state) => state.dataVersion);
   const bumpVersion = useAppStore((state) => state.bumpVersion);
-  const [mode, setMode] = useState<HistoryMode>('list');
-  const [selected, setSelected] = useState(() => new Date());
-  const [month, setMonth] = useState(() => startOfMonth(new Date()));
-  const [medications, setMedications] = useState<Record<string, MedicationRow>>({});
-  const [listLimit, setListLimit] = useState(PAGE_SIZE);
-  // Null means Poke has not read yet. Every empty state on this screen makes a
-  // claim about the user's own data, so none of them may render over a query
-  // that has not answered.
-  const [listRows, setListRows] = useState<InjectionRow[] | null>(null);
-  const [listHasMore, setListHasMore] = useState(false);
-  const [monthDots, setMonthDots] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
-  const [dayRows, setDayRows] = useState<InjectionRow[] | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const selectedDay = startOfDay(selected.getTime());
 
-  useEffect(() => {
-    let live = true;
-    listMedications(true)
-      .then((rows) => {
-        if (!live) return;
-        const byId: Record<string, MedicationRow> = {};
-        for (const medication of rows) byId[medication.id] = medication;
-        setMedications(byId);
-      })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [dataVersion]);
+  const [ready, setReady] = useState(false);
+  const [medications, setMedications] = useState<MedicationRow[]>([]);
+  const [reminderTime, setReminderTime] = useState('09:00');
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('lb');
+  const [now, setNow] = useState(() => Date.now());
+  const [selected, setSelected] = useState<BoardDay | null>(null);
 
-  // One page of shots, newest first. The extra row answers "is there more"
-  // without a second query, and it never reaches the screen.
-  useEffect(() => {
-    if (mode !== 'list') return;
-    let live = true;
-    listInjections({ limit: listLimit + 1 })
-      .then((rows) => {
-        if (!live) return;
-        setListHasMore(rows.length > listLimit);
-        setListRows(rows.slice(0, listLimit));
-      })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [dataVersion, listLimit, mode]);
+  const listRef = useRef<FlatList<number>>(null);
+  const [visibleIndex, setVisibleIndex] = useState(0);
 
-  // The dots for the month on screen, and only that month.
-  useEffect(() => {
-    if (mode !== 'calendar') return;
-    let live = true;
-    listInjectionMarks(startOfMonth(month).getTime(), endOfMonth(month).getTime())
-      .then((marks) => { if (live) setMonthDots(groupMarksByDay(marks)); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [dataVersion, mode, month]);
-
-  // The rows for the day the user tapped, read from the day itself rather than
-  // filtered out of a capped list.
-  useEffect(() => {
-    if (mode !== 'calendar') return;
-    let live = true;
-    setDayRows(null);
-    listInjections({ fromMs: selectedDay, toMs: endOfDay(selectedDay) })
-      .then((rows) => { if (live) setDayRows(rows); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [dataVersion, mode, selectedDay]);
-
-  // A shot logged on the wrong medication skews the level curve and the rotation
-  // until it goes. The row soft deletes, so every list query drops it from here on.
-  const deleteInjection = useCallback(async (injection: InjectionRow, medicationName: string | null) => {
-    const dose = formatDose(injection.dose, injection.unit);
-    const when = `${fmtDayLabel(injection.taken_at)} at ${fmtTime(injection.taken_at).toLocaleLowerCase()}`;
-    const confirmed = await confirmDelete(
-      'Delete this shot?',
-      `Poke removes ${medicationName ?? 'Unknown medication'} ${dose} from ${when}. You cannot undo this.`,
-    );
-    if (!confirmed) return;
-    setDeletingId(injection.id);
-    try {
-      await softDeleteInjection(injection.id);
-      await refreshScheduledReminders().catch(() => {});
-      bumpVersion();
-    } catch (error: unknown) {
-      Alert.alert('Poke could not delete your shot', error instanceof Error ? error.message : 'Try again.');
-    } finally {
-      setDeletingId(null);
-    }
-  }, [bumpVersion]);
-
-  const grouped = useMemo(() => groupByDay(listRows ?? []), [listRows]);
-
-  return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
-        <Text variant="display">History</Text>
-        <SegmentedControl value={mode} onChange={setMode} />
-
-        {mode === 'calendar' ? (
-          <>
-            <MonthGrid
-              month={month}
-              onMonthChange={setMonth}
-              dotsByDay={monthDots}
-              medications={medications}
-              selected={selected}
-              onSelect={setSelected}
-            />
-            <HistoryGroup
-              label={format(selected, 'EEEE, MMMM d')}
-              day={selected}
-              injections={dayRows}
-              medications={medications}
-              deletingId={deletingId}
-              onDelete={deleteInjection}
-            />
-          </>
-        ) : listRows === null ? (
-          <Card style={styles.emptyDay}>
-            <Text color={colors.inkMuted}>Poke is reading your history.</Text>
-          </Card>
-        ) : grouped.length > 0 ? (
-          <>
-            {grouped.map((day) => (
-              <HistoryGroup
-                key={day.key}
-                label={day.label}
-                day={new Date(day.at)}
-                injections={day.injections}
-                medications={medications}
-                deletingId={deletingId}
-                onDelete={deleteInjection}
-              />
-            ))}
-            {listHasMore ? (
-              <View style={styles.group}>
-                <Text variant="small" color={colors.inkMuted}>
-                  Poke shows your {listRows.length} most recent shots. Your older shots
-                  are still here and the calendar reaches all of them.
-                </Text>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onPress={() => setListLimit((limit) => limit + PAGE_SIZE)}
-                >
-                  {`Show ${PAGE_SIZE} more shots`}
-                </Button>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <EmptyHistory />
-        )}
-      </ScrollView>
-    </View>
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      // The day can have turned over while the app was in the background, so
+      // "today" is read again on every focus, not once per mount.
+      setNow(Date.now());
+      Promise.all([listMedications(true), getPreferences()])
+        .then(([rows, preferences]) => {
+          if (!alive) return;
+          setMedications(rows);
+          setReminderTime(preferences.reminder_time ?? '09:00');
+          setWeightUnit(preferences.weight_unit === 'kg' ? 'kg' : 'lb');
+          setReady(true);
+        })
+        .catch(() => {
+          if (alive) setReady(true);
+        });
+      return () => {
+        alive = false;
+      };
+      // Medications and preferences change on other screens, so focus is the
+      // trigger. `dataVersion` moves when a shot is logged or deleted, and the
+      // months and the sheet read it themselves.
+    }, []),
   );
-}
 
-function SegmentedControl({ value, onChange }: { value: HistoryMode; onChange: (mode: HistoryMode) => void }) {
+  /** The lanes: every medication still on the list, in the order the user put them. */
+  const lanes = useMemo(
+    () => medications.filter((medication) => medication.status !== 'archived'),
+    [medications],
+  );
+  const medicationsById = useMemo(
+    () => new Map(medications.map((medication) => [medication.id, medication])),
+    [medications],
+  );
+
+  const months = useMemo(() => {
+    const thisMonth = startOfLocalMonth(now);
+    if (medications.length === 0) return [thisMonth];
+    const oldest = medications.reduce((min, medication) => Math.min(min, medication.created_at), now);
+    const first = addLocalMonths(startOfLocalMonth(oldest), -LEAD_MONTHS);
+    const all = monthStartsBetween(Math.min(first, thisMonth), thisMonth);
+    return all.length > MAX_MONTHS ? all.slice(all.length - MAX_MONTHS) : all;
+  }, [medications, now]);
+
+  const laneCount = lanes.length;
+  const heights = useMemo(
+    () => months.map((month) => monthSectionHeight(month, laneCount)),
+    [months, laneCount],
+  );
+  const offsets = useMemo(() => {
+    let running = LIST_TOP;
+    return heights.map((height) => {
+      const offset = running;
+      running += height;
+      return offset;
+    });
+  }, [heights]);
+
+  const lastIndex = months.length - 1;
+  const onToday = visibleIndex >= lastIndex;
+
+  // The list opens on the newest month, and `initialScrollIndex` does not raise
+  // a scroll event, so the bar is told where it landed.
+  useEffect(() => {
+    setVisibleIndex(months.length - 1);
+  }, [months]);
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = event.nativeEvent.contentOffset.y + LIST_TOP;
+      let index = 0;
+      for (let step = 0; step < offsets.length; step += 1) {
+        if (offsets[step] <= y) index = step;
+        else break;
+      }
+      setVisibleIndex((current) => (current === index ? current : index));
+    },
+    [offsets],
+  );
+
+  const jumpToToday = useCallback(() => {
+    if (lastIndex < 0) return;
+    listRef.current?.scrollToIndex({ index: lastIndex, animated: true });
+  }, [lastIndex]);
+
+  const openLogShot = useCallback((day: BoardDay) => {
+    setSelected(null);
+    router.push(
+      day.isPast
+        ? { pathname: '/log-shot', params: { takenAt: String(day.dayStart) } }
+        : '/log-shot',
+    );
+  }, []);
+
+  const renderMonth = useCallback(
+    ({ item }: { item: number }) => (
+      <HistoryMonthSection
+        monthStart={item}
+        lanes={lanes}
+        reminderTime={reminderTime}
+        now={now}
+        dataVersion={dataVersion}
+        selectedDay={selected?.dayStart ?? null}
+        onSelectDay={setSelected}
+      />
+    ),
+    [lanes, reminderTime, now, dataVersion, selected],
+  );
+
   return (
-    <View style={styles.segmented}>
-      {(['list', 'calendar'] as const).map((mode) => {
-        const selected = value === mode;
-        return (
-          <Pressable
-            key={mode}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            onPress={() => onChange(mode)}
-            style={[styles.segment, selected && styles.segmentSelected]}
+    <View style={styles.screen}>
+      <View style={[styles.bar, { paddingTop: insets.top }, onToday ? null : styles.barRule]}>
+        <Text variant="h2" numberOfLines={1} style={styles.barLabel}>
+          {monthLabel(months[visibleIndex] ?? now)}
+        </Text>
+        <Pressable
+          testID="history-today-chip"
+          accessibilityRole="button"
+          accessibilityLabel="Go to this month"
+          onPress={jumpToToday}
+          style={[styles.chip, onToday ? null : styles.chipAway]}
+        >
+          <View style={[styles.chipDot, onToday ? null : styles.chipDotAway]} />
+          <Text
+            variant="caption"
+            color={onToday ? colors.inkMuted : colors.successDeep}
+            style={styles.chipLabel}
           >
-            <Text variant="smallStrong" color={selected ? colors.inkInverse : colors.inkMuted}>
-              {mode === 'list' ? 'List' : 'Calendar'}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function HistoryGroup({
-  label,
-  day,
-  injections,
-  medications,
-  deletingId,
-  onDelete,
-}: {
-  label: string;
-  day: Date;
-  /** Null until the query answers. See the empty states. */
-  injections: readonly InjectionRow[] | null;
-  medications: Readonly<Record<string, MedicationRow>>;
-  deletingId: string | null;
-  onDelete: (injection: InjectionRow, medicationName: string | null) => void;
-}) {
-  return (
-    <View style={styles.group}>
-      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
-      {injections === null ? (
-        <Card style={styles.emptyDay}>
-          <Text color={colors.inkMuted}>Poke is reading this day.</Text>
-        </Card>
-      ) : injections.length > 0 ? (
-        <Card padding="xs" style={styles.rows}>
-          {injections.map((injection, index) => (
-            <HistoryRow
-              key={injection.id}
-              injection={injection}
-              medication={medications[injection.medication_id] ?? null}
-              divider={index < injections.length - 1}
-              deleting={deletingId === injection.id}
-              onDelete={onDelete}
-            />
-          ))}
-        </Card>
-      ) : (
-        <EmptyDay day={day} />
-      )}
-    </View>
-  );
-}
-
-/**
- * A day the user tapped that holds no shot.
- *
- * The button carries the day to the log screen. It used to open on today, so a
- * user filing a shot they forgot on Tuesday got a row on the wrong day.
- *
- * The calendar also reaches days that have not arrived. A log records a shot
- * that happened, so a future day gets the sentence and no button.
- */
-function EmptyDay({ day }: { day: Date }) {
-  const dayStart = startOfDay(day.getTime());
-  const todayStart = startOfDay(Date.now());
-  if (dayStart > todayStart) {
-    return (
-      <Card style={styles.emptyDay}>
-        <Text color={colors.inkMuted}>
-          This day has not arrived. Poke logs a shot on the day you take it.
-        </Text>
-      </Card>
-    );
-  }
-  const past = dayStart < todayStart;
-  return (
-    <Card style={styles.emptyDay}>
-      <Text color={colors.inkMuted}>You logged no shot on this day.</Text>
-      <Button
-        size="sm"
-        onPress={() => router.push(past
-          ? { pathname: '/log-shot', params: { takenAt: String(dayStart) } }
-          : '/log-shot')}
-      >
-        {past ? 'Log shot on this day' : 'Log shot'}
-      </Button>
-    </Card>
-  );
-}
-
-function HistoryRow({
-  injection,
-  medication,
-  divider,
-  deleting,
-  onDelete,
-}: {
-  injection: InjectionRow;
-  medication: MedicationRow | null;
-  divider: boolean;
-  deleting: boolean;
-  onDelete: (injection: InjectionRow, medicationName: string | null) => void;
-}) {
-  const site = injection.site_id ? getBodySite(injection.site_id) : undefined;
-  const color = medication
-    ? colors.med[medication.color_index % colors.med.length] ?? colors.accent
-    : colors.inkSubtle;
-  const name = medication?.name ?? 'Unknown medication';
-  return (
-    <View style={[styles.row, divider && styles.rowDivider]}>
-      <View style={[styles.medicationDot, { backgroundColor: color }]} />
-      <View style={styles.rowCopy}>
-        <Text variant="bodyStrong">{name}</Text>
-        <Text variant="small" color={colors.inkMuted}>
-          {fmtTime(injection.taken_at).toLocaleLowerCase()}{' '}
-          {site ? `in the ${site.label.toLocaleLowerCase()}` : 'with no site'}
-        </Text>
+            Today
+          </Text>
+        </Pressable>
       </View>
-      <Text variant="smallStrong">{formatDose(injection.dose, injection.unit)}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Delete the ${name} shot from ${fmtDayLabel(injection.taken_at)} at ${fmtTime(injection.taken_at)}`}
-        accessibilityState={{ disabled: deleting }}
-        onPress={() => onDelete(injection, medication?.name ?? null)}
-        disabled={deleting}
-        style={[styles.delete, deleting && styles.deleteBusy]}
-      >
-        <Trash2 size={18} color={colors.inkSubtle} />
-      </Pressable>
+
+      {ready ? (
+        <FlatList
+          ref={listRef}
+          data={months}
+          keyExtractor={(month) => String(month)}
+          renderItem={renderMonth}
+          getItemLayout={(_, index) => ({
+            length: heights[index] ?? 0,
+            offset: offsets[index] ?? LIST_TOP,
+            index,
+          })}
+          initialScrollIndex={lastIndex > 0 ? lastIndex : undefined}
+          onScrollToIndexFailed={() => listRef.current?.scrollToEnd({ animated: false })}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          ListHeaderComponent={<View style={styles.listTop} />}
+          ListFooterComponent={<View style={{ height: LIST_BOTTOM + insets.bottom }} />}
+          showsVerticalScrollIndicator={false}
+          windowSize={5}
+          removeClippedSubviews={false}
+        />
+      ) : (
+        <View style={styles.listTop} />
+      )}
+
+      <HistoryDaySheet
+        day={selected}
+        lanes={lanes}
+        medicationsById={medicationsById}
+        weightUnit={weightUnit}
+        dataVersion={dataVersion}
+        onClose={() => setSelected(null)}
+        onChanged={bumpVersion}
+        onLogShot={openLogShot}
+      />
     </View>
   );
-}
-
-function EmptyHistory() {
-  return (
-    <Card style={styles.emptyDay}>
-      <Text variant="h2">No shots yet.</Text>
-      <Text color={colors.inkMuted}>Every shot you log appears here.</Text>
-      <Button onPress={() => router.push('/log-shot')}>Log shot</Button>
-    </Card>
-  );
-}
-
-/**
- * Ask before a delete, and name the shot in the question. `Alert.alert` is a no-op
- * on react-native-web, and the web preview is the fast loop, so ask through the
- * browser there instead of dropping the step.
- */
-function confirmDelete(title: string, message: string): Promise<boolean> {
-  if (Platform.OS === 'web') {
-    return Promise.resolve(typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) => {
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Delete shot', style: 'destructive', onPress: () => resolve(true) },
-      ],
-      { onDismiss: () => resolve(false) },
-    );
-  });
-}
-
-function groupByDay(injections: readonly InjectionRow[]): HistoryDay[] {
-  const groups = new Map<string, HistoryDay>();
-  for (const injection of injections) {
-    const key = format(injection.taken_at, 'yyyy-MM-dd');
-    const existing = groups.get(key);
-    if (existing) existing.injections.push(injection);
-    else {
-      groups.set(key, {
-        key,
-        label: fmtDayLabel(injection.taken_at),
-        at: injection.taken_at,
-        injections: [injection],
-      });
-    }
-  }
-  return Array.from(groups.values());
-}
-
-/**
- * Which medications have a shot on each day, keyed the way the grid reads a
- * square. The grouping is in JavaScript rather than in SQL because a day is a
- * local day here and `date-fns` already answers that on both platforms.
- */
-function groupMarksByDay(marks: readonly InjectionMark[]): ReadonlyMap<string, readonly string[]> {
-  const days = new Map<string, string[]>();
-  for (const mark of marks) {
-    const key = format(mark.takenAt, 'yyyy-MM-dd');
-    const medicationIds = days.get(key);
-    if (!medicationIds) days.set(key, [mark.medicationId]);
-    else if (!medicationIds.includes(mark.medicationId)) medicationIds.push(mark.medicationId);
-  }
-  return days;
 }
 
 const styles = StyleSheet.create({
-  root: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    width: '100%',
-    maxWidth: 600,
-    alignSelf: 'center',
-    gap: spacing.xl,
-    paddingHorizontal: spacing.screen,
-    paddingBottom: 112,
-  },
-  segmented: {
-    height: 48,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    padding: spacing.xs,
-    borderRadius: radius.lg,
-    backgroundColor: colors.accentSoft,
-  },
-  segment: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.md,
-  },
-  segmentSelected: {
-    backgroundColor: colors.accent,
-  },
-  group: {
-    gap: spacing.sm,
-  },
-  rows: {
-    overflow: 'hidden',
-  },
-  row: {
-    minHeight: 72,
+  bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  rowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
-  },
-  medicationDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  rowCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  delete: {
-    width: 44,
+    justifyContent: 'space-between',
+    gap: 12,
     height: 44,
+    paddingHorizontal: spacing.screen,
+    backgroundColor: colors.background,
+    zIndex: 3,
+  },
+  barRule: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  barLabel: {
+    flexShrink: 1,
+  },
+  chip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: -spacing.sm,
+    gap: 6,
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  deleteBusy: {
-    opacity: 0.4,
+  chipAway: {
+    backgroundColor: colors.successSoft,
+    borderColor: 'rgba(20,122,82,0.2)',
   },
-  emptyDay: {
-    gap: spacing.md,
+  chipDot: {
+    width: 7,
+    height: 7,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkSubtle,
+  },
+  chipDotAway: {
+    backgroundColor: colors.success,
+  },
+  chipLabel: {
+    fontSize: 13,
+  },
+  listTop: {
+    height: LIST_TOP,
   },
 });
