@@ -88,6 +88,15 @@ const DOSE_MAX: Record<Unit, number> = {
 /** How far back the date wheel reaches on its own. A missed shot gets filed within a month. */
 const DATE_DAYS = 30;
 
+/**
+ * The most rows the day wheel ever draws.
+ *
+ * The wheel is a plain list, and the History board reaches six years back, so an
+ * uncapped range would mount thousands of rows the moment the user taps an old
+ * day. Past the cap the window moves to the chosen day instead of growing.
+ */
+const DATE_MAX_DAYS = 400;
+
 /** How many used sites the diagram marks as recent. */
 const RECENT_SITES = 4;
 
@@ -195,10 +204,13 @@ export default function LogShotScreen() {
   //
   // The range reaches back a month on its own, and further when the route names
   // an older day: History can send any day the calendar reaches, and a wheel
-  // that cannot show that day would file the shot on the wrong one.
+  // that cannot show that day would file the shot on the wrong one. It never
+  // draws more than `DATE_MAX_DAYS` rows: a day tapped years back moves the
+  // window rather than growing it, so the chosen day is always on the wheel.
   const days = useMemo(() => {
     const oldest = Math.min(startOfDay(subDays(today, DATE_DAYS - 1).getTime()), takenDay);
-    const span = differenceInCalendarDays(today, oldest) + 1;
+    const newest = Math.min(today, startOfDay(addDays(oldest, DATE_MAX_DAYS - 1).getTime()));
+    const span = differenceInCalendarDays(newest, oldest) + 1;
     return Array.from({ length: span }, (_, index) => startOfDay(addDays(oldest, index).getTime()));
   }, [today, takenDay]);
   const detailsSummary = takenDay === today
@@ -412,11 +424,14 @@ export default function LogShotScreen() {
  *
  * A day that has not arrived is refused here, the way the wheel refuses one by
  * having no row past today. A log records a shot that happened.
+ *
+ * The route is a string from outside the app, so the whole of it has to be a
+ * timestamp: `Number.parseInt` would read `123abc` as the 1st of January 1970.
  */
 function dayFromRoute(value: string | undefined, now: number): number | null {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return null;
+  if (!value || !/^-?\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) return null;
   const day = startOfDay(parsed);
   if (day > startOfDay(now)) return null;
   return withDay(now, day);

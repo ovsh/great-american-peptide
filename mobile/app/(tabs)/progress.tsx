@@ -215,6 +215,7 @@ export default function ProgressScreen() {
                 pro={pro}
                 band={bandKind(journey, now)}
                 logToken={logToken}
+                now={now}
               />
             </TodayRise>
           </>

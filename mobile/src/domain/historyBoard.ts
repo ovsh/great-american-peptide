@@ -12,8 +12,8 @@
 //   logged      the user logged a shot        solid
 //   loggedTwice two or more shots that day    solid, split
 //   due         scheduled, and today          tinted with a ring
-//   scheduled   scheduled, still ahead        tinted
-//   missed      scheduled, the day passed     hollow ring
+//   scheduled   scheduled, still open         tinted
+//   missed      scheduled, the window closed  hollow ring
 //   none        the schedule names no dose    nothing
 //
 // This module is pure. It reads a medication row, a schedule and a count of
@@ -27,6 +27,7 @@ import {
   scheduledDosesBetween,
   type MedicationSchedule,
 } from './scheduling';
+import { SCHEDULE_GRACE_DAYS } from './streaks';
 
 export type LaneMark = 'logged' | 'loggedTwice' | 'due' | 'scheduled' | 'missed' | 'none';
 
@@ -132,7 +133,14 @@ export function buildMonthWeeks({
   return weeks;
 }
 
-/** One lane of one day. A shot on file outranks whatever the schedule said. */
+/**
+ * One lane of one day. A shot on file outranks whatever the schedule said.
+ *
+ * A dose is not lost the moment its day ends: it keeps the same grace window
+ * `streaks` gives it, so a shot kept one day late reads the same on the board as
+ * it does on Today and on Progress. The window closes at the start of the day
+ * after the grace, which is `closesAt` in `scheduledDoseWindow`.
+ */
 export function laneMark({
   shots,
   scheduled,
@@ -147,7 +155,7 @@ export function laneMark({
   if (shots >= 2) return 'loggedTwice';
   if (shots === 1) return 'logged';
   if (!scheduled) return 'none';
-  if (dayStart < today) return 'missed';
+  if (addLocalDays(dayStart, SCHEDULE_GRACE_DAYS + 1) <= today) return 'missed';
   if (dayStart === today) return 'due';
   return 'scheduled';
 }

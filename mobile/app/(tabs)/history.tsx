@@ -34,6 +34,8 @@ import { getPreferences } from '../../src/repositories/preferences';
 import { useAppStore } from '../../src/stores/app';
 import { colors, radius, spacing } from '../../src/theme';
 
+/** The month bar's own height. The status bar sits above it, not inside it. */
+const BAR_HEIGHT = 44;
 /** The gap above the first month, matching the gap between months. */
 const LIST_TOP = 10;
 /** Clear of the tab bar and the centre button. */
@@ -123,14 +125,17 @@ export default function HistoryScreen() {
     });
   }, [heights]);
 
-  const lastIndex = months.length - 1;
+  const monthCount = months.length;
+  const lastIndex = monthCount - 1;
   const onToday = visibleIndex >= lastIndex;
 
   // The list opens on the newest month, and `initialScrollIndex` does not raise
-  // a scroll event, so the bar is told where it landed.
+  // a scroll event, so the bar is told where it landed. The count is the
+  // trigger, not the array: `months` is rebuilt on every focus, and resetting on
+  // that would drag the bar back to this month over a board still on 2024.
   useEffect(() => {
-    setVisibleIndex(months.length - 1);
-  }, [months]);
+    setVisibleIndex(monthCount - 1);
+  }, [monthCount]);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -176,7 +181,13 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.bar, { paddingTop: insets.top }, onToday ? null : styles.barRule]}>
+      <View
+        style={[
+          styles.bar,
+          { height: BAR_HEIGHT + insets.top, paddingTop: insets.top },
+          onToday ? null : styles.barRule,
+        ]}
+      >
         <Text variant="h2" numberOfLines={1} style={styles.barLabel}>
           {monthLabel(months[visibleIndex] ?? now)}
         </Text>
@@ -247,7 +258,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    height: 44,
     paddingHorizontal: spacing.screen,
     backgroundColor: colors.background,
     zIndex: 3,

@@ -11,6 +11,7 @@ import { ProgressChart } from '@/components/progress-chart';
 import {
   PROGRESS_METRICS,
   buildLayout,
+  dayDistance,
   type Journey,
   type ProgressMetric,
 } from '@/components/progress-geometry';
@@ -46,6 +47,8 @@ interface ProgressJourneyCardProps {
   pro: boolean;
   band: ProgressBandKind;
   logToken: number;
+  /** The clock the screen read, for the read-out's "how long ago". */
+  now: number;
 }
 
 /**
@@ -63,6 +66,7 @@ export function ProgressJourneyCard({
   pro,
   band,
   logToken,
+  now,
 }: ProgressJourneyCardProps) {
   const [width, setWidth] = useState(0);
   const [sheet, setSheet] = useState(false);
@@ -74,7 +78,7 @@ export function ProgressJourneyCard({
     () => (width > 0 ? buildLayout(journey, width) : null),
     [journey, width],
   );
-  const readOut = readOutFor(journey, metric, pro);
+  const readOut = readOutFor(journey, metric, pro, now);
 
   return (
     <View style={styles.card} testID="progress-journey-card">
@@ -214,7 +218,7 @@ interface ReadOut {
  * metric. The chip that replaces it is a real slot of the same height, so the
  * row does not move when the user subscribes.
  */
-function readOutFor(journey: Journey, metric: ProgressMetric, pro: boolean): ReadOut {
+function readOutFor(journey: Journey, metric: ProgressMetric, pro: boolean, now: number): ReadOut {
   if (metric === 'shots') {
     const first = journey.medications[0];
     return {
@@ -237,21 +241,21 @@ function readOutFor(journey: Journey, metric: ProgressMetric, pro: boolean): Rea
       value: String(journey.effects.length),
       unit: 'logged',
       tone: colors.violet,
-      pill: last !== null ? `Last ${agoLabel(journey.spanDays - last.day)}` : null,
+      pill: last !== null ? agoLabel(dayDistance(last.takenAt, now)) : null,
       direction: null,
       locked: false,
     };
   }
 
-  const now = journey.weights[journey.weights.length - 1] ?? null;
-  const change = now !== null && journey.startWeight !== null
-    ? journey.startWeight - now.value
+  const latest = journey.weights[journey.weights.length - 1] ?? null;
+  const change = latest !== null && journey.startWeight !== null
+    ? journey.startWeight - latest.value
     : 0;
   const hasChange = Math.abs(change) >= 0.05;
 
   return {
-    value: now !== null ? now.value.toFixed(1) : null,
-    unit: now !== null ? journey.unit : 'No weight yet',
+    value: latest !== null ? latest.value.toFixed(1) : null,
+    unit: latest !== null ? journey.unit : 'No weight yet',
     tone: colors.amber,
     pill: hasChange ? `${Math.abs(change).toFixed(1)} ${journey.unit} ${change > 0 ? 'down' : 'up'}` : null,
     direction: hasChange ? (change > 0 ? 'down' : 'up') : null,
@@ -259,10 +263,14 @@ function readOutFor(journey: Journey, metric: ProgressMetric, pro: boolean): Rea
   };
 }
 
+/**
+ * When the last effect landed. "Last" belongs in front of a count, not in front
+ * of a day: "Last today" is not English.
+ */
 function agoLabel(days: number): string {
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  return `${days} days ago`;
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `Last ${days} days ago`;
 }
 
 /** Every mark on the chart, named once, behind the (i). */
