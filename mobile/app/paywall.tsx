@@ -26,8 +26,8 @@ const BENEFITS = [
   },
   {
     icon: Layers,
-    title: 'Every medication',
-    body: 'Track more than one medication at a time.',
+    title: 'Unlimited medications',
+    body: 'Free keeps two. Pro tracks as many as you take.',
   },
   {
     icon: FileDown,

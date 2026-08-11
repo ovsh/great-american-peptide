@@ -45,8 +45,9 @@ export default function MedicationsScreen() {
   const pro = useIsPro();
 
   // Send a free user to the paywall from here rather than let them fill in a
-  // form that will not save.
-  const atFreeLimit = !pro && meds.filter((m) => m.status !== 'archived').length >= FREE_MEDICATION_LIMIT;
+  // form that will not save. Only a running medication holds a slot, which is
+  // the rule `countActiveMedications` applies at the write.
+  const atFreeLimit = !pro && meds.filter((m) => m.status === 'active').length >= FREE_MEDICATION_LIMIT;
   const addMedication = () => (atFreeLimit ? openPaywall() : router.push('/medications/new'));
 
   const load = useCallback(async () => {
@@ -57,7 +58,14 @@ export default function MedicationsScreen() {
 
   useEffect(() => { load(); }, [load, dataVersion]);
 
+  // Pause is always free: a user who stopped a medication must be able to say
+  // so. Resume puts a medication back among the running ones, so it goes through
+  // the same door as adding one when the free slots are full.
   const togglePause = async (m: MedicationRow) => {
+    if (m.status === 'paused' && atFreeLimit) {
+      openPaywall();
+      return;
+    }
     const next = m.status === 'paused' ? 'active' : 'paused';
     await setMedicationStatusAndRefresh(m.id, next);
     bumpVersion();

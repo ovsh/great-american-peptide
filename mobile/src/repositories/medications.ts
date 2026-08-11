@@ -59,13 +59,21 @@ export async function reorderMedications(ids: readonly string[]): Promise<void> 
   });
 }
 
-/** The free tier keeps one medication. An archived one does not count against it. */
-export const FREE_MEDICATION_LIMIT = 1;
+/**
+ * The free tier keeps two medications. The third one opens the paywall.
+ *
+ * Only a running medication counts. A paused or archived one does not: it draws
+ * no reminder and the user has said they are not on it, so holding a slot for it
+ * would charge them for a medication they stopped. The way back in is gated
+ * instead — `medications/index.tsx` sends Resume and Restore to the paywall when
+ * the two running slots are already full — so a free user never runs three.
+ */
+export const FREE_MEDICATION_LIMIT = 2;
 
 export async function countActiveMedications(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM medications WHERE status != 'archived'`,
+    `SELECT COUNT(*) AS n FROM medications WHERE status = 'active'`,
   );
   return row?.n ?? 0;
 }

@@ -35,7 +35,7 @@ FREE, FOR AS LONG AS YOU USE IT
 - Log a shot in seconds
 - Your next shot day, on the first screen
 - The full history of what you logged
-- One medication, picked from a searchable list of 19 or added by you
+- Two medications, picked from a searchable list of 19 or added by you
 - One reminder
 
 POKE PRO
@@ -43,8 +43,8 @@ POKE PRO
   Poke uses the half-life you set and the shots you logged.
 - Trends that add up. Poke puts your weight, your doses and the side effects you
   record on one timeline. You see what moved with what.
-- Every medication. Run more than one at a time. Each medication keeps its own
-  schedule.
+- Unlimited medications. Free keeps two. Pro runs as many as you take, and each
+  medication keeps its own schedule.
 - Take it to your doctor. Export everything you logged as a CSV file.
 
 WHAT POKE IS NOT
@@ -158,15 +158,15 @@ HOW TO REVIEW POKE PRO
 Poke Pro is an auto-renewable subscription in the Poke Pro group, sold through RevenueCat and StoreKit 2.
 
 1. Finish setup. The paywall opens at the end and can be closed.
-2. To open it later: Profile > Subscription > Get Poke Pro. The Progress tab, the blurred level preview on Today, Export history and adding a second medication also open it.
+2. To open it later: Profile > Subscription > Get Poke Pro. The Progress tab, the blurred level preview on Today, Export history and adding a third medication also open it.
 3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month free trial for new subscribers.
 4. The paywall closes and Pro unlocks at once. Restore purchases is on the paywall and in Profile.
 
 If the sandbox store cannot be reached, the app unlocks all features so review is not blocked.
 
 FREE AND PRO
-Free: shot logging, next shot, full history, one medication and one reminder.
-Pro: exact estimated level charts, progress charts, more than one medication and CSV export.
+Free: shot logging, next shot, full history, two medications and one reminder.
+Pro: exact estimated level charts, progress charts, unlimited medications and CSV export.
 
 MEDICAL POSITIONING
 Poke is a personal record. It is not a medical device and makes no clinical claim.

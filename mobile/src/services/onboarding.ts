@@ -115,9 +115,9 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
   /**
    * How many of the medications the user named Poke switches on.
    *
-   * The free tier carries one medication and the App Store listing says so.
+   * The free tier carries two medications and the App Store listing says so.
    * `medications/new.tsx` held that line and this door did not, so anyone who
-   * named three medications during setup kept three of them for nothing.
+   * named four medications during setup kept four of them for nothing.
    *
    * Poke saves every medication the user named. They answered honestly about
    * their own regimen and Poke throws none of it away. The ones past the limit
@@ -132,7 +132,7 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
    */
   const claimed = new Set(matched.flatMap(({ existing }) => (existing ? [existing.id] : [])));
   const outsideActive = existingMedications
-    .filter((medication) => medication.status !== 'archived' && !claimed.has(medication.id))
+    .filter((medication) => medication.status === 'active' && !claimed.has(medication.id))
     .length;
   const activeAllowance = isProNow()
     ? seeds.length

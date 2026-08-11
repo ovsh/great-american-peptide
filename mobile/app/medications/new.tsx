@@ -228,8 +228,8 @@ export default function AddMedicationScreen() {
       {atFreeLimit ? (
         <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.lg }}>
           <ProLock
-            title="Track more than one medication"
-            body="The free version keeps one medication. Pro tracks every medication with its own schedule, level and history."
+            title="Track a third medication"
+            body="The free version keeps two medications. Pro tracks as many as you take, each with its own schedule, level and history."
           />
         </View>
       ) : step === 'pick' ? (
