@@ -92,7 +92,7 @@ function printsAboveZero(level: number, unit: Unit): boolean {
 
 /** A stat hint names the day. A bare clock time reads as today on a 30d range. */
 function fmtMoment(ms: number): string {
-  return format(new Date(ms), 'MMM d · h:mm a');
+  return format(new Date(ms), "MMM d 'at' h:mm a");
 }
 
 function unitLabel(unit: Unit): string {

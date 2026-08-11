@@ -202,8 +202,8 @@ export default function LogShotScreen() {
     return Array.from({ length: span }, (_, index) => startOfDay(addDays(oldest, index).getTime()));
   }, [today, takenDay]);
   const detailsSummary = takenDay === today
-    ? `${fmtTime(draft.takenAt)} · notes`
-    : `${fmtDayLabel(draft.takenAt)} · ${fmtTime(draft.takenAt)} · notes`;
+    ? `${fmtTime(draft.takenAt)} and notes`
+    : `${fmtDayLabel(draft.takenAt)} at ${fmtTime(draft.takenAt)} and notes`;
 
   const selectSite = (site: BodySite) => {
     setDraft((current) => ({ ...current, selectedSiteId: site.id }));

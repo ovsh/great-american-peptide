@@ -47,7 +47,7 @@ export function twiceWeeklyScheduleNote(firstWeekday: Weekday): string | null {
   }
   const last = days[days.length - 1];
   if (last === undefined) return null;
-  const named = days.length === 1 ? last : `${days.slice(0, -1).join(' · ')} and ${last}`;
+  const named = days.length === 1 ? last : `${days.slice(0, -1).join(', ')} and ${last}`;
   return `Poke schedules ${named}.`;
 }
 

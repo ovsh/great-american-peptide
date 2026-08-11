@@ -27,7 +27,7 @@ export function TodayTrackCard({
     ? `${convertWeight(weight.value, weight.unit, weightUnit).toFixed(1)} ${weightUnit}`
     : 'Not logged';
   const sideEffectValue = sideEffect
-    ? `${sideEffectLabel(sideEffect.effect)} · ${sideEffect.severity}/10`
+    ? `${sideEffectLabel(sideEffect.effect)}, ${sideEffect.severity} of 10`
     : 'None logged';
 
   return (

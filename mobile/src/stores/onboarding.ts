@@ -2,15 +2,16 @@ import type { Href } from 'expo-router';
 import { create } from 'zustand';
 
 import type { ActivityLevel, GoalKind, JourneyStage, Sex } from '../db/types';
-import { getPreset, type FrequencyKind, type Route, type Unit } from '../domain/peptides';
+import { getPreset, getPresetEntry, type FrequencyKind, type Route, type Unit } from '../domain/peptides';
 import { WEEKDAY_OPTIONS, type Weekday } from '../domain/scheduling';
 import { cmToIn, inToCm, kgToLb, lbToKg, type HeightUnit, type WeightUnit } from '../domain/units';
 
 // The one id that is not a catalog preset. The user types the name instead.
 export const CUSTOM_MEDICATION_ID = 'custom';
 
-// A preset id, or CUSTOM_MEDICATION_ID. The picker searches the whole catalog,
-// so this cannot be a fixed union of ids.
+// A picker entry id, which is a molecule id or a brand id, or
+// CUSTOM_MEDICATION_ID. The picker searches the whole catalog, so this cannot
+// be a fixed union of ids.
 export type OnboardingMedicationId = string;
 export type OnboardingFrequency = 'daily' | 'twice_weekly' | 'weekly';
 export type SideEffectConcern = 'nausea' | 'fatigue' | 'constipation' | 'injection_site' | 'none';
@@ -420,7 +421,8 @@ export function medicationDisplayName(
   customMedicationName: string,
 ): string {
   if (id === CUSTOM_MEDICATION_ID) return customMedicationName.trim() || 'Your medication';
-  return getPreset(id)?.name ?? id;
+  // A brand row keeps its brand from here to the plan card and the reminder.
+  return getPresetEntry(id)?.name ?? id;
 }
 
 // ---------------------------------------------------------------- Flow ----

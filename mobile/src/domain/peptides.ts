@@ -28,9 +28,14 @@ export type EvidenceTier = 'label' | 'trial' | 'estimate' | 'unsourced';
 interface PeptidePresetBase {
   id: string;
   name: string;
-  // Brand names and trial codes. The picker searches these too, so a user who
-  // knows "Zepbound" finds Tirzepatide.
+  // Trial codes, abbreviations and chemistry synonyms. The picker searches
+  // these, so a user who knows "reta" finds Retatrutide. They get no row of
+  // their own, because nobody buys a product called LY3437943.
   aliases?: readonly string[];
+  // Names the molecule is sold under. Each one gets its own picker row and
+  // names the medication it creates, because a user on Wegovy thinks
+  // "Wegovy" and not "semaglutide". The picker searches these too.
+  brandNames?: readonly string[];
   category: 'glp1' | 'recovery' | 'longevity' | 'growth' | 'other';
   // No default dose. A per-peptide number in the bundle is a proposal waiting
   // for a caller to read it, and `store.config.json` `review.notes` tells App
@@ -64,7 +69,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'semaglutide',
     name: 'Semaglutide',
-    aliases: ['Ozempic', 'Wegovy', 'Rybelsus'],
+    brandNames: ['Ozempic', 'Rybelsus', 'Wegovy'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -77,7 +82,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'tirzepatide',
     name: 'Tirzepatide',
-    aliases: ['Mounjaro', 'Zepbound'],
+    brandNames: ['Mounjaro', 'Zepbound'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -90,7 +95,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'liraglutide',
     name: 'Liraglutide',
-    aliases: ['Victoza', 'Saxenda'],
+    brandNames: ['Saxenda', 'Victoza'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -103,7 +108,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'dulaglutide',
     name: 'Dulaglutide',
-    aliases: ['Trulicity'],
+    brandNames: ['Trulicity'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -116,7 +121,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'exenatide',
     name: 'Exenatide',
-    aliases: ['Byetta', 'exendin-4'],
+    aliases: ['exendin-4'],
+    brandNames: ['Byetta'],
     category: 'glp1',
     unit: 'mcg',
     defaultRoute: 'sc',
@@ -157,7 +163,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'mazdutide',
     name: 'Mazdutide',
-    aliases: ['IBI362', 'LY3305677', 'Xinermei'],
+    aliases: ['IBI362', 'LY3305677'],
+    brandNames: ['Xinermei'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -210,7 +217,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'tesamorelin',
     name: 'Tesamorelin',
-    aliases: ['Egrifta'],
+    brandNames: ['Egrifta'],
     category: 'growth',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -225,7 +232,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'sermorelin',
     name: 'Sermorelin',
-    aliases: ['Geref', 'GRF 1-29'],
+    aliases: ['GRF 1-29'],
+    brandNames: ['Geref'],
     category: 'growth',
     unit: 'mcg',
     defaultRoute: 'sc',
@@ -269,7 +277,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'somatropin',
     name: 'Somatropin (HGH)',
-    aliases: ['HGH', 'growth hormone', 'Genotropin', 'Norditropin', 'Omnitrope'],
+    aliases: ['HGH', 'growth hormone'],
+    brandNames: ['Genotropin', 'Norditropin', 'Omnitrope'],
     category: 'growth',
     unit: 'iu',
     defaultRoute: 'sc',
@@ -284,7 +293,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'mecasermin',
     name: 'Mecasermin (IGF-1)',
-    aliases: ['Increlex', 'IGF-1', 'rhIGF-1'],
+    aliases: ['IGF-1', 'rhIGF-1'],
+    brandNames: ['Increlex'],
     category: 'growth',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -338,7 +348,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'thymosin-alpha-1',
     name: 'Thymosin Alpha-1',
-    aliases: ['Zadaxin', 'Ta1', 'thymalfasin'],
+    aliases: ['Ta1', 'thymalfasin'],
+    brandNames: ['Zadaxin'],
     category: 'recovery',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -431,7 +442,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'bremelanotide',
     name: 'Bremelanotide (PT-141)',
-    aliases: ['PT-141', 'PT141', 'Vyleesi'],
+    aliases: ['PT-141', 'PT141'],
+    brandNames: ['Vyleesi'],
     category: 'other',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -444,7 +456,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'hcg',
     name: 'HCG',
-    aliases: ['human chorionic gonadotropin', 'Pregnyl', 'Novarel', 'Ovidrel'],
+    aliases: ['human chorionic gonadotropin'],
+    brandNames: ['Novarel', 'Ovidrel', 'Pregnyl'],
     category: 'other',
     unit: 'iu',
     defaultRoute: 'sc',
@@ -457,7 +470,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'teriparatide',
     name: 'Teriparatide (PTH 1-34)',
-    aliases: ['Forteo', 'PTH 1-34'],
+    aliases: ['PTH 1-34'],
+    brandNames: ['Forteo'],
     category: 'other',
     unit: 'mcg',
     defaultRoute: 'sc',
@@ -496,7 +510,8 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'gonadorelin',
     name: 'Gonadorelin',
-    aliases: ['GnRH', 'Factrel', 'Lutrepulse', 'LHRH'],
+    aliases: ['GnRH', 'LHRH'],
+    brandNames: ['Factrel', 'Lutrepulse'],
     category: 'other',
     unit: 'mcg',
     defaultRoute: 'sc',
@@ -521,8 +536,62 @@ export const peptidePresets: PeptidePreset[] = [
   },
 ];
 
+// A brand row carries the preset id, this separator, and the brand in lower
+// case: `semaglutide:wegovy`. No preset id holds a colon, so every reader can
+// take the molecule back out of an entry id.
+const ENTRY_SEPARATOR = ':';
+
+/**
+ * One row of a preset picker.
+ *
+ * A molecule has one row of its own and one row for each name it is sold
+ * under, because a user on Wegovy looks for Wegovy. Every row points at the
+ * same preset, so the brand row carries the molecule's half-life, unit, route
+ * and frequency, and only the name differs.
+ */
+export interface PresetEntry {
+  /** What the picker and the onboarding draft key on. */
+  id: string;
+  /** The row's name, and the name of the medication the row creates. */
+  name: string;
+  /** The molecule under a brand row. Undefined on a molecule row. */
+  moleculeName?: string;
+  preset: PeptidePreset;
+}
+
+function entriesFor(preset: PeptidePreset): PresetEntry[] {
+  const rows: PresetEntry[] = [{ id: preset.id, name: preset.name, preset }];
+  for (const brand of preset.brandNames ?? []) {
+    rows.push({
+      id: `${preset.id}${ENTRY_SEPARATOR}${brand.toLocaleLowerCase().replace(/\s+/g, '-')}`,
+      name: brand,
+      moleculeName: preset.name,
+      preset,
+    });
+  }
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Every picker row, in catalog order. The catalog runs by category, and a
+ * molecule keeps its brands beside it, sorted by name.
+ */
+export function pickerEntries(): PresetEntry[] {
+  return peptidePresets.flatMap(entriesFor);
+}
+
+/** The row an id names, whether that id is a molecule or a brand. */
+export function getPresetEntry(id: string): PresetEntry | undefined {
+  const preset = getPreset(id);
+  if (!preset) return undefined;
+  return entriesFor(preset).find((entry) => entry.id === id);
+}
+
+/** The molecule an id names. A brand id resolves to the molecule it sells. */
 export function getPreset(id: string): PeptidePreset | undefined {
-  return peptidePresets.find((p) => p.id === id);
+  const separator = id.indexOf(ENTRY_SEPARATOR);
+  const presetId = separator === -1 ? id : id.slice(0, separator);
+  return peptidePresets.find((p) => p.id === presetId);
 }
 
 // True when the preset carries a half-life the app can draw a curve from. Not
@@ -540,23 +609,37 @@ export const EVIDENCE_LABELS: Record<EvidenceTier, string> = {
   unsourced: 'No published half-life',
 };
 
-// Search across name and brand names. A name that starts with the query ranks
-// above a name that only contains it, so "sem" puts Semaglutide first.
-export function searchPresets(query: string): PeptidePreset[] {
+/**
+ * The picker rows a query matches, best first.
+ *
+ * The row's own name outranks everything a row only inherits, so "wegovy"
+ * puts the Wegovy row above the Semaglutide row that sells it, and "sema"
+ * puts Semaglutide above its three brands. A molecule row also answers to its
+ * trial codes and its abbreviations, so "reta" still finds Retatrutide.
+ */
+export function searchPresets(query: string): PresetEntry[] {
   const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return peptidePresets;
-  const scored: { preset: PeptidePreset; score: number }[] = [];
-  for (const preset of peptidePresets) {
-    const haystacks = [preset.name, ...(preset.aliases ?? [])].map((value) =>
-      value.toLocaleLowerCase(),
-    );
+  const entries = pickerEntries();
+  if (!needle) return entries;
+  const scored: { entry: PresetEntry; score: number }[] = [];
+  for (const entry of entries) {
+    const name = entry.name.toLocaleLowerCase();
+    // A brand row answers to its molecule. A molecule row answers to every
+    // other name the molecule goes by.
+    const inherited = entry.moleculeName === undefined
+      ? [...(entry.preset.aliases ?? []), ...(entry.preset.brandNames ?? [])]
+      : [entry.preset.name];
     let score = -1;
-    for (const [index, haystack] of haystacks.entries()) {
-      const aliasPenalty = index === 0 ? 0 : 1;
-      if (haystack.startsWith(needle)) score = Math.max(score, 10 - aliasPenalty);
-      else if (haystack.includes(needle)) score = Math.max(score, 5 - aliasPenalty);
+    if (name === needle) score = 20;
+    else if (name.startsWith(needle)) score = 10;
+    else if (name.includes(needle)) score = 5;
+    for (const value of inherited) {
+      const haystack = value.toLocaleLowerCase();
+      if (haystack === needle) score = Math.max(score, 9);
+      else if (haystack.startsWith(needle)) score = Math.max(score, 4);
+      else if (haystack.includes(needle)) score = Math.max(score, 2);
     }
-    if (score >= 0) scored.push({ preset, score });
+    if (score >= 0) scored.push({ entry, score });
   }
-  return scored.sort((a, b) => b.score - a.score).map((entry) => entry.preset);
+  return scored.sort((a, b) => b.score - a.score).map((row) => row.entry);
 }

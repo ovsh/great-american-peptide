@@ -272,7 +272,7 @@ function GoalCard({ goal, hasGoal }: { goal: GoalProgress | null; hasGoal: boole
           <Target size={21} color={colors.amber} />
         </View>
         <Text variant="h2">
-          {Math.abs(goal.change).toFixed(1)} {goal.unit} {direction} · {goal.percent}% to goal
+          {Math.abs(goal.change).toFixed(1)} {goal.unit} {direction} and {goal.percent}% to goal
         </Text>
       </View>
       <View accessibilityLabel={`${goal.percent} percent to goal`} style={styles.progressTrack}>

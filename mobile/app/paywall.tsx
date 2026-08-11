@@ -194,7 +194,7 @@ export default function PaywallScreen() {
         ) : null}
         <View style={styles.legalRow}>
           <LegalLink label="Terms" url={TERMS_URL} />
-          <Text variant="caption" color={colors.inkSubtle}>·</Text>
+          <Text variant="caption" color={colors.inkSubtle}>and</Text>
           <LegalLink label="Privacy" url={PRIVACY_URL} />
         </View>
       </View>

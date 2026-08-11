@@ -79,7 +79,7 @@ export async function refreshScheduledReminders(): Promise<void> {
             // The reminder repeats the schedule the user set. It gives no
             // instruction, so the body names the user as the source of the number.
             title: `${med.name} is on your schedule`,
-            body: `You set ${med.default_dose} ${med.default_unit} · ${med.default_route.toUpperCase()} for today.`,
+            body: `You set ${med.default_dose} ${med.default_unit} ${med.default_route.toUpperCase()} for today.`,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,

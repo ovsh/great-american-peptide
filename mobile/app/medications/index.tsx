@@ -161,11 +161,11 @@ export default function MedicationsScreen() {
                       {m.status === 'archived' && <Pill tone="neutral">Archived</Pill>}
                     </View>
                     <Text variant="small" color={colors.inkMuted}>
-                      {formatDose(m.default_dose, m.default_unit)} · {m.default_route.toUpperCase()}
+                      {formatDose(m.default_dose, m.default_unit)} {m.default_route.toUpperCase()}
                     </Text>
                     <Text variant="caption" color={colors.inkSubtle}>
                       {FREQ_LABEL[m.frequency_kind] ?? m.frequency_kind}
-                      {m.half_life_hours ? ` · t½ ${m.half_life_hours}h` : ''}
+                      {m.half_life_hours ? ` with a ${m.half_life_hours}h half-life` : ''}
                     </Text>
                   </View>
                 </View>

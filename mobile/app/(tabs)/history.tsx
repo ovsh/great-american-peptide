@@ -330,7 +330,8 @@ function HistoryRow({
       <View style={styles.rowCopy}>
         <Text variant="bodyStrong">{name}</Text>
         <Text variant="small" color={colors.inkMuted}>
-          {fmtTime(injection.taken_at).toLocaleLowerCase()} · {site?.label ?? 'No site'}
+          {fmtTime(injection.taken_at).toLocaleLowerCase()}{' '}
+          {site ? `in the ${site.label.toLocaleLowerCase()}` : 'with no site'}
         </Text>
       </View>
       <Text variant="smallStrong">{formatDose(injection.dose, injection.unit)}</Text>

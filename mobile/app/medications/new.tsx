@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -18,8 +18,8 @@ import { MedVialIcon } from '@/components/MedVialIcon';
 import {
   EVIDENCE_LABELS,
   getPreset,
-  peptidePresets,
-  type PeptidePreset,
+  pickerEntries,
+  type PresetEntry,
   type FrequencyKind,
   type Route,
   type Unit,
@@ -71,6 +71,9 @@ export default function AddMedicationScreen() {
   // The route is reachable directly, so the screen checks the limit itself.
   const [atFreeLimit, setAtFreeLimit] = useState(false);
   const selectedPreset = presetId ? getPreset(presetId) : undefined;
+  // The catalog does not change while the screen is open, and the list is the
+  // same rows on every keystroke in the second step.
+  const entries = useMemo(() => pickerEntries(), []);
 
   useEffect(() => {
     if (editingId || pro) { setAtFreeLimit(false); return; }
@@ -112,9 +115,13 @@ export default function AddMedicationScreen() {
   // A preset fills in what a published source says and nothing else. The dose
   // field stays empty: the user types the dose, Poke does not offer one. The
   // onboarding schedule screen works the same way.
-  const pickPreset = (p: PeptidePreset) => {
+  //
+  // A brand row and its molecule row share one preset, so the science is the
+  // same either way and only the name follows the row the user pressed.
+  const pickPreset = (entry: PresetEntry) => {
+    const p = entry.preset;
     setPresetId(p.id);
-    setName(p.name);
+    setName(entry.name);
     setDose('');
     setUnit(p.unit);
     setRoute(p.defaultRoute);
@@ -228,23 +235,30 @@ export default function AddMedicationScreen() {
       ) : step === 'pick' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
           <Section eyebrow="Presets" gap="sm">
-            {peptidePresets.map((p, idx) => (
-              <Pressable key={p.id} onPress={() => pickPreset(p)}>
+            {entries.map((entry, idx) => (
+              <Pressable key={entry.id} onPress={() => pickPreset(entry)}>
                 <Card padding="md" style={styles.presetCard}>
                   <MedVialIcon size={36} colorIndex={idx} />
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="bodyStrong">{p.name}</Text>
-                    {/* The name carries the row. The evidence tier read the same
-                        on almost every card, so it moved to the estimate sheet.
-                        Only the missing half-life stays: it changes what the app
-                        can draw, so the user must see it before the pick. */}
-                    {p.evidence === 'unsourced' ? (
+                    <Text variant="bodyStrong">{entry.name}</Text>
+                    {/* A brand row names its molecule, which differs on every
+                        row and says what Wegovy is. A molecule row has no such
+                        line. The evidence tier read the same on almost every
+                        card, so it moved to the estimate sheet. Only the
+                        missing half-life stays: it changes what the app can
+                        draw, so the user must see it before the pick. */}
+                    {entry.moleculeName ? (
+                      <Text variant="caption" color={colors.inkMuted}>
+                        {entry.moleculeName}
+                      </Text>
+                    ) : null}
+                    {entry.preset.evidence === 'unsourced' ? (
                       <Text variant="caption" color={colors.inkMuted}>
                         {EVIDENCE_LABELS.unsourced}
                       </Text>
                     ) : null}
                   </View>
-                  <Pill tone="neutral">{p.category}</Pill>
+                  <Pill tone="neutral">{entry.preset.category}</Pill>
                 </Card>
               </Pressable>
             ))}

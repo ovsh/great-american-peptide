@@ -181,7 +181,7 @@ export default function ProfileScreen() {
     : storeStatus === 'pro'
       ? {
         title: 'Poke Pro',
-        detail: 'Active · manage in your Apple Account',
+        detail: 'Active. Manage it in your Apple Account',
         action: 'Manage subscription',
         onPress: openManageSubscriptions,
       }

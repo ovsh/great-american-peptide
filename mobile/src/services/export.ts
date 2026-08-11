@@ -17,14 +17,15 @@ export type ExportOutcome =
   | { kind: 'failed'; message: string };
 
 /**
- * `SC · Upper left abdomen`. The CSV has no route column, so the route rides in
- * the detail column with the site. An id Poke no longer knows stays as it is
- * rather than becoming a blank cell.
+ * `SC in the upper left abdomen`. The CSV has no route column, so the route
+ * rides in the detail column with the site. An id Poke no longer knows stays
+ * as it is rather than becoming a blank cell.
  */
 function injectionDetail(row: InjectionRow): string {
   const route = row.route.toUpperCase();
   if (!row.site_id) return route;
-  return `${route} · ${getBodySite(row.site_id)?.label ?? row.site_id}`;
+  const site = getBodySite(row.site_id);
+  return `${route} in the ${site ? site.label.toLocaleLowerCase() : row.site_id}`;
 }
 
 export async function exportHistory(now = Date.now()): Promise<ExportOutcome> {

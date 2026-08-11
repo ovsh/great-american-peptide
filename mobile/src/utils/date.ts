@@ -9,7 +9,7 @@ export function fmtTime(ms: number): string {
 }
 
 export function fmtDateTime(ms: number): string {
-  return format(new Date(ms), 'MMM d, yyyy · h:mm a');
+  return format(new Date(ms), "MMM d, yyyy 'at' h:mm a");
 }
 
 /**

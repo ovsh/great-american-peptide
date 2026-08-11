@@ -131,7 +131,7 @@ function useNotificationPreview(): { title: string; body: string | null } {
 
   return {
     title,
-    body: `You set ${dose} ${schedule.unit} · ${schedule.route.toUpperCase()} for today.`,
+    body: `You set ${dose} ${schedule.unit} ${schedule.route.toUpperCase()} for today.`,
   };
 }
 

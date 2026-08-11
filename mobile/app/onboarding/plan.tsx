@@ -205,8 +205,13 @@ export default function PlanScreen() {
         {plan.medications.map((medication) => (
           <View key={medication.id} style={styles.routineRow}>
             <Text variant="bodyStrong">{medication.name}</Text>
+            {/* Two lines, because one sentence cannot hold a rate and a count
+                without a comma the schedule label may already have spent. */}
             <Text variant="small" color={colors.inkMuted}>
-              {medication.doseLabel} · {medication.scheduleLabel} · {medication.shotsInFourWeeks} shots in 4 weeks
+              {medication.doseLabel} {lowerFirst(medication.scheduleLabel)}
+            </Text>
+            <Text variant="small" color={colors.inkMuted}>
+              {medication.shotsInFourWeeks} shots in the first 4 weeks
             </Text>
             {medication.curve ? null : (
               <Text variant="small" color={colors.inkMuted}>
@@ -221,11 +226,11 @@ export default function PlanScreen() {
         ) : null}
         <PlanRow label="Goal" value={goalLabel ?? ''} />
         {plan.body ? (
-          <PlanRow label="BMI" value={`${plan.body.value.toFixed(1)} · ${plan.body.category.toLocaleLowerCase()}`} />
+          <PlanRow label="BMI" value={`${plan.body.value.toFixed(1)} in the ${plan.body.category.toLocaleLowerCase()} range`} />
         ) : null}
         <PlanRow
           label="Watch list"
-          value={concernLabels.length > 0 ? concernLabels.join(' · ') : 'Nothing right now'}
+          value={concernLabels.length > 0 ? namedList(concernLabels) : 'Nothing right now'}
         />
         {reminder.kind === 'enabled' ? (
           <PlanRow label="Reminder" value={`Every shot day at ${fmtClock(reminder.time)}`} />
@@ -342,7 +347,7 @@ function NextShotCard({ plan }: { plan: OnboardingPlan }) {
     <Card padding="xl" style={styles.card}>
       <Text variant="smallStrong" color={colors.inkMuted}>Next shot</Text>
       <Text variant="display">{countdownLabel(at)}</Text>
-      <Text color={colors.inkMuted}>{name} · {longDate(at)}</Text>
+      <Text color={colors.inkMuted}>{name} on {longDate(at)}</Text>
     </Card>
   );
 }
@@ -363,7 +368,7 @@ function CurveCard({ medication }: { medication: PlanMedication }) {
   return (
     <Card padding="xl" style={styles.card}>
       <Text variant="smallStrong" color={colors.inkMuted}>
-        {medication.name} · first 4 weeks
+        {medication.name} over the first 4 weeks
       </Text>
       <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.chartHolder}>
         {width > 0 ? (
@@ -431,6 +436,19 @@ function countdownLabel(at: number): string {
   if (days <= 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;
+}
+
+// The schedule label opens a sentence the dose already started, so it drops
+// its capital: "0.5 mg every week on Monday".
+function lowerFirst(value: string): string {
+  return value.charAt(0).toLocaleLowerCase() + value.slice(1);
+}
+
+// A watch list is a list, so it reads as one. Commas up to the last name, and
+// "and" before it.
+function namedList(values: string[]): string {
+  if (values.length <= 1) return values.join('');
+  return `${values.slice(0, -1).join(', ')} and ${values[values.length - 1]}`;
 }
 
 function longDate(at: number): string {

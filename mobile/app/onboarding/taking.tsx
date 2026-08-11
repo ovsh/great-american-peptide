@@ -6,7 +6,7 @@ import { Input } from '@/components/Input';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
-import { EVIDENCE_LABELS, searchPresets, type PeptidePreset } from '@/domain/peptides';
+import { EVIDENCE_LABELS, searchPresets, type PresetEntry } from '@/domain/peptides';
 import {
   CUSTOM_MEDICATION_ID,
   onboardingTotalSteps,
@@ -32,9 +32,9 @@ export default function TakingScreen() {
   // longer matches it. A selection must never scroll out of reach.
   const results = useMemo(() => {
     const matches = searchPresets(query);
-    const matched = new Set(matches.map((preset) => preset.id));
+    const matched = new Set(matches.map((entry) => entry.id));
     const pinned = searchPresets('')
-      .filter((preset) => medicationIds.includes(preset.id) && !matched.has(preset.id));
+      .filter((entry) => medicationIds.includes(entry.id) && !matched.has(entry.id));
     return [...pinned, ...matches];
   }, [query, medicationIds]);
 
@@ -72,12 +72,12 @@ export default function TakingScreen() {
       />
 
       <View style={styles.list}>
-        {results.map((preset) => (
+        {results.map((entry) => (
           <PresetCard
-            key={preset.id}
-            preset={preset}
-            selected={medicationIds.includes(preset.id)}
-            onPress={() => toggleMedication(preset.id)}
+            key={entry.id}
+            entry={entry}
+            selected={medicationIds.includes(entry.id)}
+            onPress={() => toggleMedication(entry.id)}
           />
         ))}
 
@@ -112,27 +112,38 @@ export default function TakingScreen() {
 }
 
 function PresetCard({
-  preset,
+  entry,
   selected,
   onPress,
 }: {
-  preset: PeptidePreset;
+  entry: PresetEntry;
   selected: boolean;
   onPress: () => void;
 }) {
   return (
     <SelectionCard
       compact
-      title={preset.name}
-      // The name carries the row. The evidence tier read the same on almost
-      // every card, so it moved to the estimate sheet on Today. Only the
-      // missing half-life stays: it changes what the app can draw, so the user
-      // must see it before the pick.
-      description={preset.evidence === 'unsourced' ? EVIDENCE_LABELS.unsourced : undefined}
+      title={entry.name}
+      description={entryDescription(entry)}
       selected={selected}
       onPress={onPress}
     />
   );
+}
+
+/**
+ * The line under the name, or nothing.
+ *
+ * A brand row names its molecule, which differs on every row and tells the
+ * user what Wegovy is. A molecule row has no such line. The evidence tier read
+ * the same on almost every card, so it moved to the estimate sheet on Today.
+ * Only the missing half-life stays: it changes what the app can draw, so the
+ * user must see it before the pick.
+ */
+function entryDescription(entry: PresetEntry): string | undefined {
+  const missing = entry.preset.evidence === 'unsourced' ? EVIDENCE_LABELS.unsourced : undefined;
+  if (entry.moleculeName && missing) return `${entry.moleculeName}. ${missing}`;
+  return entry.moleculeName ?? missing;
 }
 
 const styles = StyleSheet.create({

@@ -2,7 +2,7 @@ import type { MedicationRow } from '../db/types';
 import type { PreferencesPatch } from '../repositories/preferences';
 import type { NewMedication } from '../repositories/medications';
 import { CUSTOM_MEDICATION_ID, type OnboardingDraft, type OnboardingMedicationId } from '../stores/onboarding';
-import { getPreset } from '../domain/peptides';
+import { getPresetEntry } from '../domain/peptides';
 import { createInjection, listInjections } from '../repositories/injections';
 import { createMeasurement, latestMeasurement } from '../repositories/measurements';
 import {
@@ -61,12 +61,15 @@ function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
       };
     }
 
-    const preset = getPreset(selectionId);
-    if (!preset) throw new Error('Poke no longer has that medication preset.');
+    // A brand row and its molecule row point at the same preset. The row the
+    // user picked names the medication, and the preset carries the science.
+    const entry = getPresetEntry(selectionId);
+    if (!entry) throw new Error('Poke no longer has that medication preset.');
+    const preset = entry.preset;
     return {
       selectionId,
       medication: {
-        name: preset.name,
+        name: entry.name,
         presetId: preset.id,
         defaultDose: dose,
         defaultUnit: schedule.unit,
@@ -91,7 +94,10 @@ function findMedication(
     return medications.find((medication) => medication.preset_id === null
       && medication.name.trim().toLocaleLowerCase() === seed.medication.name.trim().toLocaleLowerCase());
   }
-  return medications.find((medication) => medication.preset_id === seed.selectionId);
+  // The preset alone no longer identifies a row: Wegovy and Semaglutide share
+  // one preset and are two medications, so the name has to match as well.
+  return medications.find((medication) => medication.preset_id === seed.medication.presetId
+    && medication.name.trim().toLocaleLowerCase() === seed.medication.name.trim().toLocaleLowerCase());
 }
 
 export async function completeOnboarding(draft: OnboardingDraft): Promise<void> {
