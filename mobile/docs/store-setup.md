@@ -178,6 +178,13 @@ never resampled, and writes the finished slides to
 `store/apple/screenshot/en-US/<display type>/` for `metadata:push`. Do not
 hand-crop: a resized capture is what makes Apple reject a screenshot.
 
+Every capture shows the same demo data, written by
+`scripts/seed-store-demo.py` into the simulator's database after the first
+launch. Seed from that script, not by hand, or two slides will disagree. The
+half-life on each seeded medication must stay equal to its preset in
+`src/domain/peptides.ts`: the level report calls a different number an override
+and says so in the footnote.
+
 The listing copy is drafted in
 `store-assets/app-store/copy/app-store-listing.md`; `store.config.json` is the
 machine-readable copy of it. Keep them in step.
