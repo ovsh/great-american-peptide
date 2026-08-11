@@ -1,33 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
-import { ChevronRight, Flame, Target } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
-import { BottomSheet } from '@/components/BottomSheet';
-import { Card } from '@/components/Card';
-import { LineChart } from '@/components/LineChart';
-import { ProLock, openPaywall } from '@/components/ProLock';
 import { Text } from '@/components/Text';
-import { TimeRangeToggle } from '@/components/TimeRangeToggle';
+import { dayDistance, type Journey, type JourneyMedication, type ProgressMetric } from '@/components/progress-geometry';
+import { ProgressHeaderLine, ProgressJourneyCard } from '@/components/progress-journey-card';
+import type { ProgressBandKind } from '@/components/progress-log-band';
+import { medicationColor } from '@/components/today-hero-card';
+import { TodayRise } from '@/components/today-motion';
 import type {
   InjectionRow,
   MeasurementRow,
   MedicationRow,
   PreferencesRow,
 } from '@/db/types';
+import { medicationScheduleFromStored, scheduledDosesBetween } from '@/domain/scheduling';
+import { sideEffectLabel } from '@/domain/sideEffects';
 import {
-  sameSideEffect,
-  sideEffectLabel,
-  sideEffectStorageKey,
-  type SideEffect,
-} from '@/domain/sideEffects';
-import {
-  computeMedicationScheduleStreak,
   SCHEDULE_GRACE_DAYS,
-  type ScheduleStreak,
+  computeMedicationScheduleStreak,
+  scheduledDoseWindow,
 } from '@/domain/streaks';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
@@ -37,338 +32,435 @@ import { getPreferences } from '@/repositories/preferences';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { useAppStore } from '@/stores/app';
 import { useIsPro } from '@/stores/entitlement';
-import { colors, radius, spacing } from '@/theme';
+import { arrivalBeats, colors, rise, spacing } from '@/theme';
+import { startOfDay } from '@/utils/date';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const RANGES = ['7d', '30d', '90d'] as const;
-type ProgressRange = typeof RANGES[number];
+const CONTENT_MAX_WIDTH = 600;
+/** The axis never draws less than a week, so week one is a week and not a dot. */
+const MIN_SPAN_DAYS = 7;
+/** Under five weeks the months have nothing to name, so the axis names its ends. */
+const MONTH_LABEL_FROM_DAYS = 35;
+/** How long a weight stands before the log slot asks for the next one. */
+const WEIGHT_STALE_DAYS = 3;
 
-interface WeightPoint {
-  t: number;
-  v: number;
+const FREQUENCY_LABEL: Record<string, string> = {
+  daily: 'Every day',
+  weekly: 'Every week',
+  twice_weekly: 'Twice a week',
+  custom: 'No schedule',
+};
+
+/**
+ * The metric the user last chose, kept for the life of the app run.
+ *
+ * It is a view preference and not a fact about their treatment, so it does not
+ * belong in the database; but coming back to a screen you left on Shots and
+ * finding Weight is the screen forgetting you.
+ */
+let lastMetric: ProgressMetric = 'weight';
+
+/** Everything one load produces, held together so it can be applied in one go. */
+interface ProgressData {
+  medications: MedicationRow[];
+  injections: Record<string, InjectionRow[]>;
+  weights: MeasurementRow[];
+  preferences: PreferencesRow | null;
+  sideEffects: SideEffectLog[];
 }
 
-interface GoalProgress {
-  change: number;
-  percent: number;
-  unit: WeightUnit;
-}
-
+/**
+ * Progress: the whole run on one axis.
+ *
+ * The weight curve, every shot in its medication's own lane, and every side
+ * effect above them share one x-axis, so what happened at the same time is drawn
+ * at the same place. The three metrics change the band above the rail and
+ * nothing else, which is why this is one screen rather than three.
+ */
 export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const dataVersion = useAppStore((state) => state.dataVersion);
   const pro = useIsPro();
-  const [range, setRange] = useState<ProgressRange>('30d');
-  // Free keeps the last week. Longer history is the paid part, so we clamp the
-  // range rather than trusting whatever the toggle last held.
-  const effectiveRange: ProgressRange = pro ? range : '7d';
+
+  const [medications, setMedications] = useState<MedicationRow[]>([]);
+  const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
-  const [medications, setMedications] = useState<MedicationRow[]>([]);
-  const [injections, setInjections] = useState<InjectionRow[]>([]);
   const [sideEffects, setSideEffects] = useState<SideEffectLog[]>([]);
-  const [selectedEffect, setSelectedEffect] = useState<SideEffect | null>(null);
+  const [metric, setMetric] = useState<ProgressMetric>(lastMetric);
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  /** Bumped once per weight the user has just logged. Zero has nothing to play. */
+  const [logToken, setLogToken] = useState(0);
 
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      const [weightRows, preferenceRow, medicationRows, sideEffectRows] = await Promise.all([
-        listMeasurements('weight', { limit: 365 }),
-        getPreferences(),
+  const drawnWeight = useRef<string | null | undefined>(undefined);
+  const onScreen = useRef(false);
+  const held = useRef<{ data: ProgressData; logged: boolean } | null>(null);
+
+  const chooseMetric = useCallback((next: ProgressMetric) => {
+    lastMetric = next;
+    setMetric(next);
+  }, []);
+
+  const apply = useCallback((data: ProgressData, logged: boolean) => {
+    setMedications(data.medications);
+    setInjections(data.injections);
+    setWeights(data.weights);
+    setPreferences(data.preferences);
+    setSideEffects(data.sideEffects);
+    setNow(Date.now());
+    setHasLoaded(true);
+    // In the same batch as the data, so the chart takes its "before" snapshot
+    // from the curve the user actually left behind.
+    if (logged) setLogToken((token) => token + 1);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const [medicationRows, weightRows, preferenceRow, effectRows] = await Promise.all([
         listMedications(),
-        listSideEffects({ fromMs: sideEffectWindowStart(Date.now()) }),
+        listMeasurements('weight', { limit: 1000 }),
+        getPreferences(),
+        listSideEffects({ limit: 500 }),
       ]);
       const active = medicationRows.filter((medication) => medication.status === 'active');
-      // Best streak scores every scheduled dose since a medication started, so
-      // the read is bounded by each medication rather than by a row count. A
-      // shared 1000 row cap dropped the oldest weeks and decayed the best streak.
-      const injectionRows = (await Promise.all(active.map((medication) => listInjections({
+      // Every scheduled dose since a medication started is scored, so the read is
+      // bounded by each medication rather than by a shared row count.
+      const shotLists = await Promise.all(active.map((medication) => listInjections({
         medicationId: medication.id,
-        fromMs: streakWindowStart(medication.created_at),
-      })))).flat();
-      if (!live) return;
-      setWeights(weightRows);
-      setPreferences(preferenceRow);
-      setMedications(active);
-      setInjections(injectionRows);
-      setSideEffects(sideEffectRows);
-    })().catch(() => {});
-    return () => { live = false; };
-  }, [dataVersion]);
+        fromMs: graceStart(medication.created_at),
+      })));
+      const byMedication: Record<string, InjectionRow[]> = {};
+      active.forEach((medication, index) => {
+        byMedication[medication.id] = shotLists[index] ?? [];
+      });
 
-  const unit = preferences?.weight_unit ?? 'lb';
-  const points = useMemo(
-    () => weightPoints(weights, unit, effectiveRange),
-    [effectiveRange, unit, weights],
+      const latest = weightRows[0]?.id ?? null;
+      const seen = drawnWeight.current;
+      const logged = seen !== undefined && latest !== null && latest !== seen;
+      drawnWeight.current = latest;
+
+      const data: ProgressData = {
+        medications: active,
+        injections: byMedication,
+        weights: weightRows,
+        preferences: preferenceRow,
+        sideEffects: effectRows,
+      };
+      // A weight is logged on its own screen, so the reading almost always lands
+      // while Progress is behind it. Applied there and then, the curve would have
+      // moved before anyone could see it move.
+      if (onScreen.current) apply(data, logged);
+      else held.current = { data, logged: logged || (held.current?.logged ?? false) };
+    } catch (error) {
+      setLoadError(true);
+      throw error;
+    }
+  }, [apply]);
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [dataVersion, load]);
+
+  useFocusEffect(useCallback(() => {
+    onScreen.current = true;
+    const waiting = held.current;
+    if (waiting) {
+      held.current = null;
+      apply(waiting.data, waiting.logged);
+    } else {
+      setNow(Date.now());
+    }
+    return () => { onScreen.current = false; };
+  }, [apply]));
+
+  const journey = useMemo(
+    () => buildJourney({ medications, injections, weights, preferences, sideEffects, now }),
+    [injections, medications, now, preferences, sideEffects, weights],
   );
-  const goal = useMemo(
-    () => goalProgress(weights, preferences),
-    [preferences, weights],
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } catch {
+      // The error state is already on screen; the spinner still has to stop.
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+        refreshControl={(
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />
+        )}
+      >
+        {!hasLoaded ? (
+          loadError ? <LoadError onRetry={() => load().catch(() => {})} /> : <Loading />
+        ) : (
+          <>
+            <TodayRise show delay={arrivalBeats.header} distance={rise.line}>
+              <ProgressHeaderLine journey={journey} />
+            </TodayRise>
+            <TodayRise show delay={arrivalBeats.hero} distance={rise.card}>
+              <ProgressJourneyCard
+                journey={journey}
+                metric={metric}
+                onMetric={chooseMetric}
+                pro={pro}
+                band={bandKind(journey, now)}
+                logToken={logToken}
+              />
+            </TodayRise>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
-  const streak = useMemo(() => computeMedicationScheduleStreak({
+}
+
+function Loading() {
+  return (
+    <View style={styles.state}>
+      <ActivityIndicator color={colors.inkSubtle} />
+    </View>
+  );
+}
+
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.state}>
+      <Text color={colors.inkMuted} style={styles.stateCopy}>
+        Your journey did not load.
+      </Text>
+      <Button size="sm" onPress={onRetry}>Try again</Button>
+    </View>
+  );
+}
+
+/**
+ * Which emphasis the permanent log slot wears.
+ *
+ * Solid while the curve is waiting for its next point, soft green for the rest
+ * of the day a weight lands, and quiet in between. The action never leaves.
+ */
+function bandKind(journey: Journey, now: number): ProgressBandKind {
+  if (journey.loggedWeightAt !== null) return 'done';
+  const last = journey.weights[journey.weights.length - 1];
+  if (!last) return 'push';
+  return dayDistance(last.takenAt, now) >= WEIGHT_STALE_DAYS ? 'push' : 'idle';
+}
+
+/* ------------------------------------------------------------- the journey */
+
+/**
+ * Every layer of the screen, in days since the run began.
+ *
+ * The run starts at the first thing the user did, whichever it was: a weight, a
+ * medication, or a shot. Timestamps become day offsets here so nothing under
+ * this point has to know what a millisecond is.
+ */
+function buildJourney({
+  medications,
+  injections,
+  weights,
+  preferences,
+  sideEffects,
+  now,
+}: {
+  medications: readonly MedicationRow[];
+  injections: Readonly<Record<string, readonly InjectionRow[]>>;
+  weights: readonly MeasurementRow[];
+  preferences: PreferencesRow | null;
+  sideEffects: readonly SideEffectLog[];
+  now: number;
+}): Journey {
+  const unit: WeightUnit = preferences?.weight_unit ?? 'lb';
+  const reminderTime = preferences?.reminder_time ?? '09:00';
+  const today = startOfDay(now);
+
+  const stamps = [
+    ...weights.map((weight) => weight.taken_at),
+    ...medications.map((medication) => medication.created_at),
+    ...Object.values(injections).flatMap((rows) => rows.map((row) => row.taken_at)),
+  ];
+  const startMs = stamps.length > 0 ? startOfDay(Math.min(...stamps)) : today;
+  const spanDays = Math.max(MIN_SPAN_DAYS, dayDistance(startMs, now));
+  const dayOf = (timestamp: number) => dayDistance(startMs, timestamp);
+
+  const points = weights
+    .slice()
+    .reverse()
+    .map((weight) => ({
+      day: dayOf(weight.taken_at),
+      value: convertWeight(weight.value, weight.unit, unit),
+      takenAt: weight.taken_at,
+    }));
+
+  const lanes = medications.map((medication): JourneyMedication => {
+    const rows = injections[medication.id] ?? [];
+    const shots = uniqueDays(rows.map((row) => dayOf(row.taken_at)));
+    const { missed, due } = scoreSchedule(medication, rows, reminderTime, now, dayOf);
+    return {
+      id: medication.id,
+      name: medication.name,
+      color: medicationColor(medication.color_index),
+      scheduleLabel: frequencyLabel(medication),
+      shots,
+      missed,
+      due,
+    };
+  });
+
+  const streak = computeMedicationScheduleStreak({
     medications: medications.map((row) => ({
       id: row.id,
       frequencyKind: row.frequency_kind,
       frequencyValue: row.frequency_value,
       createdAt: row.created_at,
     })),
-    injections: injections.map((row) => ({
+    injections: Object.values(injections).flatMap((rows) => rows.map((row) => ({
       id: row.id,
       medicationId: row.medication_id,
       takenAt: row.taken_at,
-    })),
-    reminderTime: preferences?.reminder_time ?? '09:00',
-    now: Date.now(),
-  }) ?? { current: 0, best: 0, weeks: [] }, [injections, medications, preferences?.reminder_time]);
-  const effectCounts = useMemo(() => countEffects(sideEffects), [sideEffects]);
-  const selectedEffectLogs = useMemo(
-    () => selectedEffect
-      ? sideEffects.filter((log) => sameSideEffect(log.effect, selectedEffect))
-      : [],
-    [selectedEffect, sideEffects],
-  );
-  const chartWidth = Math.max(220, Math.min(width, 600) - spacing.screen * 2 - spacing.xl * 2);
-  const latest = points[points.length - 1];
-  // `points` holds the selected range only, and a free account is pinned to 7d.
-  // A user with months of weights behind that clamp must not read "No weight yet".
-  const loggedBefore = weights.length > 0;
+    }))),
+    reminderTime,
+    now,
+  }) ?? { current: 0, best: 0, weeks: [] };
 
-  return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}> 
-        <Text variant="display">Progress</Text>
+  const latest = points[points.length - 1] ?? null;
+  const goal = preferences?.goal_weight ?? null;
 
-        <Card style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <View style={styles.chartTitle}>
-              <Text variant="smallStrong">Weight</Text>
-              <View style={styles.currentRow}>
-                <Text style={styles.currentValue}>{latest ? latest.v.toFixed(1) : '—'}</Text>
-                <Text variant="small" color={colors.inkMuted}>
-                  {latest ? unit : loggedBefore ? 'None in this range' : 'No weight yet'}
-                </Text>
-              </View>
-            </View>
-            <TimeRangeToggle
-              options={RANGES}
-              value={effectiveRange}
-              onChange={(next) => {
-                if (!pro && next !== '7d') openPaywall();
-                else setRange(next);
-              }}
-              size="sm"
-            />
-          </View>
-          {points.length >= 2 ? (
-            <LineChart
-              data={points}
-              width={chartWidth}
-              height={220}
-              includeZero={false}
-              color={colors.amber}
-              fillColor="rgba(232,161,60,0.12)"
-              xLabel={(timestamp) => format(timestamp, 'M/d')}
-              xTickCount={4}
-            />
-          ) : (
-            <View style={styles.chartEmpty}>
-              <Text color={colors.inkMuted} style={styles.chartEmptyCopy}>
-                {emptyChartCopy(points.length, loggedBefore, effectiveRange)}
-              </Text>
-              <Button size="sm" onPress={() => router.push('/log-weight')}>Log weight</Button>
-            </View>
-          )}
-        </Card>
-
-        <GoalCard goal={goal} hasGoal={preferences?.goal_weight !== null && preferences?.goal_weight !== undefined} />
-        <StreakCard streak={streak} />
-
-        {effectCounts.length > 0 && !pro ? (
-          <ProLock
-            title="Side effect patterns"
-            body="See which effects come back, how often and how bad they get."
-          />
-        ) : null}
-
-        {effectCounts.length > 0 && pro ? (
-          <Card style={styles.effectsCard}>
-            <View style={styles.effectsHead}>
-              <Text variant="h2">Side effects</Text>
-              <Text variant="small" color={colors.inkMuted}>Last 14 days</Text>
-            </View>
-            {effectCounts.map(({ effect, count }) => {
-              const maximum = effectCounts[0]?.count ?? 1;
-              return (
-                <Pressable
-                  key={sideEffectStorageKey(effect)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${sideEffectLabel(effect)}, ${count} ${count === 1 ? 'log' : 'logs'} in the last 14 days`}
-                  onPress={() => setSelectedEffect(effect)}
-                  style={({ pressed }) => [styles.effectRow, pressed && styles.pressed]}
-                >
-                  <View style={styles.effectCopy}>
-                    <Text variant="smallStrong" style={styles.effectLabel}>{sideEffectLabel(effect)}</Text>
-                    <View style={styles.effectTrack}>
-                      <View style={[styles.effectFill, { flex: count }]} />
-                      <View style={{ flex: Math.max(maximum - count, 0.001) }} />
-                    </View>
-                  </View>
-                  <Text variant="smallStrong" color={colors.violet}>{count}</Text>
-                  <ChevronRight size={17} color={colors.inkSubtle} />
-                </Pressable>
-              );
-            })}
-          </Card>
-        ) : null}
-      </ScrollView>
-
-      <BottomSheet
-        visible={selectedEffect !== null}
-        title={selectedEffect ? sideEffectLabel(selectedEffect) : 'Side effect'}
-        onClose={() => setSelectedEffect(null)}
-      >
-        <ScrollView contentContainerStyle={styles.filteredList}>
-          {selectedEffectLogs.map((log) => (
-            <View key={log.id} style={styles.filteredRow}>
-              <View style={styles.filteredDate}>
-                <Text variant="smallStrong">{format(log.taken_at, 'MMM d')}</Text>
-                <Text variant="caption" color={colors.inkMuted}>{format(log.taken_at, 'h:mm a')}</Text>
-              </View>
-              <View style={styles.filteredCopy}>
-                <Text variant="smallStrong" color={colors.violet}>Severity {log.severity}/10</Text>
-                {log.notes ? <Text variant="small" color={colors.inkMuted}>{log.notes}</Text> : null}
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </BottomSheet>
-    </View>
-  );
-}
-
-function GoalCard({ goal, hasGoal }: { goal: GoalProgress | null; hasGoal: boolean }) {
-  if (!goal) {
-    return (
-      <Card style={styles.summaryCard}>
-        <View style={styles.summaryIcon}>
-          <Target size={21} color={colors.amber} />
-        </View>
-        <View style={styles.summaryCopy}>
-          <Text variant="h2">{hasGoal ? 'Log weight to measure your goal.' : 'Set a goal weight.'}</Text>
-          <Text color={colors.inkMuted}>Poke then shows how far you have come.</Text>
-        </View>
-        <Button size="sm" onPress={() => hasGoal ? router.push('/log-weight') : router.push('/profile')}>
-          {hasGoal ? 'Log weight' : 'Open Profile'}
-        </Button>
-      </Card>
-    );
-  }
-  const direction = goal.change <= 0 ? 'down' : 'up';
-  return (
-    <Card style={styles.summaryCard}>
-      <View style={styles.summaryHead}>
-        <View style={styles.summaryIcon}>
-          <Target size={21} color={colors.amber} />
-        </View>
-        <Text variant="h2">
-          {Math.abs(goal.change).toFixed(1)} {goal.unit} {direction} and {goal.percent}% to goal
-        </Text>
-      </View>
-      <View accessibilityLabel={`${goal.percent} percent to goal`} style={styles.progressTrack}>
-        {goal.percent > 0 ? <View style={[styles.progressFill, { flex: goal.percent }]} /> : null}
-        <View style={{ flex: Math.max(100 - goal.percent, 0.001) }} />
-      </View>
-    </Card>
-  );
-}
-
-function StreakCard({ streak }: { streak: ScheduleStreak }) {
-  return (
-    <Card style={styles.streakCard}>
-      <View style={styles.streakIcon}>
-        <Flame size={22} color={colors.accent} fill={colors.accent} />
-      </View>
-      <View style={styles.streakStat}>
-        <Text style={styles.streakValue}>{streak.current}</Text>
-        <Text variant="small" color={colors.inkMuted}>Current streak</Text>
-      </View>
-      <View style={styles.streakDivider} />
-      <View style={styles.streakStat}>
-        <Text style={styles.streakValue}>{streak.best}</Text>
-        <Text variant="small" color={colors.inkMuted}>Best streak</Text>
-      </View>
-    </Card>
-  );
-}
-
-function rangeDays(range: ProgressRange): number {
-  return range === '7d' ? 7 : range === '30d' ? 30 : 90;
-}
-
-/**
- * Each branch is a different truth. A weight logged outside the selected range
- * is still a weight, so the empty chart names the range and not the history.
- */
-function emptyChartCopy(pointCount: number, loggedBefore: boolean, range: ProgressRange): string {
-  if (pointCount === 1) return 'Log one more weight to see your trend.';
-  if (loggedBefore) return `No weight in the last ${rangeDays(range)} days.`;
-  return 'Log two weights to see your trend.';
-}
-
-function weightPoints(weights: readonly MeasurementRow[], unit: WeightUnit, range: ProgressRange): WeightPoint[] {
-  const since = Date.now() - rangeDays(range) * DAY_MS;
-  return weights
-    .filter((weight) => weight.taken_at >= since)
-    .slice()
-    .reverse()
-    .map((weight) => ({ t: weight.taken_at, v: convertWeight(weight.value, weight.unit, unit) }));
-}
-
-function goalProgress(weights: readonly MeasurementRow[], preferences: PreferencesRow | null): GoalProgress | null {
-  const latest = weights[0];
-  const earliest = weights[weights.length - 1];
-  const goal = preferences?.goal_weight;
-  if (!latest || !earliest || goal === null || goal === undefined || !preferences) return null;
-  const unit = preferences.weight_unit;
-  const current = convertWeight(latest.value, latest.unit, unit);
-  const start = preferences.start_weight ?? convertWeight(earliest.value, earliest.unit, unit);
-  const total = goal - start;
-  if (total === 0) return { change: current - start, percent: 100, unit };
-  const achieved = current - start;
   return {
-    change: current - start,
-    percent: Math.round(Math.max(0, Math.min(100, achieved / total * 100))),
+    startMs,
+    spanDays,
+    sinceLabel: format(startMs, 'd MMM'),
+    months: spanDays >= MONTH_LABEL_FROM_DAYS ? monthMarks(startMs, now, dayOf) : [],
+    edgeLabels: spanDays >= MONTH_LABEL_FROM_DAYS
+      ? null
+      : [format(startMs, 'd MMM'), 'Today'] as const,
+    weights: points,
+    startWeight: preferences?.start_weight ?? points[0]?.value ?? null,
+    goal,
     unit,
+    medications: lanes,
+    effects: sideEffects
+      .filter((log) => log.taken_at >= startMs)
+      .slice()
+      .reverse()
+      .map((log) => ({
+        day: dayOf(log.taken_at),
+        label: sideEffectLabel(log.effect),
+        severity: log.severity,
+        takenAt: log.taken_at,
+      })),
+    shotTotal: Object.values(injections).reduce((total, rows) => total + rows.length, 0),
+    missedTotal: lanes.reduce((total, lane) => total + lane.missed.length, 0),
+    dueTotal: lanes.reduce((total, lane) => total + lane.due.length, 0),
+    streakWeeks: streak.current,
+    weeksOnTime: streak.weeks.filter((week) => week.status === 'complete').length,
+    loggedWeightAt: latest !== null && latest.takenAt >= today ? latest.takenAt : null,
   };
 }
 
-function countEffects(sideEffects: readonly SideEffectLog[]): { effect: SideEffect; count: number }[] {
-  const counts = new Map<string, { effect: SideEffect; count: number }>();
-  for (const sideEffect of sideEffects) {
-    const key = sideEffectStorageKey(sideEffect.effect);
-    const current = counts.get(key);
-    counts.set(key, { effect: current?.effect ?? sideEffect.effect, count: (current?.count ?? 0) + 1 });
+/**
+ * Which scheduled doses the user met, and which are still open.
+ *
+ * A shot counts for one dose only, and the earliest open window takes it, so a
+ * double dose on Monday does not quietly pay for the Thursday nobody took. The
+ * domain owns the window; this is the greedy pass over it that the streak keeps
+ * to itself.
+ */
+function scoreSchedule(
+  medication: MedicationRow,
+  rows: readonly InjectionRow[],
+  reminderTime: string,
+  now: number,
+  dayOf: (timestamp: number) => number,
+): { missed: number[]; due: number[] } {
+  const schedule = medicationScheduleFromStored({
+    medicationId: medication.id,
+    frequencyKind: medication.frequency_kind,
+    frequencyValue: medication.frequency_value,
+    createdAt: medication.created_at,
+    reminderTime,
+  });
+  if (!schedule) return { missed: [], due: [] };
+
+  const windows = scheduledDosesBetween(schedule, medication.created_at, now)
+    .map(scheduledDoseWindow)
+    .sort((left, right) => left.dose.scheduledAt - right.dose.scheduledAt);
+  const taken = rows
+    .map((row) => row.taken_at)
+    .sort((left, right) => left - right);
+  const used = new Set<number>();
+  const missed: number[] = [];
+  const due: number[] = [];
+
+  for (const window of windows) {
+    let matched = false;
+    for (let index = 0; index < taken.length; index += 1) {
+      const at = taken[index];
+      if (at === undefined || used.has(index)) continue;
+      if (at >= window.opensAt && at < window.closesAt) {
+        used.add(index);
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+    const day = dayOf(window.dose.scheduledDay);
+    if (now < window.closesAt) due.push(day);
+    else missed.push(day);
   }
-  return Array.from(counts.values())
-    .sort((a, b) => b.count - a.count);
+
+  return { missed: uniqueDays(missed), due: uniqueDays(due) };
+}
+
+/** The first of every month the run passes through, as a day offset. */
+function monthMarks(
+  startMs: number,
+  now: number,
+  dayOf: (timestamp: number) => number,
+): { day: number; label: string }[] {
+  const marks: { day: number; label: string }[] = [];
+  const cursor = new Date(startMs);
+  cursor.setDate(1);
+  cursor.setHours(0, 0, 0, 0);
+  cursor.setMonth(cursor.getMonth() + 1);
+
+  while (cursor.getTime() <= now) {
+    marks.push({ day: dayOf(cursor.getTime()), label: format(cursor, 'MMM') });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return marks;
+}
+
+function frequencyLabel(medication: MedicationRow): string {
+  if (medication.frequency_kind === 'every_n_days') {
+    const days = medication.frequency_value ?? 0;
+    return days === 1 ? 'Every day' : `Every ${days} days`;
+  }
+  return FREQUENCY_LABEL[medication.frequency_kind] ?? 'No schedule';
+}
+
+function uniqueDays(days: readonly number[]): number[] {
+  return Array.from(new Set(days)).sort((left, right) => left - right);
 }
 
 /**
  * A shot counts for a scheduled dose from one grace day before it, so the read
  * opens that far ahead of the day the medication started.
  */
-function streakWindowStart(createdAt: number): number {
+function graceStart(createdAt: number): number {
   const date = new Date(createdAt);
   date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() - SCHEDULE_GRACE_DAYS);
-  return date.getTime();
-}
-
-function sideEffectWindowStart(now: number): number {
-  const date = new Date(now);
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - 13);
   return date.getTime();
 }
 
@@ -385,156 +477,18 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 600,
+    maxWidth: CONTENT_MAX_WIDTH,
     alignSelf: 'center',
-    gap: spacing.md,
     paddingHorizontal: spacing.screen,
     paddingBottom: 112,
   },
-  chartCard: {
-    gap: spacing.xl,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  chartTitle: {
-    gap: spacing.xs,
-  },
-  currentRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.xs,
-  },
-  currentValue: {
-    fontSize: 36,
-    lineHeight: 42,
-    fontWeight: '600',
-    color: colors.ink,
-  },
-  chartEmpty: {
-    minHeight: 180,
+  state: {
+    minHeight: 260,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
   },
-  chartEmptyCopy: {
+  stateCopy: {
     textAlign: 'center',
-  },
-  summaryCard: {
-    gap: spacing.lg,
-  },
-  summaryHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  summaryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.warningSoft,
-  },
-  summaryCopy: {
-    gap: spacing.xs,
-  },
-  progressTrack: {
-    height: 8,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    borderRadius: radius.pill,
-    backgroundColor: colors.warningSoft,
-  },
-  progressFill: {
-    borderRadius: radius.pill,
-    backgroundColor: colors.amber,
-  },
-  streakCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  streakIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSoft,
-  },
-  streakStat: {
-    flex: 1,
-    gap: 2,
-  },
-  streakValue: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
-    color: colors.ink,
-  },
-  streakDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 44,
-    backgroundColor: colors.divider,
-  },
-  effectsCard: {
-    gap: spacing.md,
-  },
-  effectsHead: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  effectRow: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  effectCopy: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  effectTrack: {
-    height: 8,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(139,123,216,0.14)',
-  },
-  effectFill: {
-    borderRadius: radius.pill,
-    backgroundColor: colors.violet,
-  },
-  effectLabel: {
-    flex: 1,
-  },
-  pressed: {
-    opacity: 0.68,
-  },
-  filteredList: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  filteredRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    gap: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
-  },
-  filteredDate: {
-    width: 64,
-    gap: 2,
-  },
-  filteredCopy: {
-    flex: 1,
-    gap: spacing.xs,
   },
 });
