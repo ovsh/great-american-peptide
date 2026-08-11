@@ -36,26 +36,6 @@
       "HEALTH_AND_FITNESS",
       "MEDICAL"
     ],
-    "advisory": {
-      "ageRatingOverride": "NONE",
-      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
-      "contests": "NONE",
-      "gambling": false,
-      "gamblingSimulated": "NONE",
-      "horrorOrFearThemes": "NONE",
-      "kidsAgeBand": null,
-      "koreaAgeRatingOverride": "NONE",
-      "lootBox": false,
-      "matureOrSuggestiveThemes": "NONE",
-      "medicalOrTreatmentInformation": "NONE",
-      "profanityOrCrudeHumor": "NONE",
-      "sexualContentGraphicAndNudity": "NONE",
-      "sexualContentOrNudity": "NONE",
-      "unrestrictedWebAccess": false,
-      "violenceCartoonOrFantasy": "NONE",
-      "violenceRealistic": "NONE",
-      "violenceRealisticProlongedGraphicOrSadistic": "NONE"
-    },
     "review": {
       "firstName": "Miki",
       "lastName": "Ovshievich",
