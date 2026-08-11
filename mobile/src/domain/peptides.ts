@@ -69,7 +69,7 @@ export const peptidePresets: PeptidePreset[] = [
   {
     id: 'semaglutide',
     name: 'Semaglutide',
-    brandNames: ['Ozempic', 'Rybelsus', 'Wegovy'],
+    brandNames: ['Ozempic', 'Wegovy'],
     category: 'glp1',
     unit: 'mg',
     defaultRoute: 'sc',
@@ -605,7 +605,7 @@ export function hasUsableHalfLife(preset: PeptidePreset): preset is SourcedPepti
 export const EVIDENCE_LABELS: Record<EvidenceTier, string> = {
   label: 'Half-life from the drug label',
   trial: 'Half-life from a human study',
-  estimate: 'Estimated half-life — limited evidence',
+  estimate: 'Estimated half-life, limited evidence',
   unsourced: 'No published half-life',
 };
 
