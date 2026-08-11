@@ -20,6 +20,7 @@ import { Text } from '@/components/Text';
 import { medicationColor } from '@/components/today-hero-card';
 import { PressScale, usePressScale } from '@/components/today-motion';
 import type { DoseState, TodayMedicationSummary } from '@/components/today-types';
+import { FREE_MEDICATION_LIMIT } from '@/repositories/medications';
 import {
   colors,
   easing,
@@ -42,6 +43,37 @@ const CHIP_FILL = [colors.surfaceMuted, colors.successSoft];
 const CHIP_EDGE = [colors.border, 'rgba(20,122,82,0.2)'];
 const CHIP_INK = [colors.inkMuted, colors.successDeep];
 
+interface MedicationListProps {
+  rows: readonly TodayMedicationSummary[];
+  /** Every running medication, the hero's one included. Decides the add shape. */
+  activeCount: number;
+  onSelect: (medicationId: string) => void;
+  onReorder: (medicationIds: readonly string[]) => void;
+  onDragChange: (dragging: boolean) => void;
+}
+
+/**
+ * The rest of the medications, and the way to add one more.
+ *
+ * The add affordance has two shapes, and which one shows is decided by how much
+ * of the free allowance is still open, not by how long the list is:
+ *
+ * - Under the allowance the list has no rows left to draw — the one medication
+ *   is in the hero — so the card is dropped and an empty slot stands in its
+ *   place. A card whose only row is "Add medication" is a footer with nothing
+ *   above it, and the second medication is the moment Poke starts being useful.
+ * - At the allowance and above, the slot collapses back to the quiet last row of
+ *   the list card. Adding is no longer the point of the screen by then.
+ */
+export function TodayMedicationList(props: MedicationListProps) {
+  // The slot replaces the whole card, so the drag machinery below is not just
+  // unused in that state — it has nothing to hold.
+  if (props.rows.length === 0 && props.activeCount < FREE_MEDICATION_LIMIT) {
+    return <AddSlot first={props.activeCount === 0} />;
+  }
+  return <MedicationCard {...props} />;
+}
+
 /**
  * Every medication that is not the one in the hero card, plus the way to add
  * another. One tap moves a row into the hero; a hold picks it up.
@@ -56,17 +88,12 @@ const CHIP_INK = [colors.inkMuted, colors.successDeep];
  * and no text moves. The drop springs the row into its slot and the list only
  * re-orders once it has landed, so nothing ever jumps a row-height.
  */
-export function TodayMedicationList({
+function MedicationCard({
   rows,
   onSelect,
   onReorder,
   onDragChange,
-}: {
-  rows: readonly TodayMedicationSummary[];
-  onSelect: (medicationId: string) => void;
-  onReorder: (medicationIds: readonly string[]) => void;
-  onDragChange: (dragging: boolean) => void;
-}) {
+}: MedicationListProps) {
   const reduced = useReducedMotion();
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIndex = useSharedValue(-1);
@@ -200,6 +227,43 @@ export function TodayMedicationList({
         )}
       </PressScale>
     </View>
+  );
+}
+
+/**
+ * The empty slot: a row-height card, dashed, standing where the medication the
+ * user has not added yet will stand.
+ *
+ * The dash is ink, not green. Green dashes on soft green are already the drop
+ * placeholder a lifted row falls into, and an invitation and a drag target must
+ * not look alike. What the slot keeps from the add row is the part that names
+ * the action — the soft-green disc and the deep-green word — so the affordance
+ * is recognised again once it collapses back into the list.
+ *
+ * No price and no plan chip. The slot says what it gives; the third medication
+ * is where the paywall lives, and `medications/new` already carries it.
+ */
+function AddSlot({ first }: { first: boolean }) {
+  const label = first ? 'Add your first medication' : 'Add your second medication';
+
+  return (
+    <PressScale>
+      {(handlers) => (
+        <Pressable
+          testID="today-add-slot"
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={() => router.push('/medications/new')}
+          style={styles.slot}
+          {...handlers}
+        >
+          <View style={styles.slotDisc}>
+            <Plus size={14} strokeWidth={2.4} color={colors.successDeep} />
+          </View>
+          <Text color={colors.successDeep} style={styles.slotLabel}>{label}</Text>
+        </Pressable>
+      )}
+    </PressScale>
   );
 }
 
@@ -535,6 +599,35 @@ const styles = StyleSheet.create({
   },
   addLabel: {
     flex: 1,
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.15,
+  },
+  // The height of a real row, so the slot reads as the medication that is not
+  // there yet rather than as a button that happens to be wide.
+  slot: {
+    height: ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.xl,
+    borderWidth: 1.6,
+    borderStyle: 'dashed',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  slotDisc: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: colors.successSoft,
+  },
+  slotLabel: {
     fontFamily: fonts.sansSemiBold,
     fontSize: 15,
     lineHeight: 20,

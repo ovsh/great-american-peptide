@@ -352,6 +352,7 @@ export default function TodayScreen() {
             <TodayRise show delay={arrivalBeats.list} distance={rise.card}>
               <TodayMedicationList
                 rows={rest}
+                activeCount={dashboard.medications.length}
                 onSelect={selectMedication}
                 onReorder={reorder}
                 onDragChange={setDragging}
