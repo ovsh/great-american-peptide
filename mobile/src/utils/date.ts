@@ -9,7 +9,22 @@ export function fmtTime(ms: number): string {
 }
 
 export function fmtDateTime(ms: number): string {
-  return format(new Date(ms), 'MMM d, yyyy · h:mm a');
+  return format(new Date(ms), "MMM d, yyyy 'at' h:mm a");
+}
+
+/**
+ * A stored `HH:MM` in the same form `fmtTime` prints. Preferences hold the
+ * 24-hour string because that is the one that sorts, and the picker speaks AM
+ * and PM, so a screen that printed the stored string read 19:04 back to a user
+ * who had just set 7:04 PM. A string this cannot parse prints as it stands.
+ */
+export function fmtClock(value: string): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  const hour24 = Number.parseInt(match?.[1] ?? '', 10);
+  const minute = Number.parseInt(match?.[2] ?? '', 10);
+  if (!Number.isFinite(hour24) || !Number.isFinite(minute)) return value;
+  if (hour24 > 23 || minute > 59) return value;
+  return `${hour24 % 12 || 12}:${String(minute).padStart(2, '0')} ${hour24 >= 12 ? 'PM' : 'AM'}`;
 }
 
 export function fmtDayLabel(ms: number): string {

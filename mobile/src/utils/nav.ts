@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 
-export function safeBack(fallback: string) {
+export function safeBack(fallback: Href) {
   if (router.canGoBack()) router.back();
-  else router.replace(fallback as any);
+  else router.replace(fallback);
 }

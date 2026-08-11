@@ -10,22 +10,66 @@ interface StepperProps {
   onChange: (v: number) => void;
   step?: number;
   min?: number;
+  /**
+   * The highest value the stepper writes. There is no ceiling by default,
+   * because a ceiling the caller did not ask for eats a real number in silence:
+   * HCG runs to 2500 iu and above. Name a ceiling, and pass `onAboveMax` with it.
+   */
   max?: number;
+  /**
+   * Runs when a press or a typed number goes above `max` and the stepper holds
+   * at `max` instead. The caller owns the words, and the caller must put them
+   * on screen. A clamp the user cannot see is a lost number.
+   */
+  onAboveMax?: (max: number) => void;
   format?: (v: number) => string;
   unit?: string;
 }
 
-export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, format, unit }: StepperProps) {
+export function Stepper({
+  value,
+  onChange,
+  step = 0.5,
+  min = 0,
+  max = Number.POSITIVE_INFINITY,
+  onAboveMax,
+  format,
+  unit,
+}: StepperProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
+  const editing = draft !== null;
+
+  /**
+   * While the field has focus the typed text is the number the user sees, so a
+   * press has to start from that text. A press that read `value` instead would
+   * throw the typed digits away on the next render.
+   */
+  const shown = (): number => {
+    if (draft === null) return value;
+    const typed = parseFloat(draft.replace(',', '.'));
+    return Number.isFinite(typed) ? typed : value;
+  };
+
+  const commit = (next: number) => {
+    // Two decimals first, so that 2.5 plus 0.1 reads as 2.6 and not as
+    // 2.6000000000000005. A ceiling test on the raw sum would report a clamp
+    // that only float noise asked for.
+    const rounded = +next.toFixed(2);
+    if (rounded > max) onAboveMax?.(max);
+    const clamped = Math.max(min, Math.min(max, rounded));
+    if (editing) setDraft(String(clamped));
+    onChange(clamped);
+  };
+
   const dec = () => {
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
-    onChange(Math.max(min, +(value - step).toFixed(2)));
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    commit(shown() - step);
   };
   const inc = () => {
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
-    onChange(Math.min(max, +(value + step).toFixed(2)));
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    commit(shown() + step);
   };
 
   const onFocus = () => {
@@ -34,8 +78,12 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
 
   const onBlur = () => {
     if (draft !== null) {
-      const n = parseFloat(draft.replace(',', '.'));
-      if (!isNaN(n)) onChange(+Math.max(min, Math.min(max, n)).toFixed(2));
+      const typed = parseFloat(draft.replace(',', '.'));
+      if (Number.isFinite(typed)) {
+        const rounded = +typed.toFixed(2);
+        if (rounded > max) onAboveMax?.(max);
+        onChange(Math.max(min, Math.min(max, rounded)));
+      }
     }
     setDraft(null);
   };
@@ -44,7 +92,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
 
   return (
     <View style={styles.row}>
-      <Pressable style={styles.btn} onPress={dec} hitSlop={10}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Decrease" style={styles.btn} onPress={dec}>
         <Minus size={18} color={colors.ink} />
       </Pressable>
       <View style={styles.valueWrap}>
@@ -69,7 +117,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0, max = 1000, form
           ) : null
         ) : null}
       </View>
-      <Pressable style={styles.btn} onPress={inc} hitSlop={10}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Increase" style={styles.btn} onPress={inc}>
         <Plus size={18} color={colors.ink} />
       </Pressable>
     </View>
@@ -85,8 +133,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   btn: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,

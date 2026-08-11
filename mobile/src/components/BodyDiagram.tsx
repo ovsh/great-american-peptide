@@ -1,12 +1,16 @@
 import Svg, { Path, Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { Pressable, View } from 'react-native';
-import { colors } from '../theme';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './Text';
+import { colors, radius, spacing } from '../theme';
 import { bodySites, type BodySite, type View as BodyView } from '../domain/bodySites';
+import type { Route } from '../domain/peptides';
 
 interface BodyDiagramProps {
   view: BodyView;
   selectedId?: string | null;
   recentSiteIds?: string[];
+  suggestedId?: string | null;
+  route?: Route;
   onSelect: (s: BodySite) => void;
   width?: number;
   height?: number;
@@ -70,7 +74,6 @@ const BODY_OUTLINE = `
 const FRONT_DETAILS = `
   M 38 33 C 44 31 56 31 62 33
   M 50 36 L 50 78
-  M 50 96 m -1.2 0 a 1.2 1.6 0 1 0 2.4 0 a 1.2 1.6 0 1 0 -2.4 0
   M 41 152 C 43 154 47 154 49 152
   M 51 152 C 53 154 57 154 59 152
 `;
@@ -88,11 +91,14 @@ export function BodyDiagram({
   view,
   selectedId,
   recentSiteIds = [],
+  suggestedId,
+  route,
   onSelect,
   width = 200,
   height = 400,
 }: BodyDiagramProps) {
-  const visible = bodySites.filter((s) => s.view === view);
+  const visible = bodySites.filter((site) => site.view === view && (!route || site.routes.includes(route)));
+  const suggested = suggestedId ? visible.find((site) => site.id === suggestedId) : undefined;
   const VBW = 100;
   const VBH = 200;
 
@@ -101,14 +107,14 @@ export function BodyDiagram({
       <Svg width={width} height={height} viewBox={`0 0 ${VBW} ${VBH}`}>
         <Defs>
           <LinearGradient id="bodyFill" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#FFFCF4" stopOpacity={1} />
+            <Stop offset="0" stopColor={colors.surface} stopOpacity={1} />
             <Stop offset="0.55" stopColor={colors.surface} stopOpacity={1} />
-            <Stop offset="1" stopColor="#EDE3CD" stopOpacity={1} />
+            <Stop offset="1" stopColor={colors.accentSoft} stopOpacity={1} />
           </LinearGradient>
           <LinearGradient id="bodyShade" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#0F1B2D" stopOpacity={0.04} />
-            <Stop offset="0.5" stopColor="#0F1B2D" stopOpacity={0} />
-            <Stop offset="1" stopColor="#0F1B2D" stopOpacity={0.06} />
+            <Stop offset="0" stopColor={colors.ink} stopOpacity={0.04} />
+            <Stop offset="0.5" stopColor={colors.ink} stopOpacity={0} />
+            <Stop offset="1" stopColor={colors.ink} stopOpacity={0.06} />
           </LinearGradient>
         </Defs>
 
@@ -137,6 +143,9 @@ export function BodyDiagram({
           strokeLinecap="round"
           fill="none"
         />
+        {view === 'front' ? (
+          <Circle cx={50} cy={96} r={1.35} fill={colors.inkMuted} opacity={0.46} />
+        ) : null}
 
         {/* injection-site dots */}
         <G>
@@ -148,9 +157,9 @@ export function BodyDiagram({
             if (isSelected) {
               return (
                 <G key={s.id}>
-                  <Circle cx={cx} cy={cy} r={9} fill={colors.red} opacity={0.12} />
-                  <Circle cx={cx} cy={cy} r={5.5} fill={colors.red} opacity={0.28} />
-                  <Circle cx={cx} cy={cy} r={3.2} fill={colors.red} />
+                  <Circle cx={cx} cy={cy} r={9} fill={colors.accent} opacity={0.12} />
+                  <Circle cx={cx} cy={cy} r={5.5} fill={colors.accent} opacity={0.28} />
+                  <Circle cx={cx} cy={cy} r={3.2} fill={colors.accent} />
                 </G>
               );
             }
@@ -188,6 +197,9 @@ export function BodyDiagram({
           return (
             <Pressable
               key={s.id}
+              accessibilityRole="radio"
+              accessibilityLabel={s.label}
+              accessibilityState={{ selected: s.id === selectedId }}
               onPress={() => onSelect(s)}
               style={{
                 position: 'absolute',
@@ -201,6 +213,32 @@ export function BodyDiagram({
           );
         })}
       </View>
+      {suggested ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.suggested,
+            {
+              left: Math.max(0, Math.min(width - 88, suggested.x * width - 44)),
+              top: Math.max(0, suggested.y * height - 50),
+            },
+          ]}
+        >
+          <Text variant="caption" color={colors.accent}>Suggested</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  suggested: {
+    position: 'absolute',
+    minWidth: 88,
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+  },
+});

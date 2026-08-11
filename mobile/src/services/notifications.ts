@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
+import { listInjections } from '../repositories/injections';
 import { listMedications } from '../repositories/medications';
-import { lastInjectionFor } from '../repositories/injections';
 import { getPreferences } from '../repositories/preferences';
-import { frequencyHours } from '../domain/scheduling';
+import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
+import { startOfDay } from '../utils/date';
 
 type ExpoNotifications = typeof import('expo-notifications');
 
@@ -39,11 +40,6 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return req.status === 'granted';
 }
 
-function parseTime(hhmm: string): { hour: number; minute: number } {
-  const [h, m] = hhmm.split(':').map((s) => parseInt(s, 10));
-  return { hour: h ?? 9, minute: m ?? 0 };
-}
-
 export async function refreshScheduledReminders(): Promise<void> {
   const Notifications = await getNotifications();
   if (!Notifications) return;
@@ -52,28 +48,43 @@ export async function refreshScheduledReminders(): Promise<void> {
   if (!prefs.notifications_enabled) return;
 
   const meds = await listMedications();
-  const { hour, minute } = parseTime(prefs.reminder_time);
+  const now = Date.now();
 
   for (const med of meds) {
     if (med.status !== 'active') continue;
-    const last = await lastInjectionFor(med.id);
-    const intervalMs = frequencyHours(med.frequency_kind, med.frequency_value) * 60 * 60 * 1000;
-    const lastTaken = last?.taken_at ?? Date.now() - intervalMs;
-    let next = lastTaken + intervalMs;
-    const now = Date.now();
-    if (next < now) next = now + 60 * 1000;
+    const schedule = medicationScheduleFromStored({
+      medicationId: med.id,
+      frequencyKind: med.frequency_kind,
+      frequencyValue: med.frequency_value,
+      createdAt: med.created_at,
+      reminderTime: prefs.reminder_time,
+    });
+    if (!schedule) continue;
 
-    for (let i = 0; i < 6; i++) {
-      const fireDate = new Date(next + i * intervalMs);
-      fireDate.setHours(hour, minute, 0, 0);
-      if (fireDate.getTime() <= Date.now()) continue;
+    const doses = nextScheduledDoses(schedule, now, 6);
+    if (doses.length === 0) continue;
+
+    // A dose the user already logged needs no reminder. The schedule holds one dose
+    // per medication per day, so a shot on the same local day answers that dose.
+    // Without this, a shot at 07:30 still gets the 09:00 reminder.
+    const loggedFrom = Math.min(...doses.map((dose) => dose.scheduledDay));
+    const logged = await listInjections({ medicationId: med.id, fromMs: loggedFrom });
+    const loggedDays = new Set(logged.map((injection) => startOfDay(injection.taken_at)));
+
+    for (const dose of doses) {
+      if (loggedDays.has(dose.scheduledDay)) continue;
       try {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: med.name,
-            body: `${med.default_dose} ${med.default_unit} · ${med.default_route.toUpperCase()}`,
+            // The reminder repeats the schedule the user set. It gives no
+            // instruction, so the body names the user as the source of the number.
+            title: `${med.name} is on your schedule`,
+            body: `You set ${med.default_dose} ${med.default_unit} ${med.default_route.toUpperCase()} for today.`,
           },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireDate },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: new Date(dose.scheduledAt),
+          },
         });
       } catch {
         // ignore individual scheduling failures

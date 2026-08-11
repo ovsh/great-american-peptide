@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Eyebrow } from './Eyebrow';
-import { spacing } from '../theme';
+import { Text } from './Text';
+import { colors, spacing } from '../theme';
 
 interface SectionProps {
   eyebrow?: string;
@@ -16,7 +16,11 @@ export function Section({ eyebrow, eyebrowTone, trailing, children, gap = 'md' }
     <View style={[styles.wrap, { gap: spacing[gap] }]}>
       {(eyebrow || trailing) && (
         <View style={styles.head}>
-          {eyebrow ? <Eyebrow tone={eyebrowTone}>{eyebrow}</Eyebrow> : <View />}
+          {eyebrow ? (
+            <Text variant="smallStrong" color={eyebrowTone === 'accent' ? colors.accent : colors.inkMuted}>
+              {eyebrow}
+            </Text>
+          ) : <View />}
           {trailing}
         </View>
       )}

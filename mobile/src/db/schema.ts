@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -77,5 +77,171 @@ export const MIGRATIONS: { version: number; up: string }[] = [
   {
     version: 3,
     up: `ALTER TABLE preferences ADD COLUMN goal_weight REAL;`,
+  },
+  {
+    version: 4,
+    up: `
+      ALTER TABLE preferences ADD COLUMN review_event_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE preferences ADD COLUMN review_first_event_at INTEGER;
+      ALTER TABLE preferences ADD COLUMN review_last_prompted_at INTEGER;
+      ALTER TABLE preferences ADD COLUMN review_prompted_version TEXT;
+    `,
+  },
+  {
+    version: 5,
+    up: `
+      CREATE TABLE IF NOT EXISTS side_effect_logs (
+        id          TEXT PRIMARY KEY,
+        effect      TEXT NOT NULL,
+        severity    INTEGER NOT NULL,
+        taken_at    INTEGER NOT NULL,
+        notes       TEXT,
+        deleted_at  INTEGER,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_side_effects_taken ON side_effect_logs(taken_at);
+
+      ALTER TABLE preferences ADD COLUMN goal_kind TEXT;
+      ALTER TABLE preferences ADD COLUMN display_name TEXT;
+      ALTER TABLE preferences ADD COLUMN side_effect_concerns TEXT;
+    `,
+  },
+  {
+    version: 6,
+    up: `
+      ALTER TABLE preferences ADD COLUMN review_prompt_log TEXT;
+      ALTER TABLE preferences ADD COLUMN review_triggers_used TEXT;
+    `,
+  },
+  {
+    // The onboarding rebuild asks fourteen questions. These are the answers that
+    // had nowhere to live. A question whose answer is thrown away is a question
+    // Poke should not be asking, so every one of them lands in a column.
+    version: 7,
+    up: `
+      ALTER TABLE preferences ADD COLUMN journey_stage TEXT;
+      ALTER TABLE preferences ADD COLUMN sex TEXT;
+      ALTER TABLE preferences ADD COLUMN birth_year INTEGER;
+      ALTER TABLE preferences ADD COLUMN activity_level TEXT;
+      ALTER TABLE preferences ADD COLUMN motivation TEXT;
+      ALTER TABLE preferences ADD COLUMN weekly_pace REAL;
+      ALTER TABLE preferences ADD COLUMN last_shot_at INTEGER;
+    `,
+  },
+  {
+    // Poke Pro for an early tester, granted by a code instead of a payment. A
+    // timestamp rather than a flag, so the row also says when the grant started.
+    // Null means no code is active, which is the only state a paying user is in.
+    version: 8,
+    up: `ALTER TABLE preferences ADD COLUMN tester_pro_at INTEGER;`,
+  },
+  {
+    // A medication copies the half-life and the Tmax of its preset at the
+    // moment the user adds it. The copy does not follow the preset, so the
+    // 2026 review of the preset library left older rows drawing curves from
+    // numbers the library no longer holds — a dulaglutide row at 113 hours
+    // where the FDA label says 5 days, and five recovery peptides with no
+    // curve at all.
+    //
+    // Each statement below moves one preset forward, and only for a row that
+    // still holds the value the preset used to give it, or holds nothing. A
+    // row with any other number is one the user typed, so it stays. Tmax is
+    // written only where the row has none, for the same reason.
+    //
+    // The tolerance on the comparison is there because these are REAL columns
+    // written from JavaScript doubles.
+    version: 9,
+    up: `
+      UPDATE medications SET half_life_hours = 168, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'semaglutide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 165) < 0.0005);
+
+      UPDATE medications SET half_life_hours = 120, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tirzepatide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 117) < 0.0005);
+
+      UPDATE medications SET half_life_hours = 120, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'dulaglutide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 113) < 0.0005);
+
+      UPDATE medications
+         SET half_life_hours = 0.18,
+             tmax_hours = COALESCE(tmax_hours, 0.15),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tesamorelin'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 0.63) < 0.0005);
+
+      UPDATE medications
+         SET tmax_hours = COALESCE(tmax_hours, 18),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'survodutide'
+         AND tmax_hours IS NULL
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 144) < 0.0005);
+
+      UPDATE medications
+         SET tmax_hours = COALESCE(tmax_hours, 2),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'thymosin-alpha-1'
+         AND tmax_hours IS NULL
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 2) < 0.0005);
+
+      UPDATE medications
+         SET half_life_hours = 0.75,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'bpc-157' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 2,
+             tmax_hours = COALESCE(tmax_hours, 1),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tb-500' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 0.5,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'ghk-cu' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 1.5,
+             tmax_hours = COALESCE(tmax_hours, 1),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'nad-plus' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 0.5,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'epitalon' AND half_life_hours IS NULL;
+    `,
+  },
+  {
+    // Today now opens on one medication and holds a hand-made order, so both
+    // have to survive a relaunch.
+    //
+    // `sort_order` is the order the user dragged the rows into. The backfill
+    // counts the rows added before each one, so the first order the app shows
+    // is the order the medications were added in — which is what the screen
+    // showed before anyone could drag anything. `id` breaks a tie between two
+    // rows written in the same millisecond, so every row gets its own number.
+    //
+    // `focused_medication_id` is the card Today opens on. It is a preference
+    // and not a column on `medications`, because it names one row out of the
+    // table rather than describing any of them. A stale id is harmless: Today
+    // falls back to the first medication by `sort_order` when the saved one is
+    // gone or archived.
+    version: 10,
+    up: `
+      ALTER TABLE medications ADD COLUMN sort_order INTEGER;
+
+      UPDATE medications SET sort_order = (
+        SELECT COUNT(*) FROM medications AS earlier
+         WHERE earlier.created_at < medications.created_at
+            OR (earlier.created_at = medications.created_at AND earlier.id <= medications.id)
+      ) - 1;
+
+      ALTER TABLE preferences ADD COLUMN focused_medication_id TEXT;
+    `,
   },
 ];

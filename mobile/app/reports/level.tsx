@@ -2,34 +2,115 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, useWindowDimensions, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
+import { format } from 'date-fns';
 
 import { Header } from '@/components/Header';
-import { TitleBlock } from '@/components/TitleBlock';
 import { Section } from '@/components/Section';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
-import { Eyebrow } from '@/components/Eyebrow';
 import { Pill } from '@/components/Pill';
 import { LineChart } from '@/components/LineChart';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 
+import { ProLock } from '@/components/ProLock';
+
 import { listMedications } from '@/repositories/medications';
 import { listInjections } from '@/repositories/injections';
-import type { MedicationRow } from '@/db/types';
-import { levelTrajectory, peakTroughAvg, trendLabel, tmaxOrDefault } from '@/domain/pk';
+import type { InjectionRow, MedicationRow } from '@/db/types';
+import type { Unit } from '@/domain/peptides';
+import { levelTrajectory, peakTroughAvg, trendLabel, tmaxOrDefault, type DoseEvent } from '@/domain/pk';
 import { formatDose } from '@/domain/units';
-import { fmtTime } from '@/utils/date';
+import { maybePromptForReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
+import { useIsPro } from '@/stores/entitlement';
 import { colors, spacing } from '@/theme';
 
-const RANGES = ['7D', '14D', '30D'] as const;
+const RANGES = ['7d', '14d', '30d'] as const;
 type Range = typeof RANGES[number];
+
+const TREND_LABEL = {
+  rising: 'Rising',
+  falling: 'Falling',
+  steady: 'Steady',
+} as const;
+
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+/** The chart needs a smooth line. 100 segments draw one across any range. */
+const CHART_STEPS = 100;
 
 function rangeMs(r: Range): number {
-  if (r === '7D') return 7 * DAY;
-  if (r === '14D') return 14 * DAY;
+  if (r === '7d') return 7 * DAY;
+  if (r === '14d') return 14 * DAY;
   return 30 * DAY;
+}
+
+/**
+ * The peak and the trough are the point of this screen, so the stats read the
+ * range once an hour. The chart grid steps 3 to 7 hours at a time and walks
+ * past the minimum that sits between two shots.
+ */
+function statsSteps(r: Range): number {
+  return Math.round(rangeMs(r) / HOUR);
+}
+
+/**
+ * A medication carries one default unit, and every logged shot keeps the unit
+ * it was logged with. `updateMedicationDefaults` can move the two apart, so the
+ * doses convert to one unit before anything adds them up. IU is medication
+ * specific and converts to nothing, so it returns null and the screen says how
+ * many shots it left out.
+ */
+function doseIn(value: number, from: Unit, to: Unit): number | null {
+  if (from === to) return value;
+  if (from === 'mg' && to === 'mcg') return value * 1000;
+  if (from === 'mcg' && to === 'mg') return value / 1000;
+  return null;
+}
+
+function toDoses(rows: InjectionRow[] | null, unit: Unit): { events: DoseEvent[]; skipped: number } | null {
+  if (!rows) return null;
+  const events: DoseEvent[] = [];
+  let skipped = 0;
+  for (const row of rows) {
+    const dose = doseIn(row.dose, row.unit, unit);
+    if (dose === null) skipped += 1;
+    else events.push({ takenAt: row.taken_at, dose });
+  }
+  return { events, skipped };
+}
+
+/**
+ * `formatDose` rounds mcg to a whole number and prints two decimals below 1 mg.
+ * Under that the screen prints a zero, and a chart of zeros is not a chart.
+ */
+function printsAboveZero(level: number, unit: Unit): boolean {
+  if (unit === 'mcg') return level >= 0.5;
+  if (unit === 'mg') return level >= 0.005;
+  return level > 0;
+}
+
+/** A stat hint names the day. A bare clock time reads as today on a 30d range. */
+function fmtMoment(ms: number): string {
+  return format(new Date(ms), "MMM d 'at' h:mm a");
+}
+
+function unitLabel(unit: Unit): string {
+  return unit === 'iu' ? 'IU' : unit;
+}
+
+/** Each branch is a different truth. None of them may claim the user logged nothing. */
+function emptyChartCopy(
+  rows: InjectionRow[] | null,
+  doses: { events: DoseEvent[]; skipped: number } | null,
+  unit: Unit,
+): string {
+  if (!rows || !doses) return 'Poke is reading your shots.';
+  if (doses.events.length === 0 && doses.skipped > 0) {
+    return `Poke cannot convert the logged unit to ${unitLabel(unit)}. The chart needs one unit.`;
+  }
+  if (doses.events.length === 0) return 'Log a shot to see the level chart.';
+  return 'The estimated level in this range rounds to zero. Log a shot to see the level chart.';
 }
 
 export default function LevelReportScreen() {
@@ -37,10 +118,13 @@ export default function LevelReportScreen() {
   const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ medicationId?: string }>();
   const dataVersion = useAppStore((s) => s.dataVersion);
+  const pro = useIsPro();
   const [meds, setMeds] = useState<MedicationRow[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [range, setRange] = useState<Range>('14D');
-  const [doses, setDoses] = useState<{ takenAt: number; dose: number }[]>([]);
+  const [range, setRange] = useState<Range>('14d');
+  // The rows carry the medication they were read for. Nothing else can tell a
+  // late answer for the last chip from the answer for the chip on screen.
+  const [shots, setShots] = useState<{ medicationId: string; rows: InjectionRow[] } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,48 +143,89 @@ export default function LevelReportScreen() {
 
   useEffect(() => {
     if (!selected) return;
+    let live = true;
     (async () => {
       const list = await listInjections({ medicationId: selected, fromMs: Date.now() - 60 * DAY });
-      setDoses(list.map((i) => ({ takenAt: i.taken_at, dose: i.dose })));
-    })();
+      if (live) setShots({ medicationId: selected, rows: list });
+    })().catch(() => {});
+    return () => { live = false; };
   }, [selected, dataVersion]);
 
   const med = meds.find((m) => m.id === selected) ?? null;
+  // One medication owns the name, the half-life, the unit and the curve. Rows
+  // read for another medication never pass this line, so no frame paints one
+  // medication's shots under another medication's name.
+  const rows = med && shots?.medicationId === med.id ? shots.rows : null;
+  const unit: Unit = med?.default_unit ?? 'mg';
+  const halfLife = med?.half_life_hours ?? null;
+  const doses = useMemo(() => toDoses(rows, unit), [rows, unit]);
+  const events = doses?.events ?? null;
 
-  const tmax = med?.half_life_hours
-    ? tmaxOrDefault(med.half_life_hours, med.tmax_hours)
-    : 0;
+  const now = Date.now();
+  const tmax = halfLife ? tmaxOrDefault(halfLife, med?.tmax_hours) : 0;
+  const rangeStart = now - rangeMs(range);
   // Extend forward to show the elimination tail of what's already been logged.
   // No future doses are projected — peaks reflect only actual injections.
-  const forecastEndMs = med?.half_life_hours
-    ? Date.now() + Math.max(2 * DAY, med.half_life_hours * 60 * 60 * 1000 * 2)
-    : Date.now();
+  const forecastEndMs = halfLife
+    ? now + Math.max(2 * DAY, halfLife * HOUR * 2)
+    : now;
 
-  const trajectory = useMemo(() => {
-    if (!med?.half_life_hours) return [];
-    const from = Date.now() - rangeMs(range);
-    return levelTrajectory(doses, med.half_life_hours, tmax, from, forecastEndMs, 100);
-  }, [doses, med, tmax, range, forecastEndMs]);
+  const past = useMemo(
+    () => (events && halfLife ? levelTrajectory(events, halfLife, tmax, rangeStart, now, CHART_STEPS) : []),
+    [events, halfLife, tmax, rangeStart, now],
+  );
+  const future = useMemo(
+    () => (events && halfLife ? levelTrajectory(events, halfLife, tmax, now, forecastEndMs, CHART_STEPS) : []),
+    [events, halfLife, tmax, now, forecastEndMs],
+  );
+  // The stats cover the selected range and stop at now. The forecast tail decays
+  // below every real trough, so a stat taken across it reports a level the user
+  // has not reached yet.
+  const stats = useMemo(
+    () => peakTroughAvg(
+      events && halfLife ? levelTrajectory(events, halfLife, tmax, rangeStart, now, statsSteps(range)) : [],
+    ),
+    [events, halfLife, tmax, rangeStart, now, range],
+  );
 
-  const data = trajectory.filter((p) => p.t <= Date.now()).map((p) => ({ t: p.t, v: p.level }));
-  const proj = trajectory.filter((p) => p.t >= Date.now()).map((p) => ({ t: p.t, v: p.level }));
-  const stats = peakTroughAvg(trajectory);
-  const trend = med ? trendLabel(doses, med.half_life_hours!, tmax, Date.now()) : 'steady';
+  const data = past.map((p) => ({ t: p.t, v: p.level }));
+  const proj = future.map((p) => ({ t: p.t, v: p.level }));
+  const hasLevel = printsAboveZero(stats.peak.level, unit);
+  const trend = events && halfLife ? trendLabel(events, halfLife, tmax, now) : 'steady';
 
-  const chartW = width - spacing.screen * 2;
+  const chartW = Math.min(width, 600) - spacing.screen * 2;
+
+  // The curve is the paid hook, and it only becomes one at the third dose: below that
+  // it is a single rise and decay, which is a textbook diagram, not the user's routine.
+  // The dwell timer keeps this a read, not a screen the user passed through.
+  const dosesInWindow = useMemo(
+    () => (rows ? rows.filter((r) => r.taken_at >= rangeStart).length : 0),
+    [rows, rangeStart],
+  );
+
+  useEffect(() => {
+    if (!pro || dosesInWindow < 3) return;
+    const timer = setTimeout(() => { maybePromptForReview('level-curve').catch(() => {}); }, 3000);
+    return () => clearTimeout(timer);
+  }, [pro, dosesInWindow]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      <Header title="Medication Level" showBack />
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
-        <TitleBlock title="Levels" rightLabel="ESTIMATED" />
-
-        {meds.length === 0 ? (
+      <Header title="Medication level" showBack />
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero, width: '100%', maxWidth: 600, alignSelf: 'center' }}>
+        {!pro ? (
+          <View style={{ paddingHorizontal: spacing.screen }}>
+            <ProLock
+              title="Your level day by day"
+              body="See the estimated amount in your body between shots. Poke shows the peak, the trough and the average across each dose window."
+            />
+          </View>
+        ) : meds.length === 0 ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <Card padding="lg">
-              <Text variant="h3">No active medications with a half-life set.</Text>
+              <Text variant="h3">No medication has a half-life yet.</Text>
               <Text variant="small" color={colors.inkMuted} style={{ marginTop: 4 }}>
-                Add half-life when configuring a medication to see the estimated-level chart.
+                Add a half-life to a medication. Poke then draws the estimated level chart.
               </Text>
             </Card>
           </View>
@@ -122,52 +247,77 @@ export default function LevelReportScreen() {
             <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.md }}>
               <View style={styles.headRow}>
                 <View>
-                  <Eyebrow>{med?.name}</Eyebrow>
+                  <Text variant="smallStrong" color={colors.inkMuted}>{med?.name}</Text>
                   <Text variant="hero" style={{ marginTop: 4 }}>
-                    {med ? formatDose(stats.peak.level, med.default_unit) : '—'}
+                    {hasLevel ? formatDose(stats.peak.level, unit) : '—'}
                   </Text>
-                  <Text variant="caption" color={colors.inkMuted}>peak this window</Text>
+                  <Text variant="caption" color={colors.inkMuted}>peak in this range</Text>
                 </View>
-                <Pill tone={trend === 'rising' ? 'success' : trend === 'falling' ? 'warning' : 'neutral'}>
-                  {trend}
-                </Pill>
+                {hasLevel ? (
+                  <Pill tone={trend === 'rising' ? 'success' : trend === 'falling' ? 'warning' : 'neutral'}>
+                    {TREND_LABEL[trend]}
+                  </Pill>
+                ) : null}
               </View>
 
-              <View style={{ height: spacing.md }}>
-                <TimeRangeToggle options={RANGES} value={range} onChange={setRange} size="sm" />
-              </View>
+              <TimeRangeToggle options={RANGES} value={range} onChange={setRange} size="sm" />
               <View style={{ height: spacing.md }} />
 
               <Card padding="md">
-                {data.length >= 2 ? (
-                  <LineChart
-                    data={data}
-                    projection={proj.length >= 2 ? proj : undefined}
-                    width={chartW - spacing.lg * 2}
-                    height={200}
-                    yLabel={(v) => v < 1 ? v.toFixed(2) : v.toFixed(1)}
-                    xLabel={(t) => {
-                      const d = new Date(t);
-                      return `${d.getMonth() + 1}/${d.getDate()}`;
-                    }}
-                  />
+                {hasLevel && data.length >= 2 ? (
+                  <>
+                    <LineChart
+                      data={data}
+                      projection={proj.length >= 2 ? proj : undefined}
+                      width={chartW - spacing.lg * 2}
+                      height={200}
+                      xLabel={(t) => {
+                        const d = new Date(t);
+                        return `${d.getMonth() + 1}/${d.getDate()}`;
+                      }}
+                    />
+                    {doses && doses.skipped > 0 ? (
+                      <Text variant="caption" color={colors.inkSubtle} style={{ marginTop: spacing.sm }}>
+                        {`Poke left ${doses.skipped} ${doses.skipped === 1 ? 'shot' : 'shots'} out of this chart. Poke cannot convert the logged unit to ${unitLabel(unit)}.`}
+                      </Text>
+                    ) : null}
+                  </>
                 ) : (
-                  <Text variant="small" color={colors.inkMuted}>Log a few shots to see the level chart.</Text>
+                  <Text variant="small" color={colors.inkMuted}>{emptyChartCopy(rows, doses, unit)}</Text>
                 )}
               </Card>
 
               <View style={{ height: spacing.lg }} />
 
               <View style={styles.statRow}>
-                <Stat label="PEAK" value={med ? formatDose(stats.peak.level, med.default_unit) : '—'} hint={fmtTime(stats.peak.t)} />
-                <Stat label="TROUGH" value={med ? formatDose(stats.trough.level, med.default_unit) : '—'} hint={fmtTime(stats.trough.t)} />
-                <Stat label="AVG" value={med ? formatDose(stats.avg, med.default_unit) : '—'} hint="window" />
+                <Stat
+                  label="Peak"
+                  value={hasLevel ? formatDose(stats.peak.level, unit) : '—'}
+                  hint={hasLevel ? fmtMoment(stats.peak.t) : undefined}
+                />
+                <Stat
+                  label="Trough"
+                  value={hasLevel ? formatDose(stats.trough.level, unit) : '—'}
+                  hint={hasLevel ? fmtMoment(stats.trough.t) : undefined}
+                />
+                <Stat
+                  label="Average"
+                  value={hasLevel ? formatDose(stats.avg, unit) : '—'}
+                  hint={hasLevel ? 'this range' : undefined}
+                />
               </View>
 
               <View style={{ height: spacing.xl }} />
 
+              {/* "the half-life you set" was false for almost everybody. A
+                  medication picked from the catalogue carries the published
+                  half-life `medications/new.tsx` fills in, and an onboarding run
+                  never shows that field at all. The old line handed Poke's own
+                  cited number back to the user as theirs. "on file" is true
+                  whether Poke supplied the number or the user typed it. */}
               <Text variant="caption" color={colors.inkSubtle}>
-                Half-life load estimate from logged shots only. Trend only — not for dosing.
+                Poke estimates this level from the shots you logged and the half-life on file for
+                this medication. The estimate is not a measurement. This trend is not for dosing.
               </Text>
             </View>
           </>
@@ -180,7 +330,7 @@ export default function LevelReportScreen() {
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <View style={{ flex: 1, gap: 2 }}>
-      <Eyebrow>{label}</Eyebrow>
+      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
       <Text variant="bodyStrong">{value}</Text>
       {hint ? <Text variant="caption" color={colors.inkSubtle}>{hint}</Text> : null}
     </View>
@@ -190,7 +340,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 const styles = StyleSheet.create({
   chipRow: { paddingHorizontal: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xs },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   headRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

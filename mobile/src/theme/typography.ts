@@ -1,38 +1,37 @@
-import { TextStyle } from 'react-native';
+import type { TextStyle } from 'react-native';
 
 export const fonts = {
-  serif: 'Fraunces_600SemiBold',
-  serifRegular: 'Fraunces_400Regular',
   sans: 'Inter_400Regular',
   sansMedium: 'Inter_500Medium',
+  sansSemiBold: 'Inter_600SemiBold',
   sansBold: 'Inter_700Bold',
 } as const;
 
 export const text = {
   display: {
-    fontFamily: fonts.serif,
-    fontSize: 40,
-    lineHeight: 44,
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 28,
+    lineHeight: 34,
   },
   h1: {
-    fontFamily: fonts.serif,
-    fontSize: 32,
-    lineHeight: 38,
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 28,
+    lineHeight: 34,
   },
   h2: {
-    fontFamily: fonts.serif,
-    fontSize: 24,
-    lineHeight: 30,
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 20,
+    lineHeight: 26,
   },
   h3: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 20,
     lineHeight: 26,
   },
   hero: {
-    fontFamily: fonts.serif,
-    fontSize: 36,
-    lineHeight: 40,
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 28,
+    lineHeight: 34,
   },
   body: {
     fontFamily: fonts.sans,
@@ -40,7 +39,7 @@ export const text = {
     lineHeight: 22,
   },
   bodyStrong: {
-    fontFamily: fonts.sansMedium,
+    fontFamily: fonts.sansSemiBold,
     fontSize: 16,
     lineHeight: 22,
   },
@@ -56,15 +55,8 @@ export const text = {
   },
   caption: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  eyebrow: {
-    fontFamily: fonts.sansBold,
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    lineHeight: 18,
   },
 } satisfies Record<string, TextStyle>;
 

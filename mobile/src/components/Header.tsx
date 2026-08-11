@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
+import type { Href } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from './Text';
 import { safeBack } from '../utils/nav';
@@ -11,7 +12,7 @@ interface HeaderProps {
   trailing?: ReactNode;
   onBack?: () => void;
   showBack?: boolean;
-  backFallback?: string;
+  backFallback?: Href;
   variant?: 'default' | 'inline';
 }
 

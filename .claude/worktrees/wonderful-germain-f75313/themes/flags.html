@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flag backdrop — 5 directions</title>
+<style>
+  :root {
+    --ink: #0B1733;
+    --paper: #FBF7EE;
+    --red: #BF0A30;
+    --rule: rgba(11, 23, 51, 0.14);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #1a1a1a; color: var(--paper); font-family: -apple-system, system-ui, Helvetica, Arial, sans-serif; }
+  .top {
+    padding: 28px 36px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .top h1 {
+    font-family: "Times New Roman", Times, serif;
+    font-weight: 400;
+    font-size: 30px;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
+  }
+  .top p {
+    margin: 0;
+    color: rgba(255,255,255,0.62);
+    font-size: 14px;
+    letter-spacing: 0.01em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    padding: 28px;
+  }
+  .card {
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card header {
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .card .letter {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 18px;
+    color: var(--paper);
+    letter-spacing: 0.02em;
+  }
+  .card .title {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 18px;
+    color: var(--paper);
+  }
+  .card .desc {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    text-align: right;
+    flex: 1;
+    letter-spacing: 0.01em;
+    line-height: 1.4;
+  }
+  .card .link {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .card .link:hover { color: var(--paper); }
+  .frame-wrap {
+    position: relative;
+    background: var(--paper);
+    height: 720px;
+    overflow: hidden;
+  }
+  iframe {
+    width: 1440px;
+    height: 1300px;
+    border: 0;
+    transform: scale(0.52);
+    transform-origin: top left;
+    pointer-events: none;
+  }
+  .open-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: zoom-in;
+    background: transparent;
+    z-index: 2;
+  }
+  .grid .card.wide {
+    grid-column: 1 / -1;
+  }
+  .grid .card.wide .frame-wrap { height: 840px; }
+  .grid .card.wide iframe {
+    width: 1800px;
+    transform: scale(0.72);
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Flag backdrop — 5 directions</h1>
+  <p>Each variant uses the same hero copy and credentials rail. Only the backdrop treatment changes. Click a card to open full-size.</p>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <header>
+      <div>
+        <span class="letter">A</span>
+        &nbsp;<span class="title">Silk Ghost</span>
+      </div>
+      <div class="desc">Full-color flag, 10% opacity, feathered left-to-right. Quietest, most editorial.</div>
+    </header>
+    <div class="frame-wrap">
+      <iframe src="flag-silk-ghost.html" loading="lazy"></iframe>
+      <a class="open-overlay" href="flag-silk-ghost.html" target="_blank" title="Open Silk Ghost"></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <header>
+      <div>
+        <span class="letter">B</span>
+        &nbsp;<span class="title">Ken Burns Cinema</span>
+      </div>
+      <div class="desc">Dark cinematic. Flag pans slowly under a navy wash. White hero type inverts on top.</div>
+    </header>
+    <div class="frame-wrap">
+      <iframe src="flag-ken-burns.html" loading="lazy"></iframe>
+      <a class="open-overlay" href="flag-ken-burns.html" target="_blank" title="Open Ken Burns"></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <header>
+      <div>
+        <span class="letter">C</span>
+        &nbsp;<span class="title">Treasury Engraving</span>
+      </div>
+      <div class="desc">Navy crosshatch over a cream base. Reads as currency / banknote / federal document.</div>
+    </header>
+    <div class="frame-wrap">
+      <iframe src="flag-treasury.html" loading="lazy"></iframe>
+      <a class="open-overlay" href="flag-treasury.html" target="_blank" title="Open Treasury"></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <header>
+      <div>
+        <span class="letter">D</span>
+        &nbsp;<span class="title">Abstracted Stripes</span>
+      </div>
+      <div class="desc">Giant tonal horizontal bands, canton in the corner. The flag as composition, not picture.</div>
+    </header>
+    <div class="frame-wrap">
+      <iframe src="flag-stripes.html" loading="lazy"></iframe>
+      <a class="open-overlay" href="flag-stripes.html" target="_blank" title="Open Stripes"></a>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <header>
+      <div>
+        <span class="letter">E</span>
+        &nbsp;<span class="title">Split Stage</span>
+      </div>
+      <div class="desc">50/50. Left: dark, dramatic, flag cropped tight. Right: clean paper with the CoA. High contrast.</div>
+    </header>
+    <div class="frame-wrap">
+      <iframe src="flag-split.html" loading="lazy"></iframe>
+      <a class="open-overlay" href="flag-split.html" target="_blank" title="Open Split"></a>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -28,7 +28,7 @@ export function SyringeViz({ volumeMl, capacityMl = 1, width = 320, height = 80 
   return (
     <Svg width={width} height={height}>
       <Rect x={barrelL} y={barrelTop} width={barrelW} height={barrelBottom - barrelTop} fill={colors.surface} stroke={colors.ink} strokeWidth={1} rx={2} />
-      <Rect x={barrelL} y={barrelTop} width={fillRight - barrelL} height={barrelBottom - barrelTop} fill={colors.red} opacity={0.6} />
+      <Rect x={barrelL} y={barrelTop} width={fillRight - barrelL} height={barrelBottom - barrelTop} fill={colors.accent} opacity={0.6} />
       <Rect x={barrelR} y={barrelTop + 4} width={6} height={(barrelBottom - barrelTop) - 8} fill={colors.ink} />
       <Rect x={0} y={barrelTop + 8} width={barrelL} height={(barrelBottom - barrelTop) - 16} fill={colors.borderStrong} />
       <Line x1={width - 24} y1={(barrelTop + barrelBottom) / 2} x2={width - 6} y2={(barrelTop + barrelBottom) / 2} stroke={colors.ink} strokeWidth={1} />
@@ -53,7 +53,7 @@ export function SyringeViz({ volumeMl, capacityMl = 1, width = 320, height = 80 
         y1={barrelBottom + 2}
         x2={fillRight}
         y2={barrelBottom + 12}
-        stroke={colors.red}
+        stroke={colors.accent}
         strokeWidth={1.5}
       />
       <SvgText
@@ -61,7 +61,7 @@ export function SyringeViz({ volumeMl, capacityMl = 1, width = 320, height = 80 
         y={barrelBottom + 22}
         fontSize={10}
         fontFamily={fonts.sansBold}
-        fill={colors.red}
+        fill={colors.accent}
         textAnchor="middle"
       >
         {volumeMl <= 0 ? '' : `${fmt(volumeMl)} mL`}

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Eyebrow } from './Eyebrow';
+import { Text } from './Text';
 import { colors, spacing } from '../theme';
 
 interface FieldProps {
@@ -14,7 +14,7 @@ export function Field({ label, trailing, children, divider = true }: FieldProps)
   return (
     <View style={[styles.wrap, divider && styles.divider]}>
       <View style={styles.head}>
-        <Eyebrow>{label}</Eyebrow>
+        <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
         {trailing}
       </View>
       <View>{children}</View>

@@ -30,7 +30,13 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
           <View style={styles.grabber} />
           <View style={styles.header}>
             <Text variant="h3">{title}</Text>
-            <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={onClose}
+              hitSlop={10}
+              style={styles.closeBtn}
+            >
               <X size={20} color={colors.ink} />
             </Pressable>
           </View>
@@ -48,18 +54,16 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 27, 45, 0.32)',
+    backgroundColor: 'rgba(17,20,24,0.28)',
   },
   sheet: {
     maxHeight: '88%',
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.xs,
     paddingBottom: spacing.hero,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   grabber: {
     alignSelf: 'center',

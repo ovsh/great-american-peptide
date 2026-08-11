@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Themes — The Great American Peptide Company</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0B0E14;
+    --card: #141821;
+    --fg: #E7EAF0;
+    --fg-dim: rgba(231, 234, 240, 0.58);
+    --fg-mute: rgba(231, 234, 240, 0.32);
+    --accent: #D4B565;
+    --rule: rgba(231, 234, 240, 0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+  header {
+    padding: 36px 48px 28px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  header .tag {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg-dim);
+    font-weight: 500;
+  }
+
+  .lede {
+    padding: 32px 48px 12px;
+    max-width: 780px;
+    color: var(--fg-dim);
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+  .lede b { color: var(--fg); font-weight: 600; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+    padding: 20px 48px 80px;
+  }
+  @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
+
+  .tile {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: border-color 180ms;
+  }
+  .tile:hover { border-color: rgba(212, 181, 101, 0.36); }
+
+  .tile .head {
+    padding: 22px 26px 18px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .id {
+    font-family: "Playfair Display", serif;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .tile .title {
+    font-family: "Playfair Display", serif;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--fg);
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+  .tile .note {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--fg-mute);
+    text-align: right;
+  }
+  .tile .desc {
+    padding: 14px 26px 18px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--rule);
+  }
+  .tile .desc em { color: var(--accent); font-style: normal; }
+
+  .frame-wrap {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: #0E1016;
+    overflow: hidden;
+  }
+  .frame-wrap iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1440px; height: 900px;
+    transform: scale(calc(var(--tile-w, 680) / 1440));
+    transform-origin: top left;
+    border: 0;
+    pointer-events: none;
+  }
+
+  .actions {
+    padding: 16px 26px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--rule);
+  }
+  .actions a {
+    color: var(--accent);
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(212, 181, 101, 0.32);
+    padding-bottom: 2px;
+  }
+  .actions a:hover { border-color: var(--accent); }
+  .actions .pick {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--fg-mute);
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Great American Peptide — Themes</h1>
+  <div class="tag">Four variations · Same layout · Pick one</div>
+</header>
+
+<div class="lede">
+  Four visual treatments of the landing page you approved. Same structure, same copy.
+  <b>Open each at full size,</b> then tell me a letter and what to refine. Current live
+  page at <b>/</b> is the Clinical baseline.
+</div>
+
+<div class="grid">
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">T1 · Clinical</div>
+        <div class="title">Clinical white</div>
+      </div>
+      <div class="note">Current baseline<br/>Stripe × Apple</div>
+    </div>
+    <div class="desc">
+      Pure white, cool silver rules, navy ink, red accents. Playfair × Inter.
+      <em>Modern lab clean.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="clinical.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="clinical.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "T1"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">T2 · Midnight</div>
+        <div class="title">Dark desk, paper pops</div>
+      </div>
+      <div class="note">Linear × Palantir<br/>Dark mode</div>
+    </div>
+    <div class="desc">
+      Navy-black page, the chromatogram report stays white like a document floating on
+      a dark desk. Starfield dot pattern. <em>Premium tech, not costume.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="midnight.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="midnight.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "T2"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">T3 · Federal</div>
+        <div class="title">Classical, US-gov premium</div>
+      </div>
+      <div class="note">Treasury × Cond&eacute; Nast<br/>Serif + striped rules</div>
+    </div>
+    <div class="desc">
+      True flag navy and red, Libre Caslon display, thin red-navy stripe dividers
+      instead of plain rules. <em>Institutional without being stuffy.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="federal.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="federal.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "T3"</div>
+    </div>
+  </article>
+
+  <article class="tile">
+    <div class="head">
+      <div>
+        <div class="id">T4 · Steel</div>
+        <div class="title">Engineering datasheet</div>
+      </div>
+      <div class="note">IBM × Stripe<br/>Plex sans + mono</div>
+    </div>
+    <div class="desc">
+      Gunmetal + industrial red. IBM Plex everywhere, squared corners, mono labels.
+      <em>Reads as precision instrument, not medallion.</em>
+    </div>
+    <div class="frame-wrap">
+      <iframe src="steel.html" loading="lazy"></iframe>
+    </div>
+    <div class="actions">
+      <a href="steel.html" target="_blank">Open full size →</a>
+      <div class="pick">Reply: "T4"</div>
+    </div>
+  </article>
+
+</div>
+
+</body>
+</html>

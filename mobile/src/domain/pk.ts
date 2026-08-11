@@ -41,6 +41,32 @@ export function tmaxOrDefault(halfLifeHours: number, tmaxHours: number | null | 
   return Math.max(0.25, halfLifeHours / 6);
 }
 
+// How wide a level chart should be for one medication.
+//
+// A fixed 7-day window is wrong at both ends. A peptide with a 30-minute
+// half-life draws one spike and six days of flat zero; a 21-day depot never
+// leaves the top of the chart. Six half-lives is the span over which a dose
+// falls to about 1.5% of itself, which is the whole of the interesting part of
+// the curve and nothing after it.
+//
+// Clamped to a day at the short end, so a chart always covers at least the day
+// the user is looking at, and to three weeks at the long end, so a very long
+// half-life does not push the last shot off the left edge.
+//
+// A medication with no half-life gets the old 7 days: there is no curve to
+// size the window around, only the shot marks.
+export const MIN_LEVEL_WINDOW_HOURS = 24;
+export const MAX_LEVEL_WINDOW_HOURS = 21 * 24;
+const DEFAULT_LEVEL_WINDOW_HOURS = 7 * 24;
+
+export function suggestedLevelWindowHours(halfLifeHours: number | null | undefined): number {
+  if (!halfLifeHours || !Number.isFinite(halfLifeHours) || halfLifeHours <= 0) {
+    return DEFAULT_LEVEL_WINDOW_HOURS;
+  }
+  const span = halfLifeHours * 6;
+  return Math.min(MAX_LEVEL_WINDOW_HOURS, Math.max(MIN_LEVEL_WINDOW_HOURS, span));
+}
+
 // Numerically invert t_max = ln(ka/ke)/(ka - ke) to recover ka given Tmax and ke.
 // Bisection on ka in (ke·1.05, ke·1000). Cached per (halfLife, tmax) pair.
 const kaCache = new Map<string, number>();

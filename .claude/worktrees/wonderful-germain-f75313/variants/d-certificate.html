@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>The Great American Peptide Company — Certificate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;900&family=Great+Vibes&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0B0D12;
+    --bg-2: #14171F;
+    --fg: #E9E4D4;
+    --fg-dim: rgba(233,228,212,0.52);
+    --gold: #B08A3E;
+    --cert-paper: #F5EDD4;
+    --cert-ink: #1A1205;
+    --cert-red: #6B1220;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: "Inter", sans-serif; font-weight: 300; -webkit-font-smoothing: antialiased; }
+
+  .nav {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 28px 56px;
+    position: relative; z-index: 5;
+  }
+  .nav .mark {
+    font-family: "Playfair Display", serif;
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--fg);
+  }
+  .nav .cta {
+    color: var(--gold);
+    font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(176,138,62,0.4);
+    padding-bottom: 3px;
+  }
+
+  main.stage {
+    min-height: calc(100vh - 74px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 40px 120px;
+    position: relative;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(176,138,62,0.08) 0%, transparent 60%),
+      var(--bg);
+  }
+
+  .stage-label {
+    font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+  .stage-title {
+    font-family: "Playfair Display", serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 1.15rem;
+    color: var(--fg-dim);
+    margin-bottom: 56px;
+  }
+
+  /* Certificate */
+  .cert {
+    width: min(860px, 94vw);
+    aspect-ratio: 1.414 / 1;
+    background: var(--cert-paper);
+    color: var(--cert-ink);
+    position: relative;
+    padding: 52px 64px;
+    box-shadow:
+      0 40px 120px -20px rgba(0,0,0,0.8),
+      0 2px 0 rgba(255,255,255,0.05);
+    font-family: "Playfair Display", serif;
+    background-image:
+      radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.35) 0%, transparent 70%),
+      repeating-linear-gradient(45deg, rgba(107,18,32,0.02) 0 2px, transparent 2px 4px);
+    transform: rotate(-0.6deg);
+    transition: transform 400ms cubic-bezier(0.2,0.8,0.2,1);
+  }
+  .cert:hover { transform: rotate(0deg) translateY(-4px); }
+
+  /* Double engraved border */
+  .cert::before {
+    content: "";
+    position: absolute;
+    inset: 20px;
+    border: 2px solid var(--cert-ink);
+    pointer-events: none;
+  }
+  .cert::after {
+    content: "";
+    position: absolute;
+    inset: 26px;
+    border: 1px solid var(--cert-ink);
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  .cert-inner { position: relative; height: 100%; display: flex; flex-direction: column; }
+
+  .cert-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    font-family: "Inter", sans-serif;
+    font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+  .cert-top .serial { color: var(--cert-red); font-weight: 600; }
+
+  .cert-header { text-align: center; margin-top: 8px; }
+  .cert-eyebrow {
+    font-family: "Inter", sans-serif;
+    font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase;
+    font-weight: 600;
+    color: var(--cert-red);
+    margin-bottom: 12px;
+  }
+  .cert-title {
+    font-family: "Playfair Display", serif;
+    font-weight: 900;
+    font-size: clamp(1.8rem, 3.6vw, 2.6rem);
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+    margin: 0 0 8px;
+    text-transform: uppercase;
+  }
+  .cert-sub {
+    font-family: "Playfair Display", serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 15px;
+    color: rgba(26,18,5,0.72);
+    margin: 0 0 22px;
+  }
+  .rule-fancy {
+    height: 14px;
+    margin: 0 auto 30px;
+    width: 60%;
+    background:
+      linear-gradient(90deg, transparent, var(--cert-ink) 20%, var(--cert-ink) 80%, transparent) center 6px/100% 1px no-repeat,
+      linear-gradient(90deg, transparent, var(--cert-ink) 30%, var(--cert-ink) 70%, transparent) center 8px/100% 1px no-repeat;
+    position: relative;
+  }
+  .rule-fancy::before, .rule-fancy::after {
+    content: "✦";
+    position: absolute; top: 0;
+    font-size: 12px; color: var(--cert-ink);
+  }
+  .rule-fancy::before { left: 45%; }
+  .rule-fancy::after  { left: 53%; }
+
+  .cert-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    padding: 0 20px;
+  }
+  .cert-body .field .k {
+    font-family: "Inter", sans-serif;
+    font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase;
+    font-weight: 600;
+    color: rgba(26,18,5,0.65);
+    margin-bottom: 6px;
+  }
+  .cert-body .field .v {
+    font-family: "Playfair Display", serif;
+    font-weight: 600;
+    font-size: 22px;
+    line-height: 1.15;
+    color: var(--cert-ink);
+  }
+  .cert-body .field .v .unit { font-size: 13px; font-weight: 400; font-style: italic; color: rgba(26,18,5,0.7); margin-left: 4px; }
+
+  .cert-foot {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-top: auto;
+    padding-top: 16px;
+  }
+  .cert-sig {
+    font-family: "Great Vibes", cursive;
+    font-size: 34px;
+    line-height: 1;
+    color: var(--cert-ink);
+    margin-bottom: 6px;
+  }
+  .cert-sig-label {
+    font-family: "Inter", sans-serif;
+    font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase;
+    font-weight: 500;
+    color: rgba(26,18,5,0.7);
+    border-top: 1px solid var(--cert-ink);
+    padding-top: 4px;
+    min-width: 200px;
+  }
+
+  /* Wax seal */
+  .seal-wax {
+    width: 92px; height: 92px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 28%, #D4B060 0%, #A07820 35%, #513709 80%, #2C1B04 100%);
+    color: #1A1205;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: "Playfair Display", serif;
+    box-shadow:
+      inset 0 0 0 2px rgba(26,18,5,0.35),
+      inset 3px 3px 6px rgba(255,230,160,0.5),
+      inset -4px -6px 10px rgba(0,0,0,0.5),
+      0 6px 12px rgba(0,0,0,0.35);
+    position: relative;
+  }
+  .seal-wax::before {
+    content: "";
+    position: absolute; inset: 6px;
+    border: 1px dashed rgba(26,18,5,0.45);
+    border-radius: 50%;
+  }
+  .seal-wax .star { font-size: 20px; color: #1A1205; line-height: 1; }
+  .seal-wax .yr { font-size: 8px; letter-spacing: 0.26em; text-transform: uppercase; font-weight: 700; font-family: "Inter", sans-serif; margin-top: 2px; }
+
+  /* Tagline below */
+  .below {
+    margin-top: 72px;
+    text-align: center;
+    max-width: 620px;
+  }
+  .below h2 {
+    font-family: "Playfair Display", serif;
+    font-weight: 400;
+    font-size: clamp(1.6rem, 2.6vw, 2.1rem);
+    line-height: 1.3;
+    color: var(--fg);
+    margin: 0 0 20px;
+    letter-spacing: -0.01em;
+  }
+  .below h2 em { color: var(--gold); font-style: italic; }
+  .below p {
+    color: var(--fg-dim);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0 0 36px;
+    font-weight: 300;
+  }
+  .below .btn {
+    display: inline-block;
+    padding: 16px 30px;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    text-decoration: none;
+    font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase;
+    font-weight: 500;
+    background: transparent;
+    transition: background 200ms, color 200ms;
+  }
+  .below .btn:hover { background: var(--gold); color: var(--bg); }
+
+  footer {
+    padding: 24px 56px;
+    border-top: 1px solid rgba(233,228,212,0.08);
+    display: flex; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="mark">The Great American Peptide Co.</div>
+  <a href="#" class="cta">Open an Account →</a>
+</nav>
+
+<main class="stage">
+  <div class="stage-label">Lot GAPC-2026-A041 · Declassified for Review</div>
+  <div class="stage-title">This is the document every lot leaves with.</div>
+
+  <article class="cert">
+    <div class="cert-inner">
+      <div class="cert-top">
+        <div>The Great American Peptide Co.</div>
+        <div class="serial">No. 00041 · Series MMXXVI</div>
+      </div>
+
+      <div class="cert-header">
+        <div class="cert-eyebrow">Certificate of Analytical Purity</div>
+        <h1 class="cert-title">Semaglutide · 5mg</h1>
+        <p class="cert-sub">This lot has been assayed and is hereby attested to conform.</p>
+        <div class="rule-fancy"></div>
+      </div>
+
+      <div class="cert-body">
+        <div class="field">
+          <div class="k">Assay · HPLC-UV</div>
+          <div class="v">99.8<span class="unit">% purity, min.</span></div>
+        </div>
+        <div class="field">
+          <div class="k">Endotoxin · LAL USP &lt;85&gt;</div>
+          <div class="v">&lt;0.25<span class="unit">EU/mg</span></div>
+        </div>
+        <div class="field">
+          <div class="k">Method</div>
+          <div class="v">Validated<span class="unit">· reference lot on file</span></div>
+        </div>
+        <div class="field">
+          <div class="k">Date of Issue</div>
+          <div class="v">April MMXXVI</div>
+        </div>
+      </div>
+
+      <div class="cert-foot">
+        <div>
+          <div class="cert-sig">M. Ovshievich</div>
+          <div class="cert-sig-label">Chief Chemist · Authorized Signatory</div>
+        </div>
+        <div class="seal-wax">
+          <div class="star">★</div>
+          <div class="yr">USA · 2026</div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <div class="below">
+    <h2>The only peptide certificate <em>worth keeping.</em></h2>
+    <p>
+      Every lot ships with one of these. HPLC purity. LAL endotoxin.
+      Signed, serialized, and archived — here, in the United States.
+    </p>
+    <a href="#" class="btn">Request a Specification Sheet</a>
+  </div>
+</main>
+
+<footer>
+  <div>Made &amp; tested in the United States</div>
+  <div>For Research Use Only</div>
+  <div>hello@greatamericanpeptide.co</div>
+</footer>
+
+</body>
+</html>

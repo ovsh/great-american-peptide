@@ -13,6 +13,12 @@ export interface MedicationRow {
   tmax_hours: number | null;
   color_index: number;
   status: 'active' | 'paused' | 'archived';
+  /**
+   * Where the user dragged this medication in the Today list. Null only for a
+   * row written by a build older than schema version 10; readers sort those
+   * last and fall back to `created_at`.
+   */
+  sort_order: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -33,6 +39,8 @@ export interface InjectionRow {
 
 export type MeasurementKind = 'weight' | 'bmi' | 'height';
 
+export type GoalKind = 'weight_loss' | 'recovery' | 'longevity' | 'performance' | 'other';
+
 export interface MeasurementRow {
   id: string;
   kind: MeasurementKind;
@@ -41,6 +49,16 @@ export interface MeasurementRow {
   taken_at: number;
   source: 'manual' | 'healthkit';
   source_id: string | null;
+  notes: string | null;
+  deleted_at: number | null;
+  created_at: number;
+}
+
+export interface SideEffectLogRow {
+  id: string;
+  effect: string;
+  severity: number;
+  taken_at: number;
   notes: string | null;
   deleted_at: number | null;
   created_at: number;
@@ -58,5 +76,36 @@ export interface PreferencesRow {
   start_weight_at: number | null;
   goal_weight: number | null;
   height: number | null;
+  review_event_count: number;
+  review_first_event_at: number | null;
+  review_last_prompted_at: number | null;
+  review_prompted_version: string | null;
+  /** Comma-separated ms timestamps of our prompt attempts, pruned to the last 365 days. */
+  review_prompt_log: string | null;
+  /** Comma-separated ReviewTrigger names already used. Each trigger asks once, ever. */
+  review_triggers_used: string | null;
+  goal_kind: GoalKind | null;
+  display_name: string | null;
+  side_effect_concerns: string | null;
+  /** Onboarding answers. Every question the flow asks has a column here. */
+  journey_stage: JourneyStage | null;
+  sex: Sex | null;
+  birth_year: number | null;
+  activity_level: ActivityLevel | null;
+  motivation: string | null;
+  /** Weight change per week the user chose on the pace screen, in `weight_unit`. */
+  weekly_pace: number | null;
+  last_shot_at: number | null;
+  /** When a tester code unlocked Poke Pro on this device. Null when no code is active. */
+  tester_pro_at: number | null;
+  /**
+   * The medication Today opens its hero card on. Null until the user taps a
+   * row, and stale ids are ignored rather than repaired.
+   */
+  focused_medication_id: string | null;
   updated_at: number;
 }
+
+export type JourneyStage = 'taking' | 'starting';
+export type Sex = 'female' | 'male' | 'other';
+export type ActivityLevel = 'low' | 'light' | 'active' | 'very_active';
