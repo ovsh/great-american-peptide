@@ -13,7 +13,7 @@ import {
   useOnboardingStore,
   type OnboardingDraft,
 } from '@/stores/onboarding';
-import { getPreset, hasPublishedHalfLife } from '@/domain/peptides';
+import { getPreset, hasUsableHalfLife } from '@/domain/peptides';
 import { colors, onboardingMotion, radius, spacing } from '@/theme';
 import { fmtClock } from '@/utils/date';
 
@@ -177,8 +177,8 @@ export function computeLines(draft: OnboardingDraft): string[] {
   if (firstId) {
     const name = medicationDisplayName(firstId, draft.customMedicationName);
     const preset = getPreset(firstId);
-    lines.push(preset && hasPublishedHalfLife(preset)
-      ? `Reading the published half-life for ${name}`
+    lines.push(preset && hasUsableHalfLife(preset)
+      ? `Reading the half-life for ${name}`
       : `Filing ${name} with the dose you set`);
   }
 

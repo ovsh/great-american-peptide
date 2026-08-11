@@ -15,7 +15,7 @@
 import { isSameDay } from 'date-fns';
 
 import { bodySites } from '../domain/bodySites';
-import { getPreset, hasPublishedHalfLife, type Route, type Unit } from '../domain/peptides';
+import { getPreset, hasUsableHalfLife, type Route, type Unit } from '../domain/peptides';
 import { levelTrajectory, type DoseEvent } from '../domain/pk';
 import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
 import { recommendNextSite } from '../domain/rotation';
@@ -212,7 +212,7 @@ function planMedication(
     scheduleLabel: scheduleLabel(schedule),
     nextShotAt: doses[0]?.takenAt ?? null,
     shotsInFourWeeks: curveDoses.filter((event) => event.takenAt >= windowStart).length,
-    curve: preset && hasPublishedHalfLife(preset) && curveDoses.length > 0
+    curve: preset && hasUsableHalfLife(preset) && curveDoses.length > 0
       ? buildCurve(curveDoses, preset.halfLifeHours, preset.tmaxHours, schedule.unit, now)
       : null,
     evidenceNote: preset

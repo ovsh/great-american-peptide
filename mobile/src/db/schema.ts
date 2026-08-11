@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -134,5 +134,86 @@ export const MIGRATIONS: { version: number; up: string }[] = [
     // Null means no code is active, which is the only state a paying user is in.
     version: 8,
     up: `ALTER TABLE preferences ADD COLUMN tester_pro_at INTEGER;`,
+  },
+  {
+    // A medication copies the half-life and the Tmax of its preset at the
+    // moment the user adds it. The copy does not follow the preset, so the
+    // 2026 review of the preset library left older rows drawing curves from
+    // numbers the library no longer holds — a dulaglutide row at 113 hours
+    // where the FDA label says 5 days, and five recovery peptides with no
+    // curve at all.
+    //
+    // Each statement below moves one preset forward, and only for a row that
+    // still holds the value the preset used to give it, or holds nothing. A
+    // row with any other number is one the user typed, so it stays. Tmax is
+    // written only where the row has none, for the same reason.
+    //
+    // The tolerance on the comparison is there because these are REAL columns
+    // written from JavaScript doubles.
+    version: 9,
+    up: `
+      UPDATE medications SET half_life_hours = 168, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'semaglutide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 165) < 0.0005);
+
+      UPDATE medications SET half_life_hours = 120, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tirzepatide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 117) < 0.0005);
+
+      UPDATE medications SET half_life_hours = 120, updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'dulaglutide'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 113) < 0.0005);
+
+      UPDATE medications
+         SET half_life_hours = 0.18,
+             tmax_hours = COALESCE(tmax_hours, 0.15),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tesamorelin'
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 0.63) < 0.0005);
+
+      UPDATE medications
+         SET tmax_hours = COALESCE(tmax_hours, 18),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'survodutide'
+         AND tmax_hours IS NULL
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 144) < 0.0005);
+
+      UPDATE medications
+         SET tmax_hours = COALESCE(tmax_hours, 2),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'thymosin-alpha-1'
+         AND tmax_hours IS NULL
+         AND (half_life_hours IS NULL OR ABS(half_life_hours - 2) < 0.0005);
+
+      UPDATE medications
+         SET half_life_hours = 0.75,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'bpc-157' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 2,
+             tmax_hours = COALESCE(tmax_hours, 1),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'tb-500' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 0.5,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'ghk-cu' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 1.5,
+             tmax_hours = COALESCE(tmax_hours, 1),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'nad-plus' AND half_life_hours IS NULL;
+
+      UPDATE medications
+         SET half_life_hours = 0.5,
+             tmax_hours = COALESCE(tmax_hours, 0.25),
+             updated_at = strftime('%s','now') * 1000
+       WHERE preset_id = 'epitalon' AND half_life_hours IS NULL;
+    `,
   },
 ];
