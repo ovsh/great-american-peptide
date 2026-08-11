@@ -6,7 +6,7 @@ import { Text } from '@/components/Text';
 import { PressScale } from '@/components/today-motion';
 import type { MeasurementRow } from '@/db/types';
 import { sideEffectLabel } from '@/domain/sideEffects';
-import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
+import { formatWeight, kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import type { SideEffectLog } from '@/repositories/sideEffects';
 import { colors, elevation, fonts, radius, spacing } from '@/theme';
 
@@ -25,7 +25,7 @@ export function TodayTrackCard({
   sideEffect: SideEffectLog | null;
 }) {
   const weightValue = weight
-    ? `${convertWeight(weight.value, weight.unit, weightUnit).toFixed(1)} ${weightUnit}`
+    ? formatWeight(convertWeight(weight.value, weight.unit, weightUnit), weightUnit)
     : 'Not logged';
   const sideEffectValue = sideEffect
     ? `${sideEffectLabel(sideEffect.effect)}, ${sideEffect.severity} of 10`
