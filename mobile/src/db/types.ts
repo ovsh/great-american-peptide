@@ -13,6 +13,12 @@ export interface MedicationRow {
   tmax_hours: number | null;
   color_index: number;
   status: 'active' | 'paused' | 'archived';
+  /**
+   * Where the user dragged this medication in the Today list. Null only for a
+   * row written by a build older than schema version 10; readers sort those
+   * last and fall back to `created_at`.
+   */
+  sort_order: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -92,6 +98,11 @@ export interface PreferencesRow {
   last_shot_at: number | null;
   /** When a tester code unlocked Poke Pro on this device. Null when no code is active. */
   tester_pro_at: number | null;
+  /**
+   * The medication Today opens its hero card on. Null until the user taps a
+   * row, and stale ids are ignored rather than repaired.
+   */
+  focused_medication_id: string | null;
   updated_at: number;
 }
 

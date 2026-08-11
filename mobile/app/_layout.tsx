@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -126,37 +127,44 @@ export default function RootLayout() {
   const onboardingRequired = gate.kind === 'required';
   const onboardingComplete = gate.kind === 'complete';
 
+  // expo-router does not put a gesture root in the tree, and the Today list is
+  // held and dragged, so the root goes here.
   return (
-    <SafeAreaProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-        }}
-      >
-        <Stack.Protected guard={onboardingRequired}>
-          <Stack.Screen name="onboarding" />
-        </Stack.Protected>
-        <Stack.Protected guard={onboardingComplete}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="log-shot" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="log-weight" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="log-side-effect" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="medications" options={{ presentation: 'card' }} />
-          <Stack.Screen name="reports" options={{ presentation: 'card' }} />
-          <Stack.Screen name="calculator" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="redeem" options={{ presentation: 'card' }} />
-          {/* Full screen, not a card: the offer needs the whole height for the
-              benefits, both prices and the renewal disclosure. */}
-          <Stack.Screen name="paywall" options={{ presentation: 'fullScreenModal' }} />
-        </Stack.Protected>
-      </Stack>
-      <StatusBar style="dark" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
+          <Stack.Protected guard={onboardingRequired}>
+            <Stack.Screen name="onboarding" />
+          </Stack.Protected>
+          <Stack.Protected guard={onboardingComplete}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="log-shot" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="log-weight" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="log-side-effect" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="medications" options={{ presentation: 'card' }} />
+            <Stack.Screen name="reports" options={{ presentation: 'card' }} />
+            <Stack.Screen name="calculator" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="redeem" options={{ presentation: 'card' }} />
+            {/* Full screen, not a card: the offer needs the whole height for the
+                benefits, both prices and the renewal disclosure. */}
+            <Stack.Screen name="paywall" options={{ presentation: 'fullScreenModal' }} />
+          </Stack.Protected>
+        </Stack>
+        <StatusBar style="dark" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     backgroundColor: colors.background,

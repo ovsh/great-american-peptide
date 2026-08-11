@@ -34,6 +34,8 @@ const PREFERENCE_COLUMNS = [
   'last_shot_at',
   // Schema version 8.
   'tester_pro_at',
+  // Schema version 10.
+  'focused_medication_id',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {
@@ -76,4 +78,12 @@ export async function getTesterProAt(): Promise<number | null> {
 /** Pass a timestamp to grant tester access and null to take it back. */
 export async function setTesterProAt(at: number | null): Promise<void> {
   await updatePreferences({ tester_pro_at: at });
+}
+
+/**
+ * The medication Today opens on. Written when the user taps a row, and when a
+ * logged shot hands Today the medication it was written for.
+ */
+export async function setFocusedMedicationId(id: string | null): Promise<void> {
+  await updatePreferences({ focused_medication_id: id });
 }

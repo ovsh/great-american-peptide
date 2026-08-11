@@ -232,8 +232,12 @@ export const peptidePresets: PeptidePreset[] = [
     defaultFrequency: { kind: 'daily' },
     evidence: 'label',
     halfLifeHours: 0.2,
-    tmaxHours: null,
-    source: 'FDA label for Geref. Half-life about 12 minutes.',
+    // The label puts the peak at the end of the infusion, which for the
+    // subcutaneous dose is the injection itself plus the same few minutes the
+    // half-life runs to. Without a Tmax the curve jumps to full height at the
+    // moment of the shot, which no injected peptide does.
+    tmaxHours: 0.2,
+    source: 'FDA label for Geref. Half-life about 12 minutes. Peak within minutes of the shot.',
   },
   {
     id: 'ghrp-6',

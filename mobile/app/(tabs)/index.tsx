@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   RefreshControl,
   ScrollView,
@@ -12,20 +13,28 @@ import { format, isSameDay } from 'date-fns';
 import { Flame } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  TodayMedicationSection,
-  type DoseState,
-  type LevelEstimate,
-  type TodayMedicationSummary,
-} from '@/components/today-medication-section';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
+import { TodayHeroCard } from '@/components/today-hero-card';
+import { TodayMedicationList } from '@/components/today-medication-list';
+import { TodayTrackCard } from '@/components/today-track-card';
+import type {
+  DayMark,
+  DoseState,
+  LevelPoint,
+  LevelSeries,
+  TodayMedicationSummary,
+  WeekDay,
+} from '@/components/today-types';
 import type {
   InjectionRow,
   MeasurementRow,
   MedicationRow,
   PreferencesRow,
 } from '@/db/types';
-import { estimatedLevelAt, tmaxOrDefault } from '@/domain/pk';
+import type { Unit } from '@/domain/peptides';
+import { estimatedLevelAt, suggestedLevelWindowHours, tmaxOrDefault } from '@/domain/pk';
 import {
   medicationScheduleFromStored,
   nextScheduledDoses,
@@ -35,11 +44,11 @@ import {
   computeMedicationScheduleStreak,
   type ScheduleStreak,
 } from '@/domain/streaks';
-import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
+import type { WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
 import { listMeasurements } from '@/repositories/measurements';
-import { listMedications } from '@/repositories/medications';
-import { getPreferences } from '@/repositories/preferences';
+import { listMedications, reorderMedications } from '@/repositories/medications';
+import { getPreferences, setFocusedMedicationId } from '@/repositories/preferences';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { maybePromptForReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
@@ -47,13 +56,16 @@ import { useIsPro } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { endOfDay, startOfDay } from '@/utils/date';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 const CONTENT_MAX_WIDTH = 600;
+/** Three days behind today and three ahead: the week the axis draws. */
+const WEEK_LOOKBACK_DAYS = 3;
+const CURVE_STEPS_PAST = 100;
+const CURVE_STEPS_FUTURE = 40;
 
 interface TodayDashboard {
   medications: TodayMedicationSummary[];
   weight: MeasurementRow | null;
-  weightSeries: number[];
   weightUnit: WeightUnit;
   sideEffect: SideEffectLog | null;
   streak: ScheduleStreak;
@@ -63,7 +75,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const dataVersion = useAppStore((state) => state.dataVersion);
-  const focusMedicationId = useAppStore((state) => state.focusMedicationId);
+  const handoffMedicationId = useAppStore((state) => state.focusMedicationId);
   const setFocusMedication = useAppStore((state) => state.setFocusMedication);
   const pro = useIsPro();
 
@@ -72,8 +84,9 @@ export default function TodayScreen() {
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
   const [sideEffects, setSideEffects] = useState<SideEffectLog[]>([]);
-  const [selectedMedicationId, setSelectedMedicationId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -83,7 +96,7 @@ export default function TodayScreen() {
     try {
       const [medicationRows, weightRows, preferenceRow, effectRows] = await Promise.all([
         listMedications(),
-        listMeasurements('weight', { limit: 30 }),
+        listMeasurements('weight', { limit: 1 }),
         getPreferences(),
         listSideEffects({ limit: 1 }),
       ]);
@@ -145,23 +158,70 @@ export default function TodayScreen() {
     [injections, medications, now, preferences, sideEffects, weights],
   );
 
+  /**
+   * Which card the screen opens on.
+   *
+   * The saved focus wins, because the user put it there. A medication that is
+   * due today does not: the row chip says "Due" and the log band is one tap
+   * away, and a screen that rearranges itself around the calendar is a screen
+   * you cannot learn. The only thing that overrides the saved focus is the
+   * medication a just-logged shot names, which is the user pointing at it.
+   */
   useEffect(() => {
     if (!hasLoaded) return;
-    const validIds = new Set(
-      dashboard.medications.map((summary) => summary.medication.id),
-    );
+    const validIds = new Set(dashboard.medications.map((summary) => summary.medication.id));
 
-    if (focusMedicationId) {
-      if (validIds.has(focusMedicationId)) setSelectedMedicationId(focusMedicationId);
+    if (handoffMedicationId) {
+      if (validIds.has(handoffMedicationId)) {
+        setFocusedId(handoffMedicationId);
+        setFocusedMedicationId(handoffMedicationId).catch(() => {});
+      }
       setFocusMedication(null);
       return;
     }
 
-    setSelectedMedicationId((current) => {
+    setFocusedId((current) => {
       if (current && validIds.has(current)) return current;
+      const saved = preferences?.focused_medication_id ?? null;
+      if (saved && validIds.has(saved)) return saved;
       return dashboard.medications[0]?.medication.id ?? null;
     });
-  }, [dashboard.medications, focusMedicationId, hasLoaded, setFocusMedication]);
+  }, [
+    dashboard.medications,
+    handoffMedicationId,
+    hasLoaded,
+    preferences?.focused_medication_id,
+    setFocusMedication,
+  ]);
+
+  const focused = dashboard.medications.find(
+    (summary) => summary.medication.id === focusedId,
+  ) ?? dashboard.medications[0] ?? null;
+  const rest = dashboard.medications.filter(
+    (summary) => summary.medication.id !== focused?.medication.id,
+  );
+
+  const selectMedication = useCallback((medicationId: string) => {
+    setFocusedId(medicationId);
+    setFocusedMedicationId(medicationId).catch(() => {});
+  }, []);
+
+  /**
+   * The list shows every medication but the focused one, so the order it hands
+   * back has a hole in it. The focused medication keeps the slot it already
+   * had, and the dragged rows fill the rest in the order they now read.
+   */
+  const reorder = useCallback((visibleIds: readonly string[]) => {
+    const fullIds = mergeOrder(
+      medications.map((medication) => medication.id),
+      focused?.medication.id ?? null,
+      visibleIds,
+    );
+    setMedications((current) => [...current].sort(
+      (first, second) => fullIds.indexOf(first.id) - fullIds.indexOf(second.id),
+    ));
+    reorderMedications(fullIds).catch(() => {});
+  }, [focused?.medication.id, medications]);
 
   const contentWidth = Math.max(
     0,
@@ -189,7 +249,8 @@ export default function TodayScreen() {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
+        scrollEnabled={!dragging}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
         refreshControl={(
           <RefreshControl
             refreshing={refreshing}
@@ -200,21 +261,68 @@ export default function TodayScreen() {
       >
         <TodayHeader streak={dashboard.streak.current} now={now} />
 
-        <TodayMedicationSection
-          status={hasLoaded ? 'ready' : loadError ? 'error' : 'loading'}
-          medications={dashboard.medications}
-          selectedMedicationId={selectedMedicationId}
-          onSelectMedication={setSelectedMedicationId}
-          pro={pro}
-          contentWidth={contentWidth}
+        {!hasLoaded ? (
+          loadError ? <TodayLoadError onRetry={() => load().catch(() => {})} /> : <TodayLoading />
+        ) : (
+          <>
+            {focused ? (
+              <TodayHeroCard
+                summary={focused}
+                pro={pro}
+                contentWidth={contentWidth}
+                nowMs={now}
+              />
+            ) : null}
+
+            <TodayMedicationList
+              rows={rest}
+              onSelect={selectMedication}
+              onReorder={reorder}
+              onDragChange={setDragging}
+            />
+          </>
+        )}
+
+        <TodayTrackCard
           weight={dashboard.weight}
-          weightSeries={dashboard.weightSeries}
           weightUnit={dashboard.weightUnit}
           sideEffect={dashboard.sideEffect}
-          onRetry={() => load().catch(() => {})}
         />
       </ScrollView>
     </View>
+  );
+}
+
+function TodayHeader({ streak, now }: { streak: number; now: number }) {
+  return (
+    <View style={styles.header}>
+      <Text variant="bodyStrong">{format(now, 'EEEE, MMMM d')}</Text>
+      {streak >= 2 ? (
+        <View accessible accessibilityLabel={`${streak}-week streak`} style={styles.streakChip}>
+          <Flame size={15} fill={colors.accent} color={colors.accent} />
+          <Text variant="caption" color={colors.successDeep}>{streak}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function TodayLoading() {
+  return (
+    <Card style={styles.stateCard}>
+      <ActivityIndicator color={colors.accent} />
+      <Text variant="small" color={colors.inkMuted}>Loading today…</Text>
+    </Card>
+  );
+}
+
+function TodayLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card style={styles.errorCard}>
+      <Text variant="h2">Today did not load.</Text>
+      <Text color={colors.inkMuted}>Your saved data is still on this device.</Text>
+      <Button onPress={onRetry}>Try again</Button>
+    </Card>
   );
 }
 
@@ -236,7 +344,6 @@ function buildDashboard({
   const reminderTime = preferences?.reminder_time ?? '09:00';
   const summaries = medications.map((medication): TodayMedicationSummary => {
     const medicationInjections = injections[medication.id] ?? [];
-    const latestInjection = medicationInjections[0] ?? null;
     const schedule = medicationScheduleFromStored({
       medicationId: medication.id,
       frequencyKind: medication.frequency_kind,
@@ -244,31 +351,36 @@ function buildDashboard({
       createdAt: medication.created_at,
       reminderTime,
     });
+    const dose = buildDoseState({
+      latestInjection: medicationInjections[0] ?? null,
+      schedule,
+      now,
+    });
+    const windowHours = suggestedLevelWindowHours(medication.half_life_hours);
+    const windowFromMs = now - windowHours * HOUR_MS;
+    const nextDoseAt = nextDoseFrom(dose);
+    // Ahead of now the chart draws to the next dose. With no next dose there is
+    // nothing to draw toward, so it shows a fraction of the window instead and
+    // the curve simply runs off the right edge, which is what it does.
+    const windowToMs = nextDoseAt ?? now + windowHours * 0.15 * HOUR_MS;
 
     return {
       medication,
-      injections: medicationInjections,
-      latestInjection,
-      dose: buildDoseState({
-        medicationId: medication.id,
-        latestInjection,
-        schedule,
-        now,
-      }),
-      level: buildLevelEstimate({
+      dose,
+      week: buildWeek({ injections: medicationInjections, dose, schedule, now }),
+      level: buildLevelSeries({
         injections: medicationInjections,
-        halfLifeHours: medication.half_life_hours,
-        tmaxHours: medication.tmax_hours,
+        medication,
         now,
+        fromMs: windowFromMs,
+        toMs: windowToMs,
+        nextDoseAt,
       }),
+      windowFromMs,
+      windowToMs,
     };
-  }).sort(byTodayThenName);
+  });
 
-  const weightUnit = preferences?.weight_unit ?? 'lb';
-  const weightSeries = weights
-    .slice()
-    .reverse()
-    .map((weight) => convertWeight(weight.value, weight.unit, weightUnit));
   const streak = computeMedicationScheduleStreak({
     medications: medications.map((row) => ({
       id: row.id,
@@ -288,20 +400,17 @@ function buildDashboard({
   return {
     medications: summaries,
     weight: weights[0] ?? null,
-    weightSeries,
-    weightUnit,
+    weightUnit: preferences?.weight_unit ?? 'lb',
     sideEffect: sideEffects[0] ?? null,
     streak,
   };
 }
 
 function buildDoseState({
-  medicationId,
   latestInjection,
   schedule,
   now,
 }: {
-  medicationId: string;
   latestInjection: InjectionRow | null;
   schedule: ReturnType<typeof medicationScheduleFromStored>;
   now: number;
@@ -312,85 +421,25 @@ function buildDoseState({
     : null;
 
   if (latestInjection && isSameDay(latestInjection.taken_at, now)) {
-    return {
-      kind: 'loggedToday',
-      injection: latestInjection,
-      nextScheduledAt,
-    };
+    return { kind: 'loggedToday', injection: latestInjection, nextScheduledAt };
   }
+  if (!schedule) return { kind: 'unscheduled' };
 
-  if (!schedule) return { kind: 'unscheduled', medicationId };
-
-  const scheduledToday = scheduledDosesBetween(
-    schedule,
-    startOfDay(now),
-    endOfToday,
-  )[0];
-  if (scheduledToday) {
-    return {
-      kind: 'due',
-      medicationId,
-      scheduledAt: scheduledToday.scheduledAt,
-    };
-  }
-
-  if (nextScheduledAt !== null) {
-    return { kind: 'upcoming', scheduledAt: nextScheduledAt };
-  }
-
-  return { kind: 'unscheduled', medicationId };
+  const scheduledToday = scheduledDosesBetween(schedule, startOfDay(now), endOfToday)[0];
+  if (scheduledToday) return { kind: 'due', scheduledAt: scheduledToday.scheduledAt };
+  if (nextScheduledAt !== null) return { kind: 'upcoming', scheduledAt: nextScheduledAt };
+  return { kind: 'unscheduled' };
 }
 
-function buildLevelEstimate({
-  injections,
-  halfLifeHours,
-  tmaxHours,
-  now,
-}: {
-  injections: readonly InjectionRow[];
-  halfLifeHours: number | null;
-  tmaxHours: number | null;
-  now: number;
-}): LevelEstimate {
-  if (halfLifeHours === null || halfLifeHours <= 0) return { kind: 'unsupported' };
-  if (injections.length === 0) return { kind: 'empty' };
-
-  const doses = injections.map((injection) => ({
-    takenAt: injection.taken_at,
-    dose: injection.dose,
-  }));
-  const tmax = tmaxOrDefault(halfLifeHours, tmaxHours);
-  const points = Array.from({ length: 7 }, (_, index) => {
-    const timestamp = now - (6 - index) * DAY_MS;
-    return {
-      t: timestamp,
-      v: estimatedLevelAt(doses, halfLifeHours, tmax, timestamp),
-    };
-  });
-  const currentPoint = points[points.length - 1];
-
-  return currentPoint
-    ? { kind: 'ready', current: currentPoint.v, points }
-    : { kind: 'empty' };
-}
-
-function byTodayThenName(
-  first: TodayMedicationSummary,
-  second: TodayMedicationSummary,
-): number {
-  return doseRank(first.dose) - doseRank(second.dose)
-    || first.medication.name.localeCompare(second.medication.name);
-}
-
-function doseRank(dose: DoseState): number {
+function nextDoseFrom(dose: DoseState): number | null {
   switch (dose.kind) {
     case 'due':
-    case 'loggedToday':
-      return 0;
     case 'upcoming':
-      return 1;
+      return dose.scheduledAt;
+    case 'loggedToday':
+      return dose.nextScheduledAt;
     case 'unscheduled':
-      return 2;
+      return null;
     default: {
       const exhaustive: never = dose;
       return exhaustive;
@@ -398,29 +447,130 @@ function doseRank(dose: DoseState): number {
   }
 }
 
-function TodayHeader({ streak, now }: { streak: number; now: number }) {
-  return (
-    <View style={styles.header}>
-      <View style={styles.headerCopy}>
-        <Text variant="display">Today</Text>
-        <Text variant="small" color={colors.inkMuted}>
-          {format(now, 'EEEE, MMMM d')}
-        </Text>
-      </View>
-      {streak >= 2 ? (
-        <View accessible accessibilityLabel={`${streak}-week streak`} style={styles.streakChip}>
-          <Flame size={17} fill={colors.accent} color={colors.accent} />
-          <Text variant="smallStrong" color={colors.accent}>{streak}</Text>
-        </View>
-      ) : null}
-    </View>
+/** The seven days under the chart, marked for this medication only. */
+function buildWeek({
+  injections,
+  dose,
+  schedule,
+  now,
+}: {
+  injections: readonly InjectionRow[];
+  dose: DoseState;
+  schedule: ReturnType<typeof medicationScheduleFromStored>;
+  now: number;
+}): WeekDay[] {
+  const today = startOfDay(now);
+  const days: number[] = [];
+  for (let offset = -WEEK_LOOKBACK_DAYS; offset < 7 - WEEK_LOOKBACK_DAYS; offset += 1) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + offset);
+    date.setHours(0, 0, 0, 0);
+    days.push(date.getTime());
+  }
+  const first = days[0] ?? today;
+  const last = days[days.length - 1] ?? today;
+
+  const loggedDays = new Set<number>();
+  for (const injection of injections) {
+    if (injection.taken_at < first || injection.taken_at > endOfDay(last)) continue;
+    loggedDays.add(startOfDay(injection.taken_at));
+  }
+  const scheduledDays = new Set<number>(
+    schedule
+      ? scheduledDosesBetween(schedule, first, endOfDay(last)).map((entry) => entry.scheduledDay)
+      : [],
   );
+
+  return days.map((dayStart): WeekDay => {
+    const isToday = dayStart === today;
+    let mark: DayMark = 'rest';
+    if (loggedDays.has(dayStart)) mark = 'logged';
+    else if (isToday && dose.kind === 'due') mark = 'due';
+    else if (scheduledDays.has(dayStart)) mark = 'scheduled';
+    return { dayStart, mark, isToday };
+  });
 }
 
-function convertWeight(value: number, fromUnit: string | null, toUnit: WeightUnit): number {
-  if (fromUnit === 'kg' && toUnit === 'lb') return kgToLb(value);
-  if (fromUnit === 'lb' && toUnit === 'kg') return lbToKg(value);
-  return value;
+function buildLevelSeries({
+  injections,
+  medication,
+  now,
+  fromMs,
+  toMs,
+  nextDoseAt,
+}: {
+  injections: readonly InjectionRow[];
+  medication: MedicationRow;
+  now: number;
+  fromMs: number;
+  toMs: number;
+  nextDoseAt: number | null;
+}): LevelSeries {
+  const halfLife = medication.half_life_hours;
+  // A medication with no half-life on file draws its shots instead of a curve.
+  // Poke cannot model it, and saying so in a sentence shows nothing.
+  if (halfLife === null || halfLife <= 0) {
+    return {
+      kind: 'shots',
+      shots: injections
+        .filter((injection) => injection.taken_at >= fromMs && injection.taken_at <= toMs)
+        .map((injection) => injection.taken_at),
+    };
+  }
+  if (injections.length === 0) return { kind: 'empty', nextDoseAt };
+
+  const doses = injections
+    .map((injection) => {
+      const dose = doseIn(injection.dose, injection.unit, medication.default_unit);
+      return dose === null ? null : { takenAt: injection.taken_at, dose };
+    })
+    .filter((dose): dose is { takenAt: number; dose: number } => dose !== null);
+  if (doses.length === 0) return { kind: 'empty', nextDoseAt };
+
+  const tmax = tmaxOrDefault(halfLife, medication.tmax_hours);
+  const sample = (t: number): LevelPoint => ({
+    t,
+    v: estimatedLevelAt(doses, halfLife, tmax, t),
+  });
+  const past = seriesBetween(fromMs, now, CURVE_STEPS_PAST).map(sample);
+  const future = toMs > now ? seriesBetween(now, toMs, CURVE_STEPS_FUTURE).map(sample) : [];
+
+  return {
+    kind: 'curve',
+    past,
+    future,
+    current: estimatedLevelAt(doses, halfLife, tmax, now),
+    nextDoseAt,
+  };
+}
+
+function seriesBetween(fromMs: number, toMs: number, steps: number): number[] {
+  const out: number[] = [];
+  for (let index = 0; index <= steps; index += 1) {
+    out.push(fromMs + ((toMs - fromMs) * index) / steps);
+  }
+  return out;
+}
+
+/**
+ * A logged shot keeps the unit it was logged in, and the curve adds numbers, so
+ * they all have to be in the medication's unit before anything sums them. IU is
+ * medication specific and converts to nothing, so that shot stays out.
+ */
+function doseIn(value: number, from: Unit, to: Unit): number | null {
+  if (from === to) return value;
+  if (from === 'mg' && to === 'mcg') return value * 1000;
+  if (from === 'mcg' && to === 'mg') return value / 1000;
+  return null;
+}
+
+function mergeOrder(
+  fullIds: readonly string[],
+  focusedId: string | null,
+  visibleIds: readonly string[],
+): string[] {
+  const queue = [...visibleIds];
+  return fullIds.map((id) => (id === focusedId ? id : queue.shift() ?? id));
 }
 
 const styles = StyleSheet.create({
@@ -437,22 +587,27 @@ const styles = StyleSheet.create({
     paddingBottom: 112,
   },
   header: {
-    minHeight: 64,
+    minHeight: 34,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  headerCopy: {
-    gap: 2,
   },
   streakChip: {
-    minHeight: 36,
+    height: 30,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 11,
     borderRadius: radius.pill,
     backgroundColor: colors.accentSoft,
+  },
+  stateCard: {
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
+  errorCard: {
+    gap: spacing.lg,
   },
 });

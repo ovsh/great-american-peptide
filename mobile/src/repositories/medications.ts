@@ -16,16 +16,47 @@ export interface NewMedication {
   colorIndex: number;
 }
 
+/**
+ * The one order the app shows a medication list in: the order the user dragged
+ * the rows into on Today.
+ *
+ * Alphabetical was the old answer, and it made the list move under the reader
+ * whenever a medication was renamed and put the medication someone actually
+ * cares about wherever its initial happened to fall. A row written before
+ * schema version 10 has no `sort_order`; it sorts after the ones that do, by
+ * the date it was added.
+ */
+const MEDICATION_ORDER = `sort_order IS NULL, sort_order, created_at, name COLLATE NOCASE`;
+
 export async function listMedications(includeArchived = false): Promise<MedicationRow[]> {
   const db = await getDb();
   if (includeArchived) {
     return db.getAllAsync<MedicationRow>(
-      `SELECT * FROM medications ORDER BY status='active' DESC, name COLLATE NOCASE`,
+      `SELECT * FROM medications ORDER BY status='active' DESC, ${MEDICATION_ORDER}`,
     );
   }
   return db.getAllAsync<MedicationRow>(
-    `SELECT * FROM medications WHERE status != 'archived' ORDER BY name COLLATE NOCASE`,
+    `SELECT * FROM medications WHERE status != 'archived' ORDER BY ${MEDICATION_ORDER}`,
   );
+}
+
+/**
+ * Writes the order the user dragged the rows into. `ids` is the full list of
+ * the rows on screen, first to last; a medication this does not name keeps the
+ * number it had, so a list drawn without the archived rows cannot renumber them.
+ */
+export async function reorderMedications(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDb();
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    for (const [index, id] of ids.entries()) {
+      await db.runAsync(
+        `UPDATE medications SET sort_order = ?, updated_at = ? WHERE id = ?`,
+        [index, now, id],
+      );
+    }
+  });
 }
 
 /** The free tier keeps one medication. An archived one does not count against it. */
@@ -50,8 +81,9 @@ export async function createMedication(input: NewMedication): Promise<Medication
   const id = newId('med');
   await db.runAsync(
     `INSERT INTO medications
-      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active',
+        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM medications), ?, ?)`,
     [
       id,
       input.name,

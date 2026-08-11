@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -214,6 +214,34 @@ export const MIGRATIONS: { version: number; up: string }[] = [
              tmax_hours = COALESCE(tmax_hours, 0.25),
              updated_at = strftime('%s','now') * 1000
        WHERE preset_id = 'epitalon' AND half_life_hours IS NULL;
+    `,
+  },
+  {
+    // Today now opens on one medication and holds a hand-made order, so both
+    // have to survive a relaunch.
+    //
+    // `sort_order` is the order the user dragged the rows into. The backfill
+    // counts the rows added before each one, so the first order the app shows
+    // is the order the medications were added in — which is what the screen
+    // showed before anyone could drag anything. `id` breaks a tie between two
+    // rows written in the same millisecond, so every row gets its own number.
+    //
+    // `focused_medication_id` is the card Today opens on. It is a preference
+    // and not a column on `medications`, because it names one row out of the
+    // table rather than describing any of them. A stale id is harmless: Today
+    // falls back to the first medication by `sort_order` when the saved one is
+    // gone or archived.
+    version: 10,
+    up: `
+      ALTER TABLE medications ADD COLUMN sort_order INTEGER;
+
+      UPDATE medications SET sort_order = (
+        SELECT COUNT(*) FROM medications AS earlier
+         WHERE earlier.created_at < medications.created_at
+            OR (earlier.created_at = medications.created_at AND earlier.id <= medications.id)
+      ) - 1;
+
+      ALTER TABLE preferences ADD COLUMN focused_medication_id TEXT;
     `,
   },
 ];
