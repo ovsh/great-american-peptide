@@ -212,7 +212,7 @@ export default function LevelReportScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       <Header title="Medication level" showBack />
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero, width: '100%', maxWidth: 600, alignSelf: 'center' }}>
         {!pro ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <ProLock
