@@ -54,12 +54,7 @@
       "unrestrictedWebAccess": false,
       "violenceCartoonOrFantasy": "NONE",
       "violenceRealistic": "NONE",
-      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
-      "advertising": false,
-      "ageAssurance": false,
-      "ageRatingOverrideV2": "NONE",
-      "developerAgeRatingInfoUrl": null,
-      "gunsOrOtherWeapons": "NONE"
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE"
     },
     "review": {
       "firstName": "Miki",
