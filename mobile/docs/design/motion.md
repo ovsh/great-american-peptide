@@ -34,6 +34,7 @@ wipe and the curve draw stay in step.
 | `standard` | `bezier(0.42, 0, 0.58, 1)` | The default. Measured off the onboarding recording. |
 | `out` | `bezier(0.2, 0.7, 0.3, 1)` | Entrances; anything decelerating into place. |
 | `in` | `bezier(0.5, 0, 0.9, 0.4)` | Exits; the shot dot falling onto the curve. |
+| `linear` | `linear` | The metronome of rule 5: an arrival wipe crossing an axis. Nothing else. |
 
 ### Springs
 

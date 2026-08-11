@@ -8,6 +8,7 @@ export {
   springs,
   logBeats,
   arrivalBeats,
+  welcomeBeats,
   rise,
   timeTo,
   springTo,

@@ -3,6 +3,7 @@ import {
   withDelay,
   withSpring,
   withTiming,
+  type EasingFunction,
   type EasingFunctionFactory,
   type WithSpringConfig,
 } from 'react-native-reanimated';
@@ -43,6 +44,12 @@ export const easing = {
   standard: Easing.bezier(0.42, 0, 0.58, 1),
   out: Easing.bezier(0.2, 0.7, 0.3, 1),
   in: Easing.bezier(0.5, 0, 0.9, 0.4),
+  /**
+   * The metronome. Motion rule 5 already says an arrival wipe crosses its axis
+   * at a constant rate and that the easing belongs to whatever pops out of it,
+   * so the rate the rule names now has a token instead of a literal.
+   */
+  linear: Easing.linear,
 } as const;
 
 /**
@@ -84,12 +91,45 @@ export const arrivalBeats = {
   track: 3 * motion.beat,
 } as const;
 
+/**
+ * The welcome poster's arrival, once per cold run of the app.
+ *
+ * The approved mock counts in seconds — the curve alone strokes for 1.55 s and
+ * the button lands at 2.18 s. That is a web comp's pace, not Poke's: rule 3
+ * caps an arrival at 700 ms. The order of the mock survives the compression and
+ * the seconds do not. The curve still draws first and the words still land on
+ * top of it.
+ *
+ * The dose pins are not listed here because their delays are geometry: each one
+ * pops on the first beat after the wipe has uncovered it, which is why the mock
+ * reads as the shots landing on the curve rather than beside it.
+ *
+ * The CTA and the (i) caption take no delay at all. The primary action is a
+ * permanent slot (principles rule 4) and legal copy does not move (motion rule
+ * 8), so both are already there in frame one. Last timed frame: 675 ms.
+ */
+export const welcomeBeats = {
+  /** The wordmark, with the screen. */
+  wordmark: 0,
+  /** The level curve starts drawing itself left to right. */
+  curve: motion.beat,
+  /** The first headline line rises out of its own clip. */
+  headline: 4 * motion.beat,
+  /** The second line follows one beat later, so the two read as one sentence. */
+  headlineStep: motion.beat,
+  /** The support line under the headline. */
+  support: 6 * motion.beat,
+  /** The proof card, last. */
+  proof: 7 * motion.beat,
+} as const;
+
 /** How far a card travels on arrival, and how far the small header line does. */
 export const rise = { card: 14, line: 8 } as const;
 
 interface TimeOptions {
   duration: number;
-  easing?: EasingFunctionFactory;
+  /** A bezier from the table returns a factory; `linear` is the bare function. */
+  easing?: EasingFunction | EasingFunctionFactory;
   delay?: number;
   /** True when the OS asks for less motion: the same state, reached in one frame. */
   reduced?: boolean;
