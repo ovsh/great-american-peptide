@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Info, KeyRound, Pill, Scale, Share2, Sparkles, Star, Target } from 'lucide-react-native';
+import Constants from 'expo-constants';
+import { differenceInCalendarWeeks, startOfWeek, subWeeks } from 'date-fns';
+import { Bell, Info, Scale, Share, Sparkles, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -9,10 +11,22 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { clockLabel, InlineTimePicker } from '@/components/InlineTimePicker';
 import { Input } from '@/components/Input';
+import { ProfileRecordStrip, RECORD_WEEKS, type ProfileRecord } from '@/components/profile-record-strip';
+import {
+  ProfileCard,
+  ProfileExportValue,
+  ProfileLink,
+  ProfileProSlot,
+  ProfileRow,
+  ProfileSegment,
+  ProfileValuePill,
+} from '@/components/profile-settings-rows';
 import { Text } from '@/components/Text';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
-import type { PreferencesRow } from '@/db/types';
+import { TodayRise } from '@/components/today-motion';
+import type { InjectionRow, PreferencesRow } from '@/db/types';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
+import { listInjections } from '@/repositories/injections';
 import {
   getPreferences,
   updateGoalWeight,
@@ -32,13 +46,29 @@ import {
   type DevOverride,
 } from '@/stores/entitlement';
 import { openPaywall } from '@/components/ProLock';
-import { colors, spacing } from '@/theme';
+import { arrivalBeats, colors, rise, spacing } from '@/theme';
 
+const EMPTY_RECORD: ProfileRecord = {
+  weeks: new Array<number>(RECORD_WEEKS).fill(0),
+  total: 0,
+  since: null,
+};
+
+/**
+ * Profile shows you your record first and your settings second.
+ *
+ * It holds five things: when Poke speaks, how it reads a weight, the number the
+ * user owns, the only way data leaves the device, and the account state. The
+ * medication list, the goal track and the six section headers that used to sit
+ * here are gone — Today focuses a medication, Progress draws the weight, and the
+ * tab bar names the tab.
+ */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const dataVersion = useAppStore((state) => state.dataVersion);
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
+  const [injections, setInjections] = useState<InjectionRow[] | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
@@ -56,14 +86,25 @@ export default function ProfileScreen() {
   const testerProAt = useTesterProAt();
 
   const load = useCallback(async () => {
-    const row = await getPreferences();
+    const [row, shots] = await Promise.all([
+      getPreferences(),
+      listInjections({ fromMs: recordWindowStart() }),
+    ]);
     setPreferences(row);
+    setInjections(shots);
     setGoalDraft(row.goal_weight === null ? '' : String(row.goal_weight));
   }, []);
 
   useEffect(() => {
     load().catch(() => {});
   }, [dataVersion, load]);
+
+  const record = useMemo(
+    () => (injections === null ? EMPTY_RECORD : recordFrom(injections)),
+    [injections],
+  );
+  /** Arrival waits for the record, so the bars grow at their real heights. */
+  const loaded = preferences !== null && injections !== null;
 
   const toggleReminders = async () => {
     if (!preferences) return;
@@ -162,239 +203,206 @@ export default function ProfileScreen() {
   };
 
   /**
-   * What this row may claim. `useIsPro` is true for three different reasons and
-   * only one of them is a purchase, so a tester and a subscriber were both told
-   * to manage a subscription in an Apple Account. The tester has none, and the
-   * tap left them on an App Store page with nothing on it.
+   * What the Pro slot may claim, and where it goes.
+   *
+   * `useIsPro` is true for three different reasons and only one of them is a
+   * purchase, so a tester and a subscriber were both told to manage a
+   * subscription in an Apple Account. The tester has none, and the tap left them
+   * on an App Store page with nothing on it.
    *
    * The order matches `accessFromState`: a tester grant wins over the store, so
    * it is read first here too. The third case is a store Poke asked and could
-   * not reach, which unlocks every feature without selling anything.
+   * not reach, which unlocks every feature without selling anything — that user
+   * is not a subscriber, so the slot offers the subscription rather than calling
+   * it active. The row's detail line is gone with every other subtitle, so the
+   * distinction the four cases carry now lives in the accessibility label.
    */
-  const subscription = testerProAt !== null
+  const proSlot = testerProAt !== null
     ? {
-      title: 'Poke Pro',
-      detail: 'A tester code turned Poke Pro on',
-      action: 'Open tester access',
+      state: 'active' as const,
+      label: 'Poke Pro is active from a tester code. Open tester access',
       onPress: () => router.push('/redeem'),
     }
     : storeStatus === 'pro'
       ? {
-        title: 'Poke Pro',
-        detail: 'Active. Manage it in your Apple Account',
-        action: 'Manage subscription',
+        state: 'active' as const,
+        label: 'Poke Pro is active. Manage the subscription in your Apple Account',
         onPress: openManageSubscriptions,
       }
-      : pro
-        ? {
-          title: 'Poke Pro',
-          detail: 'Poke could not reach the App Store',
-          action: 'See Poke Pro',
-          onPress: openPaywall,
-        }
-        : {
-          title: 'Get Poke Pro',
-          detail: 'Levels, trends and export',
-          action: 'See Poke Pro',
-          onPress: openPaywall,
-        };
+      : {
+        state: 'offer' as const,
+        label: pro
+          ? 'Poke could not reach the App Store. See Poke Pro'
+          : 'See Poke Pro',
+        onPress: openPaywall,
+      };
+
+  const goalWeight = preferences?.goal_weight ?? null;
+  const weightUnit = preferences?.weight_unit ?? 'lb';
+  const remindersOn = preferences?.notifications_enabled === 1;
+  const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null;
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
-        <Text variant="display">Profile</Text>
+        <TodayRise show={loaded} delay={arrivalBeats.header} distance={rise.line}>
+          <ProfileRecordStrip record={record} entered={loaded} />
+        </TodayRise>
 
-        {paywallEnabled ? (
-          <SettingsSection label="Subscription">
-            <Card padding="xs" style={styles.groupCard}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={subscription.action}
-                onPress={subscription.onPress}
-                style={({ pressed }) => [styles.row, styles.divider, pressed && styles.pressed]}
-              >
-                <View style={styles.rowIcon}><Sparkles size={20} color={colors.accent} /></View>
-                <View style={styles.rowCopy}>
-                  <Text variant="bodyStrong">{subscription.title}</Text>
-                  <Text variant="small" color={colors.inkMuted}>{subscription.detail}</Text>
-                </View>
-                <ChevronRight size={19} color={colors.inkSubtle} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Restore purchases"
-                onPress={runRestore}
-                disabled={restoring}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-              >
-                <View style={styles.rowIcon} />
-                <View style={styles.rowCopy}>
-                  <Text variant="bodyStrong">{restoring ? 'Restoring' : 'Restore purchases'}</Text>
-                  <Text variant="small" color={colors.inkMuted}>If you paid on another device</Text>
-                </View>
-              </Pressable>
-            </Card>
-          </SettingsSection>
-        ) : null}
-
-        <SettingsSection label="My medications">
-          <SettingsRow
-            icon={<Pill size={20} color={colors.accent} />}
-            label="Medications"
-            detail="Dose, schedule and status"
-            onPress={() => router.push('/medications')}
-          />
-        </SettingsSection>
-
-        <SettingsSection label="Reminders">
-          <Card padding="xs" style={styles.groupCard}>
-            <View style={[styles.row, preferences?.notifications_enabled === 1 && styles.divider]}>
-              <View style={styles.rowIcon}><Bell size={20} color={colors.accent} /></View>
-              <View style={styles.rowCopy}>
-                <Text variant="bodyStrong">Shot reminders</Text>
-                <Text variant="small" color={colors.inkMuted}>At your usual shot time</Text>
-              </View>
-              <Switch
-                accessibilityLabel="Shot reminders"
-                value={preferences?.notifications_enabled === 1}
-                onValueChange={toggleReminders}
-                trackColor={{ true: colors.accent, false: colors.borderStrong }}
-                thumbColor={colors.surface}
-              />
-            </View>
-            {/* The wheels used to sit open on this page, inside its ScrollView.
-                A wheel takes every vertical drag that starts on it, so scrolling
-                past the Reminders card moved the saved time and said nothing.
-                Behind a row it cannot catch a scroll, and it matches the two
-                rows below it. */}
-            {preferences?.notifications_enabled === 1 ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Edit reminder time"
-                onPress={() => setTimeOpen(true)}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-              >
-                <View style={styles.rowIcon} />
-                <View style={styles.rowCopy}>
-                  <Text variant="bodyStrong">Reminder time</Text>
-                  <Text variant="small" color={colors.inkMuted}>{clockLabel(preferences.reminder_time)}</Text>
-                </View>
-                <ChevronRight size={19} color={colors.inkSubtle} />
-              </Pressable>
-            ) : null}
-          </Card>
-        </SettingsSection>
-
-        <SettingsSection label="Goals and units">
-          <Card padding="xs" style={styles.groupCard}>
-            <View style={[styles.row, styles.divider]}>
-              <View style={styles.rowIcon}><Scale size={20} color={colors.amber} /></View>
-              <View style={styles.rowCopy}>
-                <Text variant="bodyStrong">Units</Text>
-                <Text variant="small" color={colors.inkMuted}>Weight display</Text>
-              </View>
-              <TimeRangeToggle
-                options={['lb', 'kg'] as const}
-                value={preferences?.weight_unit ?? 'lb'}
-                onChange={setWeightUnit}
-                size="sm"
-              />
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Edit goal weight"
+        <TodayRise show={loaded} delay={arrivalBeats.hero} distance={rise.card}>
+          <ProfileCard>
+            {/* The time is a pill inside the row rather than a row of its own.
+                A row that appeared and vanished with the switch took the saved
+                time off the screen with it, and the wheels themselves cannot sit
+                in a ScrollView: a wheel takes every vertical drag that starts on
+                it, so scrolling past this card moved the saved time and said
+                nothing. Behind a row, it can catch neither. */}
+            <ProfileRow
+              testID="profile-reminders-row"
+              divided={false}
+              icon={<Bell size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Shot reminders"
+              accessibilityLabel={`Reminder time, ${clockLabel(preferences?.reminder_time ?? '09:00')}`}
+              onPress={() => setTimeOpen(true)}
+              value={(
+                <>
+                  <ProfileValuePill
+                    label={clockLabel(preferences?.reminder_time ?? '09:00').toLowerCase()}
+                    quiet={!remindersOn}
+                  />
+                  {/* The switch sits inside a row that opens the time picker, so
+                      it has to take its own touches. The wrapper claims the
+                      gesture the switch itself does not, and the row press never
+                      fires under a finger that came for the switch. */}
+                  <View onStartShouldSetResponder={() => true}>
+                    <Switch
+                      testID="profile-reminders-switch"
+                      accessibilityLabel="Shot reminders"
+                      value={remindersOn}
+                      onValueChange={toggleReminders}
+                      trackColor={{ true: colors.accent, false: colors.borderStrong }}
+                      thumbColor={colors.surface}
+                    />
+                  </View>
+                </>
+              )}
+            />
+            <ProfileRow
+              testID="profile-units-row"
+              icon={<Scale size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Units"
+              value={(
+                <ProfileSegment
+                  options={['lb', 'kg'] as const}
+                  value={weightUnit}
+                  onChange={setWeightUnit}
+                  label="Units"
+                />
+              )}
+            />
+            <ProfileRow
+              testID="profile-goal-row"
+              icon={<Target size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Goal weight"
+              accessibilityLabel="Goal weight"
               onPress={() => setGoalOpen(true)}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <View style={styles.rowIcon}><Target size={20} color={colors.amber} /></View>
-              <View style={styles.rowCopy}>
-                <Text variant="bodyStrong">Goal weight</Text>
-                <Text variant="small" color={colors.inkMuted}>
-                  {preferences?.goal_weight === null || preferences?.goal_weight === undefined
-                    ? 'Not set'
-                    : `${preferences.goal_weight.toFixed(1)} ${preferences.weight_unit}`}
-                </Text>
-              </View>
-              <ChevronRight size={19} color={colors.inkSubtle} />
-            </Pressable>
-          </Card>
-        </SettingsSection>
+              value={(
+                <ProfileValuePill
+                  label={goalWeight === null ? 'Set a goal' : `${formatWeight(goalWeight)} ${weightUnit}`}
+                />
+              )}
+            />
+          </ProfileCard>
+        </TodayRise>
 
-        <SettingsSection label="Your data">
-          <SettingsRow
-            icon={<Share2 size={20} color={colors.violet} />}
-            label={exporting ? 'Preparing your file' : 'Export history'}
-            detail={pro ? 'A CSV of every shot, weight and side effect' : 'Poke Pro'}
-            onPress={runExport}
-          />
-        </SettingsSection>
+        <TodayRise show={loaded} delay={arrivalBeats.list} distance={rise.card}>
+          <ProfileCard>
+            <ProfileRow
+              testID="profile-export-row"
+              divided={false}
+              icon={<Share size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Export history"
+              accessibilityLabel={pro ? 'Export history as CSV' : 'Export history as CSV. See Poke Pro'}
+              onPress={runExport}
+              value={<ProfileExportValue state={exporting ? 'busy' : pro ? 'idle' : 'locked'} />}
+            />
+            {/* Hidden only when Poke cannot sell a subscription at all. A slot
+                that offers a tier the store has never heard of is a dead tap. */}
+            {paywallEnabled ? (
+              <ProfileProSlot
+                testID="profile-pro-slot"
+                state={proSlot.state}
+                accessibilityLabel={proSlot.label}
+                onPress={proSlot.onPress}
+                icon={<Sparkles size={22} strokeWidth={1.8} color={colors.successDeep} />}
+              />
+            ) : null}
+          </ProfileCard>
+        </TodayRise>
 
-        <SettingsSection label="About">
-          <Card padding="xs" style={styles.groupCard}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="About Poke"
+        <TodayRise show={loaded} delay={arrivalBeats.track} distance={rise.line}>
+          <View style={styles.links}>
+            {/* Medications is a link rather than a row: it is the only way into
+                the screen that edits a dose or a schedule, and Today only reaches
+                `medications/new`. Cutting it from Profile would strand the
+                editor. */}
+            <ProfileLink
+              testID="profile-link-medications"
+              label="Medications"
+              onPress={() => router.push('/medications')}
+            />
+            <ProfileLink
+              testID="profile-link-about"
+              label="About Poke"
               onPress={() => setAboutOpen(true)}
-              style={({ pressed }) => [styles.row, styles.divider, pressed && styles.pressed]}
-            >
-              <View style={styles.rowIcon}><Info size={20} color={colors.inkMuted} /></View>
-              <View style={styles.rowCopy}>
-                <Text variant="bodyStrong">About Poke</Text>
-                <Text variant="small" color={colors.inkMuted}>Privacy and medical disclaimer</Text>
-              </View>
-              <ChevronRight size={19} color={colors.inkSubtle} />
-            </Pressable>
+            />
+            {paywallEnabled ? (
+              <ProfileLink
+                testID="profile-link-restore"
+                label={restoring ? 'Restoring' : 'Restore purchases'}
+                onPress={runRestore}
+              />
+            ) : null}
             {/* Opens the App Store review composer. Never StoreReview.requestReview():
                 StoreKit can show nothing, and a button that does nothing is a dead tap. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Rate Poke on the App Store"
+            <ProfileLink
+              testID="profile-link-rate"
+              label="Rate Poke"
               onPress={() => { openWriteReview().catch(() => {}); }}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <View style={styles.rowIcon}><Star size={20} color={colors.amber} /></View>
-              <View style={styles.rowCopy}>
-                <Text variant="bodyStrong">Rate Poke</Text>
-                <Text variant="small" color={colors.inkMuted}>Opens the App Store</Text>
-              </View>
-              <ChevronRight size={19} color={colors.inkSubtle} />
-            </Pressable>
-          </Card>
-        </SettingsSection>
-
-        {/* The only way into /redeem. The paywall never links here: a buyer
-            reading a price must not be shown a way around it. */}
-        <SettingsSection label="Testers">
-          <SettingsRow
-            icon={<KeyRound size={20} color={colors.inkMuted} />}
-            label="Tester access"
-            detail={testerProAt === null ? 'Enter a code from Poke' : 'A code keeps Poke Pro on'}
-            onPress={() => router.push('/redeem')}
-          />
-        </SettingsSection>
+            />
+            {/* The only way into /redeem. The paywall never links here: a buyer
+                reading a price must not be shown a way around it. */}
+            <ProfileLink
+              testID="profile-link-tester"
+              label="Tester access"
+              onPress={() => router.push('/redeem')}
+            />
+            {version === null ? null : (
+              <Text testID="profile-version" variant="caption" color={colors.inkSubtle} style={styles.version}>
+                Poke {version}
+              </Text>
+            )}
+          </View>
+        </TodayRise>
 
         {__DEV__ ? (
-          <SettingsSection label="Developer">
-            <Card padding="xs" style={styles.groupCard}>
-              <View style={styles.pickerRow}>
-                <Text variant="smallStrong">Entitlement</Text>
-                <TimeRangeToggle
-                  options={['real', 'free', 'pro'] as const}
-                  value={devOverride ?? 'real'}
-                  onChange={(next) => setDevOverride(next === 'real' ? null : (next as DevOverride))}
-                  size="sm"
-                />
-                <Text variant="caption" color={colors.inkSubtle}>
-                  Debug builds only. &quot;real&quot; follows the App Store.
-                </Text>
-              </View>
-            </Card>
-          </SettingsSection>
+          <Card padding="md" style={styles.devCard}>
+            <Text variant="smallStrong">Entitlement</Text>
+            <TimeRangeToggle
+              options={['real', 'free', 'pro'] as const}
+              value={devOverride ?? 'real'}
+              onChange={(next) => setDevOverride(next === 'real' ? null : (next as DevOverride))}
+              size="sm"
+            />
+            <Text variant="caption" color={colors.inkSubtle}>
+              Debug builds only. &quot;real&quot; follows the App Store.
+            </Text>
+          </Card>
         ) : null}
       </ScrollView>
 
       <BottomSheet visible={timeOpen} title="Reminder time" onClose={() => setTimeOpen(false)}>
-        <View style={styles.timeSheet}>
+        <View style={styles.sheet}>
           {/* Five minute rows, the same grid the onboarding screen uses.
               A time already saved off the grid keeps its own row. */}
           <InlineTimePicker
@@ -409,7 +417,7 @@ export default function ProfileScreen() {
       </BottomSheet>
 
       <BottomSheet visible={goalOpen} title="Goal weight" onClose={() => setGoalOpen(false)}>
-        <View style={styles.goalSheet}>
+        <View style={styles.sheet}>
           <Input
             value={goalDraft}
             onChangeText={setGoalDraft}
@@ -418,7 +426,7 @@ export default function ProfileScreen() {
             placeholder="Enter a number"
             accessibilityLabel="Goal weight"
           />
-          <Text variant="small" color={colors.inkMuted}>{preferences?.weight_unit ?? 'lb'}</Text>
+          <Text variant="small" color={colors.inkMuted}>{weightUnit}</Text>
           <Button disabled={savingGoal} onPress={saveGoal}>{savingGoal ? 'Saving' : 'Save goal'}</Button>
         </View>
       </BottomSheet>
@@ -432,13 +440,12 @@ export default function ProfileScreen() {
               <Text variant="small" color={colors.inkMuted}>A private log for your routine.</Text>
             </View>
           </View>
-          {/* The row that opens this sheet says "Privacy and medical disclaimer",
-              and until now the sheet carried only the second half. Privacy is the
-              reason a lot of people install Poke, so the one place they go looking
-              for it should say it. Every line here is checkable: the package list
-              holds no analytics SDK, `src/` and `app/` make no network call, and
-              the only dependency that reaches a server is RevenueCat, which
-              carries a purchase receipt and never the log. */}
+          {/* The link that opens this sheet is one word now, so both halves have
+              to be here. Privacy is the reason a lot of people install Poke.
+              Every line is checkable: the package list holds no analytics SDK,
+              `src/` and `app/` make no network call, and the only dependency that
+              reaches a server is RevenueCat, which carries a purchase receipt and
+              never the log. */}
           <View style={styles.disclaimer}>
             <Text variant="bodyStrong">Privacy</Text>
             <Text color={colors.inkMuted}>
@@ -461,45 +468,37 @@ export default function ProfileScreen() {
   );
 }
 
-function SettingsSection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
-      {children}
-    </View>
-  );
+/** Monday of the week that started `RECORD_WEEKS - 1` weeks ago. */
+function recordWindowStart(now = Date.now()): number {
+  return startOfWeek(subWeeks(now, RECORD_WEEKS - 1), { weekStartsOn: 1 }).getTime();
 }
 
-function SettingsRow({
-  icon,
-  label,
-  detail,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  detail: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => pressed && styles.pressed}
-    >
-      <Card padding="xs">
-        <View style={styles.row}>
-          <View style={styles.rowIcon}>{icon}</View>
-          <View style={styles.rowCopy}>
-            <Text variant="bodyStrong">{label}</Text>
-            <Text variant="small" color={colors.inkMuted}>{detail}</Text>
-          </View>
-          <ChevronRight size={19} color={colors.inkSubtle} />
-        </View>
-      </Card>
-    </Pressable>
-  );
+/**
+ * Shots per ISO week, and the first one inside the window.
+ *
+ * The count and the date are read from the same rows the bars are, so the line
+ * over the strip can never disagree with it. A user who started before the
+ * window reads a true sentence about the window rather than about their whole
+ * history, which is what the thirteen bars show.
+ */
+function recordFrom(rows: readonly InjectionRow[], now = Date.now()): ProfileRecord {
+  const start = recordWindowStart(now);
+  const weeks = new Array<number>(RECORD_WEEKS).fill(0);
+  let total = 0;
+  let since: number | null = null;
+  for (const row of rows) {
+    const index = differenceInCalendarWeeks(row.taken_at, start, { weekStartsOn: 1 });
+    if (index < 0 || index >= RECORD_WEEKS) continue;
+    weeks[index] = (weeks[index] ?? 0) + 1;
+    total += 1;
+    if (since === null || row.taken_at < since) since = row.taken_at;
+  }
+  return { weeks, total, since };
+}
+
+/** `195 lb`, not `195.0 lb`. A goal is rarely a tenth. */
+function formatWeight(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function convertWeight(value: number, from: WeightUnit, to: WeightUnit): number {
@@ -516,40 +515,21 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 600,
     alignSelf: 'center',
-    gap: spacing.xxxl,
+    gap: spacing.lg,
     paddingHorizontal: spacing.screen,
     paddingBottom: 112,
   },
-  section: {
-    gap: spacing.sm,
+  links: {
+    paddingHorizontal: spacing.xs,
   },
-  groupCard: {
-    overflow: 'hidden',
+  version: {
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    fontVariant: ['tabular-nums'],
   },
-  row: {
-    minHeight: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
+  devCard: {
     gap: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  divider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  pickerRow: {
-    gap: spacing.md,
-    padding: spacing.md,
+    alignItems: 'flex-start',
   },
   aboutSheet: {
     gap: spacing.xl,
@@ -578,13 +558,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: colors.surfaceMuted,
   },
-  goalSheet: {
+  sheet: {
     gap: spacing.md,
-  },
-  timeSheet: {
-    gap: spacing.md,
-  },
-  pressed: {
-    opacity: 0.7,
   },
 });
