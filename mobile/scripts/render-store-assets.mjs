@@ -46,7 +46,7 @@ const slides = [
     file: '01-today.png',
     kicker: 'TODAY',
     title: 'Know what is due today.',
-    sub: 'One card holds the next shot, the day of the week and the dose you logged last time.',
+    sub: 'One card holds the medication, its dose, the week at a glance and the shot that is due.',
   },
   {
     id: '02-log',
@@ -74,7 +74,7 @@ const slides = [
     file: '05-history.png',
     kicker: 'HISTORY',
     title: 'Every shot, every site, on record.',
-    sub: 'A list or a calendar of what you took, when you took it and where. Export it for your doctor.',
+    sub: 'A calendar of what you took, when you took it and where. Export it for your doctor.',
   },
   {
     id: '06-medications',
