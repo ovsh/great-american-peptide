@@ -1,10 +1,13 @@
 # Poke — App Store listing copy
 
-Version 1.2.2. The subscription shipped in 1.1.0, so the description still
+Version 1.3.0. The subscription shipped in 1.1.0, so the description still
 carries the full guideline 3.1.2 disclosure and the review notes still answer the
 two questions Apple always asks a paid health app: how do we get in, and is this
-a medical device. 1.2.2 adds the guided setup, a searchable medication list,
-a source line on every half-life and the rebuilt Today screen.
+a medical device. 1.3.0 rebuilds the four tabs, grows the medication list to 33
+sourced presets and adds brand-name search.
+
+> `store.config.json` is the source of truth. Every block below is the text in
+> that file, wrapped for reading. Change the JSON first, then this file.
 
 Field limits, so nothing is written that cannot be pasted:
 name 30, subtitle 30, promotional text 170, keywords 100, description 4000.
@@ -35,12 +38,13 @@ FREE, FOR AS LONG AS YOU USE IT
 - Log a shot in seconds
 - Your next shot day, on the first screen
 - The full history of what you logged
-- Two medications, picked from a searchable list of 19 or added by you
-- One reminder
+- Two medications, picked from a searchable list of 33 or added by you
+- One reminder time, for every medication you take
 
 POKE PRO
 - Your level, day by day. Poke draws the estimated curve between your shots.
-  Poke uses the half-life you set and the shots you logged.
+  Poke uses the shots you logged and the half-life on file for the medication.
+  Poke shows the source of every half-life.
 - Trends that add up. Poke puts your weight, your doses and the side effects you
   record on one timeline. You see what moved with what.
 - Unlimited medications. Free keeps two. Pro runs as many as you take, and each
@@ -50,8 +54,9 @@ POKE PRO
 WHAT POKE IS NOT
 Poke is a record of what you enter and nothing more. Poke gives no medical
 advice, no diagnosis, no treatment guidance and no dose recommendations. The
-level curve is an estimate that Poke calculates from the values you type in. The
-level curve is not a measurement. The level curve is not a basis for changing a
+level curve is an estimate that Poke calculates from the shots you log and the
+half-life on file. Poke shows the source of every half-life. The level curve is
+not a measurement. The level curve is not a basis for changing a
 dose. The reconstitution screen is a unit conversion for laboratory and
 educational use. The reconstitution screen turns a mass and a volume into a
 concentration. Speak to a licensed clinician about your treatment. Call your
@@ -127,25 +132,19 @@ cards on a 13 inch screen leave the slide nearly empty.
 
 ## What is new in this version
 
-TODAY, REBUILT
-Switch between medications from a compact row. The selected medication shows the next shot, dose, schedule and last shot without a large image. When a shot is due, Log shot fills the bottom edge of the card so the action is easy to find.
+TODAY, CALM
+One card for the medication you focus on: the level curve, your week under it, and Log shot in a fixed slot. Hold a row to reorder. The order you set is the order Poke opens with.
 
-ESTIMATED LEVELS, CLEARER
-The level card uses the shots you logged. Free shows a blurred preview of the seven-day estimate. Poke Pro shows the exact estimate and opens the full details. An estimate is not a measurement and is not a basis for changing a dose.
+A NEW HISTORY
+Months stack in one scroll. Each day carries one lane per medication, so a kept dose, a missed dose and a planned dose read at a glance. Tap a day to open it and log a shot for that day.
 
-TRACK TODAY
-Weight and side effects now sit in one clean list.
+PROGRESS, ON ONE CHART
+Weight, shots and side effects share one timeline. Free shows the shape of your line. Poke Pro shows the numbers.
 
-SETUP NOW BUILDS A PLAN
-Poke asks about every medication you take, then shows the next shot day, estimated level plan and first sites in the injection rotation. Optional height, weight, goal weight and reminder questions each have a skip.
+MORE MEDICATIONS, SOURCED
+33 presets, searchable by brand name such as Ozempic, Wegovy and Zepbound. Every half-life names its source, and an estimate says it is an estimate.
 
-A LONGER LIST, AND A SEARCH
-The medication list now holds 19 entries and supports generic-name and brand-name searches.
-
-HALF-LIVES THAT NAME THEIR SOURCE
-Every half-life names its source. Where no human study exists, Poke draws no curve.
-
-Poke gives no medical advice, diagnosis, treatment guidance or dose recommendation.
+Plus a new first screen and many small fixes.
 
 ## App Review notes
 
@@ -158,15 +157,16 @@ HOW TO REVIEW POKE PRO
 Poke Pro is an auto-renewable subscription in the Poke Pro group, sold through RevenueCat and StoreKit 2.
 
 1. Finish setup. The paywall opens at the end and can be closed.
-2. To open it later: Profile > Subscription > Get Poke Pro. The Progress tab, the blurred level preview on Today, Export history and adding a third medication also open it.
+2. To open it later: Profile > See Poke Pro. The "Unlock exact levels" chip on the Today level chart, the "Unlock your numbers" pill on the Progress chart, Export history in Profile and adding a third medication also open it.
 3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month free trial for new subscribers.
 4. The paywall closes and Pro unlocks at once. Restore purchases is on the paywall and in Profile.
 
-If the sandbox store cannot be reached, the app unlocks all features so review is not blocked.
+If the store cannot be set up on the device at all, the app unlocks all features so review is not blocked. A slow network is not that case: Poke keeps the free view, keeps the paywall in reach, and asks the store again.
 
 FREE AND PRO
-Free: shot logging, next shot, full history, two medications and one reminder.
+Free: shot logging, next shot, full history and two medications.
 Pro: exact estimated level charts, progress charts, unlimited medications and CSV export.
+Reminders are the same on both sides. The user sets one reminder time, and that one time covers every medication. Free and Pro get the same reminders.
 
 MEDICAL POSITIONING
 Poke is a personal record. It is not a medical device and makes no clinical claim.
@@ -174,19 +174,26 @@ Poke is a personal record. It is not a medical device and makes no clinical clai
 - Poke records the dose the user enters. It never recommends, calculates or suggests a dose.
 - Poke gives no diagnosis, treatment guidance or administration instructions.
 - A level chart is an estimate from the shots the user logged and the published half-life on file. Poke shows the half-life source. The estimate is not a measurement and is not a basis for changing a dose.
-- Where no human half-life study exists, Poke says so and draws no curve.
+- Every half-life on file names its source: a drug label, a human study, or a stated estimate. The app labels an estimate as an estimate. Where Poke has no sourced half-life, it draws no curve.
 - The reconstitution screen is a unit conversion for laboratory research and educational calculations only. It gives no dose instruction.
 - Setup and Profile show the full disclaimer and tell the user to speak to a clinician.
-- Medications are stored and shown by generic name. Brand names work only as search terms and in a half-life source title.
+- Brand names are their own rows in the medication picker. A picked brand is stored and shown under the name the user picked, so Wegovy stays Wegovy. Every brand row maps to one molecule, and the molecule carries the half-life and its source, so one medication is never counted twice.
+- Setup can print a target date, and only when the user enters a current weight, a goal weight and a weekly rate. The screen says the date is the distance divided by the pace the user typed, that it is arithmetic on two numbers, that it is not a forecast, and that no model of the body stands behind it. Without weight data, no date appears.
 
-WHAT CHANGED IN 1.2.2
-Today now uses a compact medication rail and one selected-medication card. The next shot is the primary block. A due shot has a full-width Log shot action. Free shows the real seven-day estimate shape behind a blur, with no exact values exposed. Pro removes the blur. A medication without a cited half-life gets no chart or level offer.
+WHAT CHANGED IN 1.3.0
+This release rebuilds the four tabs. It adds no new medical claim.
 
-Setup is now a 23-step guided flow. It asks about each medication, then optional profile and tracking questions. Before the summary it shows a progress screen for about 14 seconds. The summary uses only the answers entered and published half-lives.
+Today is one card. The card holds the medication in focus: the estimated level curve, the week under the curve, and a Log shot band that stays in the same place. Free shows the shape of the curve with no exact values. Pro shows the values. Hold a medication row to reorder the list. The order the user sets is the order Poke opens with.
 
-If the user enters a current weight, goal weight and weekly rate, Poke divides the distance by that rate and prints a date. The screen says: "That date is your distance divided by the pace you set. It is arithmetic on two numbers you typed. It is not a forecast, and no model of your body stands behind it. Move the pace above and watch the date move with it. Speak to your clinician about the pace that suits you." If weight data is skipped, no date appears.
+History is a month board. Months stack in one scroll. Each day carries one lane for each medication, so a kept dose, a missed dose and a planned dose read at a glance. Tap a day to open a half-sheet for that day and log a shot there.
 
-The medication list has 19 generic entries and search. Every half-life names its published source. Nothing in 1.2.2 changes what Poke claims to do.
+Progress is one chart. Weight, shots and side effects share one timeline. Free shows the shape of the line. Pro shows the numbers.
+
+Profile is minimal. It holds the record strip, reminders, units, goal weight, export and the account state. The old section headers are gone.
+
+The medication list has 33 presets and search. Every half-life names its source: a drug label, a human study, or a stated estimate. The app labels an estimate as an estimate. Brand names such as Ozempic, Wegovy and Zepbound are rows in the picker, and a picked brand keeps its own name.
+
+Setup opens with a new welcome screen.
 
 CONTACT
 support@peptide.industries

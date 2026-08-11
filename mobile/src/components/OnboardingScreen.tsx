@@ -14,6 +14,7 @@ import type { Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card } from './Card';
+import { MarkChip } from './EstimateMark';
 import { Text } from './Text';
 import type { OnboardingTransition } from './onboardingTransition';
 import { colors, radius, spacing } from '../theme';
@@ -126,6 +127,8 @@ export function OnboardingScreen({
 
 interface SelectionCardProps {
   title: string;
+  /** A quiet word beside the title, for the one row in a list that needs it. */
+  marker?: string;
   description?: string;
   selected: boolean;
   onPress: () => void;
@@ -135,6 +138,7 @@ interface SelectionCardProps {
 
 export function SelectionCard({
   title,
+  marker,
   description,
   selected,
   onPress,
@@ -156,7 +160,12 @@ export function SelectionCard({
         ]}
       >
         <View style={styles.choiceCopy}>
-          <Text variant={compact ? 'smallStrong' : 'bodyStrong'}>{title}</Text>
+          <View style={styles.choiceTitle}>
+            <Text variant={compact ? 'smallStrong' : 'bodyStrong'} style={styles.choiceName}>
+              {title}
+            </Text>
+            {marker ? <MarkChip label={marker} /> : null}
+          </View>
           {description ? <Text variant="small" color={colors.inkMuted}>{description}</Text> : null}
         </View>
         <View style={[styles.check, selected && styles.checkSelected]}>
@@ -280,6 +289,14 @@ const styles = StyleSheet.create({
   choiceCopy: {
     flex: 1,
     gap: spacing.xs,
+  },
+  choiceTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  choiceName: {
+    flexShrink: 1,
   },
   check: {
     width: 22,

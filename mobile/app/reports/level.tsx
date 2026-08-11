@@ -11,13 +11,14 @@ import { Text } from '@/components/Text';
 import { Pill } from '@/components/Pill';
 import { LineChart } from '@/components/LineChart';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
+import { chartHeightFor } from '@/components/chart-height';
 
 import { ProLock } from '@/components/ProLock';
 
 import { listMedications } from '@/repositories/medications';
 import { listInjections } from '@/repositories/injections';
 import type { InjectionRow, MedicationRow } from '@/db/types';
-import type { Unit } from '@/domain/peptides';
+import { EVIDENCE_LABELS, getPreset, type PeptidePreset, type Unit } from '@/domain/peptides';
 import { levelTrajectory, peakTroughAvg, trendLabel, tmaxOrDefault, type DoseEvent } from '@/domain/pk';
 import { formatDose } from '@/domain/units';
 import { maybePromptForReview } from '@/services/review';
@@ -38,6 +39,41 @@ const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 /** The chart needs a smooth line. 100 segments draw one across any range. */
 const CHART_STEPS = 100;
+/** The curve on a phone. A wider screen grows it; see `chartHeightFor`. */
+const CHART_HEIGHT = 200;
+/** The card the curve sits in is `padding="md"` on all four sides. */
+const CHART_PAD = spacing.md;
+
+/** The screen ends on one caption, and every state of it is one caption. */
+const FOOTNOTE = 'Poke estimates this level from the shots you logged and the half-life on file for'
+  + ' this medication. The estimate is not a measurement. This trend is not for dosing.';
+
+/**
+ * What stands behind the half-life, when the number is not a published one.
+ *
+ * A label or a trial half-life is cited where the user set the medication up,
+ * and repeating the tier here would be a caption the reader does not need. An
+ * estimate is different: the peak, the trough and the average on this screen are
+ * all read off a number with limited evidence, and the screen has to say so
+ * where the numbers are. A medication Poke carries no sourced half-life for is
+ * running on the number the user typed, and only that is honest to print.
+ *
+ * It joins the footnote rather than standing on its own, so this stays one
+ * caption and not a caption with a badge over it.
+ *
+ * The preset is only the basis while the number on file is still the preset's.
+ * `medications/[id]` lets the user type over it, and after that the curve runs
+ * on the user's number. Citing the preset's evidence tier there would credit
+ * Poke's source for a figure Poke did not supply, so the override is named
+ * first and every other branch stays as it was.
+ */
+function halfLifeBasis(preset: PeptidePreset | undefined, med: MedicationRow | null): string {
+  if (!preset) return 'Half-life entered by you.';
+  if (med && med.half_life_hours !== preset.halfLifeHours) return 'Half-life entered by you.';
+  if (preset.evidence === 'estimate') return `${EVIDENCE_LABELS.estimate}.`;
+  if (preset.evidence === 'unsourced') return 'Half-life entered by you.';
+  return '';
+}
 
 function rangeMs(r: Range): number {
   if (r === '7d') return 7 * DAY;
@@ -194,6 +230,12 @@ export default function LevelReportScreen() {
   const trend = events && halfLife ? trendLabel(events, halfLife, tmax, now) : 'steady';
 
   const chartW = Math.min(width, 600) - spacing.screen * 2;
+  // The card is what the reader sees, so the card's width is what its height
+  // follows. The curve inside it keeps whatever the padding leaves.
+  const chartH = chartHeightFor(chartW, CHART_HEIGHT + CHART_PAD * 2) - CHART_PAD * 2;
+
+  const preset = med?.preset_id ? getPreset(med.preset_id) : undefined;
+  const footnote = [halfLifeBasis(preset, med), FOOTNOTE].filter(Boolean).join(' ');
 
   // The curve is the paid hook, and it only becomes one at the third dose: below that
   // it is a single rise and decay, which is a textbook diagram, not the user's routine.
@@ -270,7 +312,7 @@ export default function LevelReportScreen() {
                       data={data}
                       projection={proj.length >= 2 ? proj : undefined}
                       width={chartW - spacing.lg * 2}
-                      height={200}
+                      height={chartH}
                       xLabel={(t) => {
                         const d = new Date(t);
                         return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -314,11 +356,9 @@ export default function LevelReportScreen() {
                   half-life `medications/new.tsx` fills in, and an onboarding run
                   never shows that field at all. The old line handed Poke's own
                   cited number back to the user as theirs. "on file" is true
-                  whether Poke supplied the number or the user typed it. */}
-              <Text variant="caption" color={colors.inkSubtle}>
-                Poke estimates this level from the shots you logged and the half-life on file for
-                this medication. The estimate is not a measurement. This trend is not for dosing.
-              </Text>
+                  whether Poke supplied the number or the user typed it, and
+                  `halfLifeBasis` says which it was when that matters. */}
+              <Text variant="caption" color={colors.inkSubtle}>{footnote}</Text>
             </View>
           </>
         )}
@@ -338,7 +378,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 const styles = StyleSheet.create({
-  chipRow: { paddingHorizontal: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xs },
+  chipRow: { gap: spacing.sm, paddingBottom: spacing.xs },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   headRow: {

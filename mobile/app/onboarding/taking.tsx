@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
+import { estimateMark } from '@/components/EstimateMark';
 import { Input } from '@/components/Input';
 import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
 import { Text } from '@/components/Text';
@@ -124,6 +125,7 @@ function PresetCard({
     <SelectionCard
       compact
       title={entry.name}
+      marker={estimateMark(entry.preset.evidence)}
       description={entryDescription(entry)}
       selected={selected}
       onPress={onPress}
@@ -138,7 +140,8 @@ function PresetCard({
  * user what Wegovy is. A molecule row has no such line. The evidence tier read
  * the same on almost every card, so it moved to the estimate sheet on Today.
  * Only the missing half-life stays: it changes what the app can draw, so the
- * user must see it before the pick.
+ * user must see it before the pick. The estimate tier is marked beside the name
+ * rather than here, so it is a mark and not another line of prose.
  */
 function entryDescription(entry: PresetEntry): string | undefined {
   const missing = entry.preset.evidence === 'unsourced' ? EVIDENCE_LABELS.unsourced : undefined;

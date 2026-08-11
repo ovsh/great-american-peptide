@@ -1,3 +1,4 @@
+import { chartHeightFor } from '@/components/chart-height';
 import type { WeightUnit } from '@/domain/units';
 
 /**
@@ -139,7 +140,16 @@ export function buildLayout(journey: Journey, width: number): ChartLayout {
   // The Shots band is a list, and a list of six medications is taller than the
   // curve needs. The plot takes the height of the most demanding metric so the
   // rail below it never moves when the metric changes.
-  const plotH = Math.max(base, CHART.shotsTop + rows * CHART.shotsRow);
+  const basePlot = Math.max(base, CHART.shotsTop + rows * CHART.shotsRow);
+
+  // The rail under the plot is a fixed stack, so the chart's own height is the
+  // one number a wide screen may move, and the plot takes whatever it gains.
+  // The rail keeps its proportions and the log band under the card keeps its
+  // place. On every phone width the clamp returns the natural height unchanged.
+  const railH = CHART.effGap + CHART.laneGap + rows * CHART.lanePitch + CHART.monthGap + CHART.bottom;
+  const naturalH = CHART.plotT + basePlot + railH;
+  const height = chartHeightFor(width, naturalH);
+  const plotH = basePlot + (height - naturalH);
 
   const goalY = CHART.plotT + plotH;
   const effY = goalY + CHART.effGap;
@@ -150,7 +160,7 @@ export function buildLayout(journey: Journey, width: number): ChartLayout {
 
   return {
     width,
-    height: monthY + CHART.bottom,
+    height,
     plotL,
     plotR,
     plotT: CHART.plotT,
