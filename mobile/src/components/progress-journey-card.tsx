@@ -28,7 +28,7 @@ export function ProgressHeaderLine({ journey }: { journey: Journey }) {
     <View style={styles.top}>
       <Text variant="bodyStrong" numberOfLines={1} style={styles.since}>
         Since {journey.sinceLabel}
-        <Text variant="smallStrong" color={colors.inkMuted}> · {shots}</Text>
+        <Text variant="smallStrong" color={colors.inkMuted}>, {shots}</Text>
       </Text>
       {journey.streakWeeks > 0 ? (
         <View style={styles.streak} testID="progress-streak">

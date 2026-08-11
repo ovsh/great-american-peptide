@@ -75,6 +75,7 @@ export default function ProfileScreen() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const pro = useIsPro();
   const paywallEnabled = usePaywallEnabled();
   const restoring = useEntitlementStore((state) => state.restoring);
@@ -86,6 +87,7 @@ export default function ProfileScreen() {
   const testerProAt = useTesterProAt();
 
   const load = useCallback(async () => {
+    setLoadError(false);
     const [row, shots] = await Promise.all([
       getPreferences(),
       listInjections({ fromMs: recordWindowStart() }),
@@ -96,7 +98,9 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    load().catch(() => {});
+    // A swallowed rejection leaves every row at opacity 0 with nothing to tap.
+    // The screen says so instead, and offers the retry, the way Progress does.
+    load().catch(() => setLoadError(true));
   }, [dataVersion, load]);
 
   const record = useMemo(
@@ -241,6 +245,18 @@ export default function ProfileScreen() {
   const weightUnit = preferences?.weight_unit ?? 'lb';
   const remindersOn = preferences?.notifications_enabled === 1;
   const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null;
+
+  // The rows below all wait on `loaded`, so a failed read would hold them at
+  // opacity 0 for good. This is the whole screen while that is the state.
+  if (loadError && !loaded) {
+    return (
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
+          <LoadError onRetry={() => load().catch(() => setLoadError(true))} />
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -468,6 +484,18 @@ export default function ProfileScreen() {
   );
 }
 
+/** The same state Progress shows when the database does not answer. */
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.state}>
+      <Text color={colors.inkMuted} style={styles.stateCopy}>
+        Your profile did not load.
+      </Text>
+      <Button size="sm" onPress={onRetry}>Try again</Button>
+    </View>
+  );
+}
+
 /** Monday of the week that started `RECORD_WEEKS - 1` weeks ago. */
 function recordWindowStart(now = Date.now()): number {
   return startOfWeek(subWeeks(now, RECORD_WEEKS - 1), { weekStartsOn: 1 }).getTime();
@@ -521,6 +549,15 @@ const styles = StyleSheet.create({
   },
   links: {
     paddingHorizontal: spacing.xs,
+  },
+  state: {
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.lg,
+  },
+  stateCopy: {
+    textAlign: 'center',
   },
   version: {
     paddingTop: spacing.sm,

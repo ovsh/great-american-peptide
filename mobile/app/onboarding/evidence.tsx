@@ -12,7 +12,7 @@ export default function EvidenceScreen() {
       step="evidence"
       icon={<FlaskConical size={34} color={colors.accent} />}
       title="Every half-life here names its source"
-      body="Poke prints the source next to the medication. Where no human study exists, Poke draws no curve."
+      body="Poke prints the source next to the medication. Where the half-life is only an estimate, Poke says so."
       note="The level chart is an estimate. No estimate is a reason to change a dose."
     />
   );

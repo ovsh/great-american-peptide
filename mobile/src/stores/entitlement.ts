@@ -23,9 +23,9 @@ import {
  * What the App Store said about this device.
  *
  * `unreachable` is the case that earns its keep. Poke asked and got no answer,
- * which is not the same as an answer of `free`. Recording it as `free` takes a
- * paying subscriber's features away the moment their network drops, and
- * `store.config.json` review.notes promises App Review the opposite.
+ * which is not the same as an answer of `free`. Keeping the two apart is what
+ * lets Poke ask again instead of settling, and it is why a late `pro` can still
+ * arrive and win. It is not a grant: see `accessFromState`.
  */
 export type EntitlementStatus = 'unknown' | 'free' | 'pro' | 'unreachable';
 
@@ -76,11 +76,22 @@ let unsubscribe: (() => void) | null = null;
 /**
  * How long Poke waits for the App Store before it stops waiting. `app/_layout`
  * holds the first paint until Poke decides, so this cap is what keeps a silent
- * store from holding the app on the splash screen. A store that misses the cap
- * counts as unreachable, which unlocks every paid feature, and a late answer
- * still wins when it arrives.
+ * store from holding the app on the splash screen.
+ *
+ * Missing the cap does not unlock anything. A store that is configured and can
+ * sell owes an answer, and until it gives one the user sees the free view with
+ * the paywall in reach. A late answer still wins when it arrives, and
+ * `retryUntilAnswered` keeps asking for it.
  */
 const STORE_ANSWER_TIMEOUT_MS = 3000;
+
+/**
+ * When Poke asks a ready store again after it missed the cap, in ms after the
+ * one before. Short enough that a subscriber on a slow train gets their
+ * features back inside a minute, few enough that a store that is down is asked
+ * three times and then left alone until the next paywall or launch.
+ */
+const STORE_RETRY_DELAYS_MS = [2000, 5000, 15000];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -91,6 +102,24 @@ function sleep(ms: number): Promise<void> {
 /** True when the App Store itself said which side of the paywall this user is on. */
 function storeAnswered(status: EntitlementStatus): boolean {
   return status === 'pro' || status === 'free';
+}
+
+/**
+ * Asks a ready store again until it answers, or until the attempts run out.
+ *
+ * This is what keeps the timeout honest. Poke stops waiting after three
+ * seconds so the app opens, and a subscriber whose network was slow at that
+ * moment is briefly on the free side. Each answer that arrives here puts them
+ * back, without a tap.
+ */
+async function retryUntilAnswered(get: () => EntitlementState): Promise<void> {
+  for (const delay of STORE_RETRY_DELAYS_MS) {
+    await sleep(delay);
+    // A listener answer, a restore, or a purchase may have landed meanwhile.
+    if (get().availability?.kind !== 'ready') return;
+    if (storeAnswered(get().status)) return;
+    await get().refreshStatus();
+  }
 }
 
 /**
@@ -142,13 +171,20 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
 
     await Promise.race([ask().catch(() => {}), sleep(STORE_ANSWER_TIMEOUT_MS)]);
     set({ decided: true });
+
+    // The first paint no longer waits, but the question is still open. A ready
+    // store that missed the cap gets asked again, because the user is on the
+    // free side until it answers.
+    if (get().availability?.kind === 'ready' && !storeAnswered(get().status)) {
+      void retryUntilAnswered(get);
+    }
   },
 
   refreshStatus: async () => {
     try {
       const info = await fetchCustomerInfo();
       // A null read means the store was never asked, so it says nothing about
-      // this user. Only a real answer may put someone on the free side.
+      // this user. It is recorded as its own case, so Poke knows to ask again.
       set({ status: info === null ? 'unreachable' : isPro(info) ? 'pro' : 'free' });
     } catch {
       set({ status: 'unreachable' });
@@ -230,16 +266,29 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
  * view over a tester grant. A tester grant wins over the store, so an invited
  * tester sees Pro without paying. Before Poke decides, the answer is `pending`
  * rather than a guess, because a guess renders as a lock or as a feature and
- * both flicker into the opposite a moment later. After that, a store Poke
- * cannot sell through, or could not reach, unlocks everything: locking a door
- * Poke cannot sell a key for only breaks the app.
+ * both flicker into the opposite a moment later.
+ *
+ * After that, only one case unlocks by itself: a store Poke cannot sell
+ * through. Locking a door Poke cannot sell a key for only breaks the app, and
+ * `paywallFromState` reads the same field, so the lock and the way past it
+ * appear and disappear together.
+ *
+ * A store that can sell but has not answered yet is a different case, and it
+ * ends in `free`. It is a three second timeout, not a broken store, so
+ * unlocking on it hands Pro to every user on a slow network and hides the
+ * paywall from App Review. The user sees the free view with the paywall in
+ * reach, `retryUntilAnswered` keeps asking, and a real subscriber flips back on
+ * the first answer.
  */
 function accessFromState(state: EntitlementState): ProAccess {
   if (__DEV__ && state.devOverride !== null) return state.devOverride === 'pro' ? 'pro' : 'free';
   if (state.testerProAt !== null) return 'pro';
   if (!state.decided) return 'pending';
-  if (state.availability?.kind !== 'ready') return 'pro';
-  if (!storeAnswered(state.status)) return 'pro';
+  // `null` means `initPurchases` itself never came back. That call reads a key
+  // and configures the SDK on the device, with no network in it, so this is the
+  // same "cannot sell" case as an explicit `unavailable`, and the paywall is
+  // hidden here too.
+  if (state.availability === null || state.availability.kind !== 'ready') return 'pro';
   return state.status === 'pro' ? 'pro' : 'free';
 }
 
@@ -271,9 +320,10 @@ export function useEntitlementSettled(): boolean {
 }
 
 /**
- * The boolean the paid screens read. `pending` counts as unlocked for the same
- * reason an unreachable store does, and the first paint waits for the answer,
- * so a rendered screen never sees this value while it is still pending.
+ * The boolean the paid screens read. `pending` counts as unlocked so a lock
+ * never flashes over a question Poke has not asked yet, and the first paint
+ * waits for the answer, so a rendered screen never sees this value while it is
+ * still pending.
  */
 export function useIsPro(): boolean {
   return useEntitlementStore((state) => accessFromState(state) !== 'free');

@@ -530,18 +530,22 @@ export function HistoryDaySheet({
   );
 }
 
-/** `8:05 am · Upper left abdomen`, or just the time when no site was recorded. */
+/** `8:05 am in the upper left abdomen`, or the time alone when no site was recorded. */
 function siteMeta(shot: InjectionRow): string {
   const site = shot.site_id ? getBodySite(shot.site_id) : undefined;
-  return site ? `${fmtTime(shot.taken_at)} · ${site.label}` : fmtTime(shot.taken_at);
+  // Every site label starts a phrase, so it carries a capital of its own. Inside
+  // the sentence it takes the lower case.
+  return site
+    ? `${fmtTime(shot.taken_at)} in the ${site.label.toLowerCase()}`
+    : fmtTime(shot.taken_at);
 }
 
-/** What the schedule wanted on a day it did not get: `Missed · every Tuesday`. */
+/** What the schedule wanted on a day it did not get: `Missed, every Tuesday`. */
 function planMeta(mark: LaneMark, medication: MedicationRow): string | null {
   if (mark === 'none' || mark === 'logged' || mark === 'loggedTwice') return null;
   const state = mark === 'missed' ? 'Missed' : mark === 'due' ? 'Due today' : 'Planned';
   const cadence = cadenceLabel(medication);
-  return cadence ? `${state} · ${cadence}` : state;
+  return cadence ? `${state}, ${cadence}` : state;
 }
 
 const styles = StyleSheet.create({

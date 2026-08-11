@@ -597,11 +597,17 @@ function mix(a: number, b: number, t: number): number {
 /** The path between two states, point for point, on whichever thread asks. */
 function linePath(from: CurveShape, to: CurveShape, t: number, start: number, end: number): string {
   'worklet';
+  // `end` comes from the target, and the two shapes rarely hold the same number
+  // of samples: the count moves when a dose window passes or a half-life is
+  // edited. Reading past the shorter one gives `undefined`, and `undefined`
+  // reaches the SVG as `NaN` and takes the whole path with it. The walk stops at
+  // the shorter of the two, and every read carries its own floor.
+  const last = Math.min(from.xs.length, to.xs.length, end);
   let d = '';
-  for (let index = start; index < end; index += 1) {
-    const x = from.xs[index] + (to.xs[index] - from.xs[index]) * t;
-    const y = from.ys[index] + (to.ys[index] - from.ys[index]) * t;
-    d += `${index === start ? 'M' : ' L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  for (let index = Math.max(start, 0); index < last; index += 1) {
+    const x = (from.xs[index] ?? 0) + ((to.xs[index] ?? 0) - (from.xs[index] ?? 0)) * t;
+    const y = (from.ys[index] ?? 0) + ((to.ys[index] ?? 0) - (from.ys[index] ?? 0)) * t;
+    d += `${d === '' ? 'M' : ' L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
   }
   return d;
 }

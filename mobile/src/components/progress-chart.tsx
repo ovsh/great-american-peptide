@@ -939,7 +939,7 @@ function shotSummary(journey: Journey): string {
   const parts = [`${journey.shotTotal} taken`];
   if (journey.missedTotal > 0) parts.push(`${journey.missedTotal} missed`);
   if (journey.dueTotal > 0) parts.push(`${journey.dueTotal} due today`);
-  return parts.join(' · ');
+  return parts.join(', ');
 }
 
 /* --------------------------------------------------------- the effects metric */

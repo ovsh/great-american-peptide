@@ -184,7 +184,7 @@ export function summarizeWeek(week: BoardWeek, lane: number): WeekFill {
 
 /**
  * How often this medication is taken, in the words the sheet says it in:
- * `Missed · every Tuesday`. Null when the frequency names no repeating day,
+ * `Missed, every Tuesday`. Null when the frequency names no repeating day,
  * and then the row says only what happened.
  */
 export function cadenceLabel(medication: MedicationRow): string | null {
