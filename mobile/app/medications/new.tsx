@@ -13,6 +13,7 @@ import { Field } from '@/components/Field';
 import { Input } from '@/components/Input';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 import { Pill } from '@/components/Pill';
+import { MarkChip, estimateMark } from '@/components/EstimateMark';
 import { MedVialIcon } from '@/components/MedVialIcon';
 
 import {
@@ -236,31 +237,12 @@ export default function AddMedicationScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: spacing.hero }}>
           <Section eyebrow="Presets" gap="sm">
             {entries.map((entry, idx) => (
-              <Pressable key={entry.id} onPress={() => pickPreset(entry)}>
-                <Card padding="md" style={styles.presetCard}>
-                  <MedVialIcon size={36} colorIndex={idx} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="bodyStrong">{entry.name}</Text>
-                    {/* A brand row names its molecule, which differs on every
-                        row and says what Wegovy is. A molecule row has no such
-                        line. The evidence tier read the same on almost every
-                        card, so it moved to the estimate sheet. Only the
-                        missing half-life stays: it changes what the app can
-                        draw, so the user must see it before the pick. */}
-                    {entry.moleculeName ? (
-                      <Text variant="caption" color={colors.inkMuted}>
-                        {entry.moleculeName}
-                      </Text>
-                    ) : null}
-                    {entry.preset.evidence === 'unsourced' ? (
-                      <Text variant="caption" color={colors.inkMuted}>
-                        {EVIDENCE_LABELS.unsourced}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Pill tone="neutral">{entry.preset.category}</Pill>
-                </Card>
-              </Pressable>
+              <PresetRow
+                key={entry.id}
+                entry={entry}
+                colorIndex={idx}
+                onPress={() => pickPreset(entry)}
+              />
             ))}
           </Section>
 
@@ -423,6 +405,53 @@ export default function AddMedicationScreen() {
   );
 }
 
+/**
+ * One row of the catalogue: the name, what it is, and nothing that reads the
+ * same on every row.
+ *
+ * A brand row names its molecule, which differs on every row and says what
+ * Wegovy is. A molecule row has no such line. The evidence tier read the same on
+ * almost every card, so it moved to the estimate sheet on Today, and only two
+ * exceptions stayed on the row itself: a missing half-life, because it changes
+ * what the app can draw, and the estimate mark, because an estimate is the one
+ * tier whose number is not a published measurement.
+ */
+function PresetRow({
+  entry,
+  colorIndex,
+  onPress,
+}: {
+  entry: PresetEntry;
+  colorIndex: number;
+  onPress: () => void;
+}) {
+  const mark = estimateMark(entry.preset.evidence);
+  return (
+    <Pressable onPress={onPress}>
+      <Card padding="md" style={styles.presetCard}>
+        <MedVialIcon size={36} colorIndex={colorIndex} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <View style={styles.nameRow}>
+            <Text variant="bodyStrong" style={styles.presetName}>{entry.name}</Text>
+            {mark ? <MarkChip label={mark} /> : null}
+          </View>
+          {entry.moleculeName ? (
+            <Text variant="caption" color={colors.inkMuted}>
+              {entry.moleculeName}
+            </Text>
+          ) : null}
+          {entry.preset.evidence === 'unsourced' ? (
+            <Text variant="caption" color={colors.inkMuted}>
+              {EVIDENCE_LABELS.unsourced}
+            </Text>
+          ) : null}
+        </View>
+        <Pill tone="neutral">{entry.preset.category}</Pill>
+      </Card>
+    </Pressable>
+  );
+}
+
 function currentWeekday(): Weekday {
   return weekdayFromTimestamp(Date.now());
 }
@@ -449,6 +478,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  presetName: {
+    flexShrink: 1,
   },
   doseRow: {
     flexDirection: 'row',
