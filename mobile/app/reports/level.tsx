@@ -60,9 +60,16 @@ const FOOTNOTE = 'Poke estimates this level from the shots you logged and the ha
  *
  * It joins the footnote rather than standing on its own, so this stays one
  * caption and not a caption with a badge over it.
+ *
+ * The preset is only the basis while the number on file is still the preset's.
+ * `medications/[id]` lets the user type over it, and after that the curve runs
+ * on the user's number. Citing the preset's evidence tier there would credit
+ * Poke's source for a figure Poke did not supply, so the override is named
+ * first and every other branch stays as it was.
  */
-function halfLifeBasis(preset: PeptidePreset | undefined): string {
+function halfLifeBasis(preset: PeptidePreset | undefined, med: MedicationRow | null): string {
   if (!preset) return 'Half-life entered by you.';
+  if (med && med.half_life_hours !== preset.halfLifeHours) return 'Half-life entered by you.';
   if (preset.evidence === 'estimate') return `${EVIDENCE_LABELS.estimate}.`;
   if (preset.evidence === 'unsourced') return 'Half-life entered by you.';
   return '';
@@ -228,7 +235,7 @@ export default function LevelReportScreen() {
   const chartH = chartHeightFor(chartW, CHART_HEIGHT + CHART_PAD * 2) - CHART_PAD * 2;
 
   const preset = med?.preset_id ? getPreset(med.preset_id) : undefined;
-  const footnote = [halfLifeBasis(preset), FOOTNOTE].filter(Boolean).join(' ');
+  const footnote = [halfLifeBasis(preset, med), FOOTNOTE].filter(Boolean).join(' ');
 
   // The curve is the paid hook, and it only becomes one at the third dose: below that
   // it is a single rise and decay, which is a textbook diagram, not the user's routine.
@@ -371,7 +378,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 const styles = StyleSheet.create({
-  chipRow: { paddingHorizontal: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xs },
+  chipRow: { gap: spacing.sm, paddingBottom: spacing.xs },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   headRow: {
