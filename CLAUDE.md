@@ -16,10 +16,11 @@
 
 - Build locally. NEVER queue an EAS cloud build (`eas build` without `--local`) unless
   the user explicitly asks for one in the current conversation — the quota is paid.
-- Known machine issue: actool fails with "Failed to launch AssetCatalogSimulatorAgent
-  via CoreSimulator spawn" on every target (Xcode 16.2 on macOS 26 skew).
-  `sudo xcodebuild -runFirstLaunch` does NOT fix it; upgrading Xcode does. Until then:
-  Debug/simulator verification builds work with `EXCLUDED_SOURCE_FILE_NAMES='*.xcassets'`;
-  production builds are blocked on the Xcode upgrade. Do not fall back to EAS cloud.
+- Toolchain state (Aug 2026): Xcode 26.6 works end to end. After any Xcode upgrade,
+  three things must happen before builds work: the user accepts the license
+  (`sudo xcodebuild -license accept`), the iOS platform downloads
+  (`xcodebuild -downloadPlatform iOS`), and actool is smoke-tested before trusting
+  a long build. `eas metadata:push` needs an interactive Apple ID login; only the
+  binary submit (`eas submit`) works headless via EAS-stored credentials.
 - Active development may live in a git worktree (`git worktree list` before editing
   mobile code); Metro must run from the same worktree you built.
