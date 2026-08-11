@@ -234,12 +234,15 @@ export default function AddMedicationScreen() {
                   <MedVialIcon size={36} colorIndex={idx} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text variant="bodyStrong">{p.name}</Text>
-                    {/* The evidence tier, not the dose. A dose on a picker card
-                        reads like a recommendation. The dose belongs on the next
-                        screen, where the user types it. */}
-                    <Text variant="caption" color={colors.inkMuted}>
-                      {EVIDENCE_LABELS[p.evidence]}
-                    </Text>
+                    {/* The name carries the row. The evidence tier read the same
+                        on almost every card, so it moved to the estimate sheet.
+                        Only the missing half-life stays: it changes what the app
+                        can draw, so the user must see it before the pick. */}
+                    {p.evidence === 'unsourced' ? (
+                      <Text variant="caption" color={colors.inkMuted}>
+                        {EVIDENCE_LABELS.unsourced}
+                      </Text>
+                    ) : null}
                   </View>
                   <Pill tone="neutral">{p.category}</Pill>
                 </Card>

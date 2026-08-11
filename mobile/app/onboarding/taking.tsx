@@ -124,10 +124,11 @@ function PresetCard({
     <SelectionCard
       compact
       title={preset.name}
-      // The evidence tier, not the dose. A dose on a picker card reads like a
-      // recommendation. The dose belongs on the schedule screen, where the user
-      // confirms it.
-      description={EVIDENCE_LABELS[preset.evidence]}
+      // The name carries the row. The evidence tier read the same on almost
+      // every card, so it moved to the estimate sheet on Today. Only the
+      // missing half-life stays: it changes what the app can draw, so the user
+      // must see it before the pick.
+      description={preset.evidence === 'unsourced' ? EVIDENCE_LABELS.unsourced : undefined}
       selected={selected}
       onPress={onPress}
     />
