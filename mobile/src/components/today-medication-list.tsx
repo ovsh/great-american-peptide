@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
+  interpolate,
+  interpolateColor,
   runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
-  withTiming,
+  withSpring,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -15,11 +18,29 @@ import { GripVertical, Plus } from 'lucide-react-native';
 
 import { Text } from '@/components/Text';
 import { medicationColor } from '@/components/today-hero-card';
+import { PressScale, usePressScale } from '@/components/today-motion';
 import type { DoseState, TodayMedicationSummary } from '@/components/today-types';
-import { colors, elevation, fonts, motion, radius, spacing } from '@/theme';
+import {
+  colors,
+  easing,
+  elevation,
+  fonts,
+  motion,
+  radius,
+  spacing,
+  springTo,
+  springs,
+  timeTo,
+} from '@/theme';
 
 const ROW_HEIGHT = 54;
-const LONG_PRESS_MS = 220;
+/** Reveal slot for the colour dot and the grip, which trade places inside it. */
+const HANDLE_WIDTH = 16;
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const CHIP_FILL = [colors.surfaceMuted, colors.successSoft];
+const CHIP_EDGE = [colors.border, 'rgba(20,122,82,0.2)'];
+const CHIP_INK = [colors.inkMuted, colors.successDeep];
 
 /**
  * Every medication that is not the one in the hero card, plus the way to add
@@ -27,6 +48,13 @@ const LONG_PRESS_MS = 220;
  *
  * The order is the user's, and it is the order Today opens in, so the list is
  * the only place it can be set.
+ *
+ * Motion. The hold is a gate with nothing in it — 250 ms of stillness, and the
+ * platform cancels it if the finger travels, so a scroll never becomes a lift.
+ * What the lift changes is the mode of the card, and the card says so: every
+ * colour dot turns into a grip in the same 16 pt slot, so no row changes width
+ * and no text moves. The drop springs the row into its slot and the list only
+ * re-orders once it has landed, so nothing ever jumps a row-height.
  */
 export function TodayMedicationList({
   rows,
@@ -39,37 +67,100 @@ export function TodayMedicationList({
   onReorder: (medicationIds: readonly string[]) => void;
   onDragChange: (dragging: boolean) => void;
 }) {
+  const reduced = useReducedMotion();
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIndex = useSharedValue(-1);
   const hoverIndex = useSharedValue(-1);
   const dragY = useSharedValue(0);
+  /** 0 at rest, 1 while a row is off the card. Drives the lift and the grips. */
+  const lift = useSharedValue(0);
+  const awaitingOrder = useRef(false);
+  const failsafe = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** True from the moment a row is picked up until the finger leaves the card. */
+  const holding = useRef(false);
+
+  const order = rows.map((row) => row.medication.id).join('|');
+
+  const clearDrag = useCallback(() => {
+    activeIndex.value = -1;
+    hoverIndex.value = -1;
+    dragY.value = 0;
+  }, [activeIndex, dragY, hoverIndex]);
+
+  const releaseDrag = useCallback(() => {
+    awaitingOrder.current = false;
+    holding.current = false;
+    if (failsafe.current !== null) {
+      clearTimeout(failsafe.current);
+      failsafe.current = null;
+    }
+    setActiveId(null);
+    onDragChange(false);
+    lift.value = springTo(0, { config: springs.settle, reduced });
+  }, [lift, onDragChange, reduced]);
 
   const beginDrag = useCallback((medicationId: string) => {
+    holding.current = true;
     setActiveId(medicationId);
     onDragChange(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [onDragChange]);
 
-  const endDrag = useCallback(() => {
-    setActiveId(null);
-    onDragChange(false);
-  }, [onDragChange]);
+  const endHold = useCallback(() => {
+    holding.current = false;
+  }, []);
 
-  const commit = useCallback((from: number, to: number) => {
-    if (from === to) return;
+  const cancelDrag = useCallback(() => {
+    clearDrag();
+    releaseDrag();
+  }, [clearDrag, releaseDrag]);
+
+  /**
+   * The row has landed on its slot and holds itself there with a transform. The
+   * new order is applied now, and the transform is only released once React has
+   * drawn it — otherwise the row would sit one slot out for a frame.
+   */
+  const landDrag = useCallback((from: number, to: number) => {
+    if (from === to) {
+      cancelDrag();
+      return;
+    }
     const ids = rows.map((row) => row.medication.id);
     const moved = ids[from];
-    if (moved === undefined) return;
+    if (moved === undefined) {
+      cancelDrag();
+      return;
+    }
     ids.splice(from, 1);
     ids.splice(to, 0, moved);
+    awaitingOrder.current = true;
+    // If the new order never arrives — a rejected write, a screen going away —
+    // the card must not stay in drag mode.
+    failsafe.current = setTimeout(cancelDrag, motion.slow);
     Haptics.selectionAsync().catch(() => {});
     onReorder(ids);
-  }, [onReorder, rows]);
+  }, [cancelDrag, onReorder, rows]);
+
+  useLayoutEffect(() => {
+    if (!awaitingOrder.current) return;
+    // A second row was picked up while the first was still landing. That gesture
+    // owns the shared values now, and clearing them would drop it.
+    if (holding.current) {
+      awaitingOrder.current = false;
+      return;
+    }
+    clearDrag();
+    releaseDrag();
+  }, [clearDrag, order, releaseDrag]);
+
+  useEffect(() => () => {
+    if (failsafe.current !== null) clearTimeout(failsafe.current);
+  }, []);
 
   return (
     <View testID="today-medication-list" style={styles.card}>
       <View style={styles.rows}>
-        <DropPlaceholder activeIndex={activeIndex} hoverIndex={hoverIndex} />
+        <DropPlaceholder hoverIndex={hoverIndex} lift={lift} />
         {rows.map((row, index) => (
           <MedicationRow
             key={row.medication.id}
@@ -81,30 +172,33 @@ export function TodayMedicationList({
             activeIndex={activeIndex}
             hoverIndex={hoverIndex}
             dragY={dragY}
+            lift={lift}
             onSelect={onSelect}
             onBeginDrag={beginDrag}
-            onEndDrag={endDrag}
-            onCommit={commit}
+            onEndHold={endHold}
+            onCancelDrag={cancelDrag}
+            onLand={landDrag}
           />
         ))}
       </View>
 
-      <Pressable
-        testID="today-add-medication"
-        accessibilityRole="button"
-        accessibilityLabel="Add medication"
-        onPress={() => router.push('/medications/new')}
-        style={({ pressed }) => [
-          styles.row,
-          rows.length > 0 && styles.rowDivided,
-          pressed && styles.rowPressed,
-        ]}
-      >
-        <View style={styles.addCircle}>
-          <Plus size={14} strokeWidth={2.4} color={colors.successDeep} />
-        </View>
-        <Text color={colors.successDeep} style={styles.addLabel}>Add medication</Text>
-      </Pressable>
+      <PressScale>
+        {(handlers) => (
+          <Pressable
+            testID="today-add-medication"
+            accessibilityRole="button"
+            accessibilityLabel="Add medication"
+            onPress={() => router.push('/medications/new')}
+            style={[styles.row, rows.length > 0 && styles.rowDivided]}
+            {...handlers}
+          >
+            <View style={styles.addCircle}>
+              <Plus size={14} strokeWidth={2.4} color={colors.successDeep} />
+            </View>
+            <Text color={colors.successDeep} style={styles.addLabel}>Add medication</Text>
+          </Pressable>
+        )}
+      </PressScale>
     </View>
   );
 }
@@ -118,10 +212,12 @@ function MedicationRow({
   activeIndex,
   hoverIndex,
   dragY,
+  lift,
   onSelect,
   onBeginDrag,
-  onEndDrag,
-  onCommit,
+  onEndHold,
+  onCancelDrag,
+  onLand,
 }: {
   summary: TodayMedicationSummary;
   index: number;
@@ -131,20 +227,25 @@ function MedicationRow({
   activeIndex: SharedValue<number>;
   hoverIndex: SharedValue<number>;
   dragY: SharedValue<number>;
+  lift: SharedValue<number>;
   onSelect: (medicationId: string) => void;
   onBeginDrag: (medicationId: string) => void;
-  onEndDrag: () => void;
-  onCommit: (from: number, to: number) => void;
+  onEndHold: () => void;
+  onCancelDrag: () => void;
+  onLand: (from: number, to: number) => void;
 }) {
+  const reduced = useReducedMotion();
   const medication = summary.medication;
   const chip = rowChip(summary);
+  const press = usePressScale();
 
   const pan = Gesture.Pan()
-    .activateAfterLongPress(LONG_PRESS_MS)
+    .activateAfterLongPress(motion.hold)
     .onStart(() => {
       activeIndex.value = index;
       hoverIndex.value = index;
       dragY.value = 0;
+      lift.value = reduced ? 1 : withSpring(1, springs.lift);
       runOnJS(onBeginDrag)(medication.id);
     })
     .onUpdate((event) => {
@@ -153,87 +254,165 @@ function MedicationRow({
       hoverIndex.value = Math.min(Math.max(index + steps, 0), count - 1);
     })
     .onEnd(() => {
-      runOnJS(onCommit)(index, hoverIndex.value);
+      // The row travels to the slot it is over, and the list is told to re-order
+      // only once it is there.
+      const to = hoverIndex.value;
+      const slot = (to - index) * ROW_HEIGHT;
+      if (reduced) {
+        dragY.value = slot;
+        runOnJS(onLand)(index, to);
+        return;
+      }
+      dragY.value = withSpring(slot, springs.settle, () => {
+        runOnJS(onLand)(index, to);
+      });
     })
-    .onFinalize(() => {
+    .onFinalize((_event, success) => {
+      if (success) {
+        runOnJS(onEndHold)();
+        return;
+      }
       activeIndex.value = -1;
       hoverIndex.value = -1;
       dragY.value = 0;
-      runOnJS(onEndDrag)();
+      runOnJS(onCancelDrag)();
     });
 
-  const animated = useAnimatedStyle(() => {
-    if (activeIndex.value === index) {
+  const outer = useAnimatedStyle(() => {
+    const held = activeIndex.value === index;
+    if (held) {
       return {
         zIndex: 3,
         transform: [
           { translateY: dragY.value },
-          { scale: 1.02 },
-          { rotate: '-1deg' },
+          { scale: 1 + 0.025 * lift.value },
+          { rotate: `${-lift.value}deg` },
         ],
       };
-    }
-    if (activeIndex.value < 0) {
-      return { zIndex: 0, transform: [{ translateY: withTiming(0, { duration: motion.fast }) }] };
     }
     const from = activeIndex.value;
     const to = hoverIndex.value;
     let shift = 0;
-    if (from < to && index > from && index <= to) shift = -ROW_HEIGHT;
-    else if (from > to && index >= to && index < from) shift = ROW_HEIGHT;
+    if (from >= 0) {
+      if (from < to && index > from && index <= to) shift = -ROW_HEIGHT;
+      else if (from > to && index >= to && index < from) shift = ROW_HEIGHT;
+    }
     return {
       zIndex: 0,
-      transform: [{ translateY: withTiming(shift, { duration: motion.fast }) }],
+      transform: [
+        { translateY: reduced ? shift : withSpring(shift, springs.settle) },
+        { scale: 1 - 0.03 * press.pressed.value },
+      ],
     };
   });
 
+  const surface = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(press.pressed.value, [0, 1], [
+      colors.surface,
+      colors.surfaceMuted,
+    ]),
+    shadowOpacity: 0.1 * lift.value * (activeIndex.value === index ? 1 : 0),
+    shadowRadius: 26 * lift.value,
+  }));
+
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={animated}>
-        <Pressable
+      <Animated.View style={outer}>
+        <AnimatedPressable
           testID={`today-medication-row-${medication.id}`}
           accessibilityRole="button"
           accessibilityLabel={`${medication.name}, ${chip.spoken}`}
           accessibilityHint="Shows this medication in the card above. Hold to reorder."
           onPress={() => onSelect(medication.id)}
-          style={({ pressed }) => [
+          onPressIn={dragging ? undefined : press.onPressIn}
+          onPressOut={dragging ? undefined : press.onPressOut}
+          style={[
             styles.row,
             styles.medRow,
             index > 0 && styles.rowDivided,
             active && styles.rowLift,
-            pressed && !dragging && styles.rowPressed,
+            surface,
           ]}
         >
-          {dragging ? <GripVertical size={16} color={colors.inkSubtle} /> : null}
-          <View style={[styles.dot, { backgroundColor: medicationColor(medication.color_index) }]} />
+          <RowHandle color={medicationColor(medication.color_index)} lift={lift} />
           <Text numberOfLines={1} style={styles.name}>{medication.name}</Text>
-          <View style={[styles.chip, chip.tone === 'due' && styles.chipDue]}>
-            <Text
-              align="center"
-              style={styles.chipLabel}
-              color={chip.tone === 'due' ? colors.successDeep : colors.inkMuted}
-            >
-              {chip.label}
-            </Text>
-          </View>
-        </Pressable>
+          <RowChip label={chip.label} due={chip.tone === 'due'} reduced={reduced} />
+        </AnimatedPressable>
       </Animated.View>
     </GestureDetector>
   );
 }
 
+/**
+ * The colour dot and the grip share one slot and trade places inside it. Nothing
+ * widens, so the name and the chip beside it never move — the row only changes
+ * what it says about itself.
+ */
+function RowHandle({ color, lift }: { color: string; lift: SharedValue<number> }) {
+  const dot = useAnimatedStyle(() => ({
+    opacity: 1 - lift.value,
+    transform: [{ scale: 0.8 + 0.2 * (1 - lift.value) }],
+  }));
+  const grip = useAnimatedStyle(() => ({
+    opacity: lift.value,
+    transform: [{ scale: 0.8 + 0.2 * lift.value }],
+  }));
+
+  return (
+    <View style={styles.handle}>
+      <Animated.View style={[styles.handleLayer, dot]}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+      </Animated.View>
+      <Animated.View style={[styles.handleLayer, grip]}>
+        <GripVertical size={16} color={colors.inkSubtle} />
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Due, Done, or the day. The words cut; the colour does not. */
+function RowChip({ label, due, reduced }: { label: string; due: boolean; reduced: boolean }) {
+  const tone = useSharedValue(due ? 1 : 0);
+
+  useEffect(() => {
+    tone.value = timeTo(due ? 1 : 0, {
+      duration: motion.fast,
+      easing: easing.standard,
+      reduced,
+    });
+  }, [due, reduced, tone]);
+
+  const box = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(tone.value, [0, 1], CHIP_FILL),
+    borderColor: interpolateColor(tone.value, [0, 1], CHIP_EDGE),
+  }));
+  const ink = useAnimatedStyle(() => ({
+    color: interpolateColor(tone.value, [0, 1], CHIP_INK),
+  }));
+
+  return (
+    <Animated.View style={[styles.chip, box]}>
+      <Animated.Text style={[styles.chipLabel, ink]}>{label}</Animated.Text>
+    </Animated.View>
+  );
+}
+
 /** The slot the lifted row drops into. It is the only thing that says where. */
 function DropPlaceholder({
-  activeIndex,
   hoverIndex,
+  lift,
 }: {
-  activeIndex: SharedValue<number>;
   hoverIndex: SharedValue<number>;
+  lift: SharedValue<number>;
 }) {
-  const style = useAnimatedStyle(() => ({
-    opacity: activeIndex.value < 0 ? 0 : 1,
-    transform: [{ translateY: withTiming(Math.max(0, hoverIndex.value) * ROW_HEIGHT, { duration: motion.fast }) }],
-  }));
+  const reduced = useReducedMotion();
+  const style = useAnimatedStyle(() => {
+    const slot = Math.max(0, hoverIndex.value) * ROW_HEIGHT;
+    return {
+      opacity: interpolate(lift.value, [0, 1], [0, 1], 'clamp'),
+      transform: [{ translateY: reduced ? slot : withSpring(slot, springs.settle) }],
+    };
+  });
 
   return <Animated.View pointerEvents="none" style={[styles.placeholder, style]} />;
 }
@@ -293,13 +472,11 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.divider,
   },
-  rowPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
   rowLift: {
     borderTopColor: 'transparent',
     borderRadius: 14,
-    ...elevation.raised,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
   },
   placeholder: {
     position: 'absolute',
@@ -312,6 +489,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(20,122,82,0.45)',
     borderRadius: 14,
     backgroundColor: colors.successSoft,
+  },
+  handle: {
+    width: HANDLE_WIDTH,
+    height: HANDLE_WIDTH,
+  },
+  handleLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 10,
@@ -329,6 +515,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansSemiBold,
     fontSize: 12,
     lineHeight: 16,
+    textAlign: 'center',
   },
   chip: {
     minWidth: 44,
@@ -336,12 +523,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-  },
-  chipDue: {
-    borderColor: 'rgba(20,122,82,0.2)',
-    backgroundColor: colors.successSoft,
   },
   addCircle: {
     width: 26,

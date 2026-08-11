@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { ChevronRight, Scale, Smile } from 'lucide-react-native';
 
 import { Text } from '@/components/Text';
+import { PressScale } from '@/components/today-motion';
 import type { MeasurementRow } from '@/db/types';
 import { sideEffectLabel } from '@/domain/sideEffects';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
@@ -34,41 +35,55 @@ export function TodayTrackCard({
     <View style={styles.card}>
       <Text style={styles.title}>Track today</Text>
 
-      <Pressable
-        testID="today-weight-row"
-        accessibilityRole="button"
-        accessibilityLabel={`Log weight. ${weightValue}`}
-        onPress={() => router.push('/log-weight')}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      >
-        <View style={[styles.icon, styles.weightIcon]}>
-          <Scale size={18} color={colors.amber} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={styles.label}>Weight</Text>
-          <Text style={styles.value} color={colors.inkMuted} numberOfLines={1}>{weightValue}</Text>
-        </View>
-        <ChevronRight size={17} color={colors.inkSubtle} />
-      </Pressable>
+      <PressScale>
+        {(handlers) => (
+          <Pressable
+            testID="today-weight-row"
+            accessibilityRole="button"
+            accessibilityLabel={`Log weight. ${weightValue}`}
+            onPress={() => router.push('/log-weight')}
+            style={styles.row}
+            {...handlers}
+          >
+            <View style={[styles.icon, styles.weightIcon]}>
+              <Scale size={18} color={colors.amber} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={styles.label}>Weight</Text>
+              <Text style={styles.value} color={colors.inkMuted} numberOfLines={1}>
+                {weightValue}
+              </Text>
+            </View>
+            <ChevronRight size={17} color={colors.inkSubtle} />
+          </Pressable>
+        )}
+      </PressScale>
 
       <View style={styles.divider} />
 
-      <Pressable
-        testID="today-side-effect-row"
-        accessibilityRole="button"
-        accessibilityLabel={`Log side effect. ${sideEffectValue}`}
-        onPress={() => router.push('/log-side-effect')}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      >
-        <View style={[styles.icon, styles.sideEffectIcon]}>
-          <Smile size={18} color={colors.violet} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={styles.label}>Side effects</Text>
-          <Text style={styles.value} color={colors.inkMuted} numberOfLines={1}>{sideEffectValue}</Text>
-        </View>
-        <ChevronRight size={17} color={colors.inkSubtle} />
-      </Pressable>
+      <PressScale>
+        {(handlers) => (
+          <Pressable
+            testID="today-side-effect-row"
+            accessibilityRole="button"
+            accessibilityLabel={`Log side effect. ${sideEffectValue}`}
+            onPress={() => router.push('/log-side-effect')}
+            style={styles.row}
+            {...handlers}
+          >
+            <View style={[styles.icon, styles.sideEffectIcon]}>
+              <Smile size={18} color={colors.violet} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={styles.label}>Side effects</Text>
+              <Text style={styles.value} color={colors.inkMuted} numberOfLines={1}>
+                {sideEffectValue}
+              </Text>
+            </View>
+            <ChevronRight size={17} color={colors.inkSubtle} />
+          </Pressable>
+        )}
+      </PressScale>
     </View>
   );
 }
@@ -105,9 +120,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xs,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceMuted,
   },
   icon: {
     width: ICON_SIZE,

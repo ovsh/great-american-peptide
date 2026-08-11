@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Info } from 'lucide-react-native';
 
@@ -7,10 +8,11 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Text } from '@/components/Text';
 import { HERO_CHART_HEIGHT, TodayLevelChart } from '@/components/today-level-chart';
 import { TodayLogBand } from '@/components/today-log-band';
+import { useSwapTransition, useTint } from '@/components/today-motion';
 import type { TodayMedicationSummary } from '@/components/today-types';
 import { TodayWeekAxis } from '@/components/today-week-axis';
 import { EVIDENCE_LABELS, getPreset, type Unit } from '@/domain/peptides';
-import { colors, elevation, radius, spacing } from '@/theme';
+import { colors, elevation, motion, radius, spacing } from '@/theme';
 
 /** The line Poke may never drop, wherever it puts it. */
 const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisions.';
@@ -19,20 +21,28 @@ const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisio
  * The focused medication, and the whole of what Today says about it: what it
  * is, where the level stands, what the week looks like, and the one action.
  *
- * The chart, the axis and the band are their own components. A motion pass
- * lands on the band and the chart next, and each of them has to animate
- * without the card knowing.
+ * The chart, the axis and the band are their own components, and each of them
+ * animates without the card knowing. What the card owns is the line at the top:
+ * the dot tints to the new medication, and the name and dose leave together and
+ * come back as the new pair, because they are one fact about one medication and
+ * must never be seen half swapped.
+ *
+ * The info button is excluded from all of it. Legal copy does not move.
  */
 export function TodayHeroCard({
   summary,
   pro,
   contentWidth,
   nowMs,
+  entered,
+  logToken,
 }: {
   summary: TodayMedicationSummary;
   pro: boolean;
   contentWidth: number;
   nowMs: number;
+  entered: boolean;
+  logToken: number;
 }) {
   const [aboutOpen, setAboutOpen] = useState(false);
   const { medication, level } = summary;
@@ -40,21 +50,26 @@ export function TodayHeroCard({
   const unit = unitLabel(medication.default_unit);
   const preset = medication.preset_id ? getPreset(medication.preset_id) : undefined;
 
-  const valueLabel = pro && level.kind === 'curve'
-    ? formatLevel(level.current, medication.default_unit)
-    : null;
+  const value = pro && level.kind === 'curve' ? level.current : null;
+  const tint = useTint(color);
+  const dotStyle = useAnimatedStyle(() => ({ backgroundColor: tint.value }));
+  const title = useSwapTransition(
+    { name: medication.name, dose: `${formatAmount(medication.default_dose, medication.default_unit)} ${unit}` },
+    medication.id,
+    { swapAt: motion.press, axis: 'x', distance: 10, out: motion.press },
+  );
 
   return (
     <View testID="today-hero-card" style={styles.shadow}>
       <View style={styles.clip}>
         <View style={styles.header}>
-          <View style={[styles.dot, { backgroundColor: color }]} />
-          <Text variant="h2" numberOfLines={1} style={styles.name}>{medication.name}</Text>
-          <View style={styles.dosePill}>
-            <Text variant="caption" color={colors.inkMuted}>
-              {formatAmount(medication.default_dose, medication.default_unit)} {unit}
-            </Text>
-          </View>
+          <Animated.View style={[styles.dot, dotStyle]} />
+          <Animated.View style={[styles.title, title.style]}>
+            <Text variant="h2" numberOfLines={1} style={styles.name}>{title.shown.name}</Text>
+            <View style={styles.dosePill}>
+              <Text variant="caption" color={colors.inkMuted}>{title.shown.dose}</Text>
+            </View>
+          </Animated.View>
           <Pressable
             testID="today-estimate-info"
             accessibilityRole="button"
@@ -75,14 +90,25 @@ export function TodayHeroCard({
             fromMs={summary.windowFromMs}
             toMs={summary.windowToMs}
             nowMs={nowMs}
-            valueLabel={valueLabel}
+            medicationId={medication.id}
+            value={value}
+            valueDecimals={levelDecimals(value, medication.default_unit)}
             unitLabel={unit}
             onUnlock={pro ? null : () => router.push('/paywall')}
             emptyHint="Log a shot to see your level"
+            entered={entered}
+            logToken={logToken}
           />
         </View>
 
-        <TodayWeekAxis week={summary.week} color={color} medicationName={medication.name} />
+        <TodayWeekAxis
+          week={summary.week}
+          color={color}
+          medicationName={medication.name}
+          medicationId={medication.id}
+          entered={entered}
+          logToken={logToken}
+        />
 
         <TodayLogBand
           dose={summary.dose}
@@ -128,8 +154,16 @@ export function formatAmount(value: number, unit: Unit): string {
 
 /** The estimate under the now dot. Two decimals below a milligram, none for mcg. */
 export function formatLevel(value: number, unit: Unit): string {
-  if (unit === 'mcg') return String(Math.round(value));
-  return value.toFixed(value < 1 ? 2 : 1);
+  return value.toFixed(levelDecimals(value, unit));
+}
+
+/**
+ * The same rule, as a count of decimals, because the chart counts the estimate
+ * up on the UI thread and has to know how to read a number it has not reached.
+ */
+export function levelDecimals(value: number | null, unit: Unit): number {
+  if (unit === 'mcg') return 0;
+  return (value ?? 0) < 1 ? 2 : 1;
 }
 
 const styles = StyleSheet.create({
@@ -153,6 +187,12 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: radius.pill,
+  },
+  title: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   name: {
     flex: 1,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -8,6 +8,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { format, isSameDay } from 'date-fns';
 import { Flame } from 'lucide-react-native';
@@ -18,6 +26,7 @@ import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { TodayHeroCard } from '@/components/today-hero-card';
 import { TodayMedicationList } from '@/components/today-medication-list';
+import { TodayRise, useSwapTransition } from '@/components/today-motion';
 import { TodayTrackCard } from '@/components/today-track-card';
 import type {
   DayMark,
@@ -53,7 +62,16 @@ import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects'
 import { maybePromptForReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
 import { useIsPro } from '@/stores/entitlement';
-import { colors, radius, spacing } from '@/theme';
+import {
+  arrivalBeats,
+  colors,
+  easing,
+  logBeats,
+  motion,
+  radius,
+  rise,
+  spacing,
+} from '@/theme';
 import { endOfDay, startOfDay } from '@/utils/date';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -62,6 +80,15 @@ const CONTENT_MAX_WIDTH = 600;
 const WEEK_LOOKBACK_DAYS = 3;
 const CURVE_STEPS_PAST = 100;
 const CURVE_STEPS_FUTURE = 40;
+
+/** Everything one load produces, held together so it can be applied in one go. */
+interface TodayData {
+  medications: MedicationRow[];
+  injections: Record<string, InjectionRow[]>;
+  weights: MeasurementRow[];
+  preferences: PreferencesRow | null;
+  sideEffects: SideEffectLog[];
+}
 
 interface TodayDashboard {
   medications: TodayMedicationSummary[];
@@ -90,6 +117,27 @@ export default function TodayScreen() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  /**
+   * Bumped once per shot the user has just logged, and read by the hero card as
+   * the cue to play the log sequence. Zero is a screen with nothing to celebrate.
+   */
+  const [logToken, setLogToken] = useState(0);
+  /** Today's shot ids as the screen last drew them. Null until the first load. */
+  const drawnShots = useRef<Set<string> | null>(null);
+  const onScreen = useRef(false);
+  const held = useRef<{ data: TodayData; logged: boolean } | null>(null);
+
+  const apply = useCallback((data: TodayData, logged: boolean) => {
+    setMedications(data.medications);
+    setInjections(data.injections);
+    setWeights(data.weights);
+    setPreferences(data.preferences);
+    setSideEffects(data.sideEffects);
+    setHasLoaded(true);
+    // In the same batch as the data, so the card takes its "before" snapshot
+    // from the curve the user actually left behind.
+    if (logged) setLogToken((token) => token + 1);
+  }, []);
 
   const load = useCallback(async () => {
     setLoadError(false);
@@ -108,23 +156,43 @@ export default function TodayScreen() {
       active.forEach((medication, index) => {
         byMedication[medication.id] = shotLists[index] ?? [];
       });
-      setMedications(active);
-      setInjections(byMedication);
-      setWeights(weightRows);
-      setPreferences(preferenceRow);
-      setSideEffects(effectRows);
-      setHasLoaded(true);
+
+      const today = todayShotIds(byMedication, Date.now());
+      const seen = drawnShots.current;
+      const logged = seen !== null && [...today].some((id) => !seen.has(id));
+      drawnShots.current = today;
+
+      const data: TodayData = {
+        medications: active,
+        injections: byMedication,
+        weights: weightRows,
+        preferences: preferenceRow,
+        sideEffects: effectRows,
+      };
+      // Logging happens on its own screen, so the new shot almost always arrives
+      // while Today is behind it. Holding the data until Today is back is what
+      // lets the sequence play at all: applied now, the curve would already have
+      // moved by the time anyone could see it move.
+      if (onScreen.current) apply(data, logged);
+      else held.current = { data, logged: logged || (held.current?.logged ?? false) };
     } catch (error) {
       setLoadError(true);
       throw error;
     }
-  }, []);
+  }, [apply]);
 
   useEffect(() => {
     load().catch(() => {});
   }, [dataVersion, load]);
 
   useFocusEffect(useCallback(() => {
+    onScreen.current = true;
+    const waiting = held.current;
+    if (waiting) {
+      held.current = null;
+      apply(waiting.data, waiting.logged);
+    }
+
     let midnightTimer: ReturnType<typeof setTimeout>;
     const syncClock = () => {
       const current = Date.now();
@@ -141,10 +209,11 @@ export default function TodayScreen() {
 
     syncClock();
     return () => {
+      onScreen.current = false;
       clearTimeout(midnightTimer);
       appStateSubscription.remove();
     };
-  }, []));
+  }, [apply]));
 
   const dashboard = useMemo(
     () => buildDashboard({
@@ -259,48 +328,104 @@ export default function TodayScreen() {
           />
         )}
       >
-        <TodayHeader streak={dashboard.streak.current} now={now} />
+        <TodayRise show delay={arrivalBeats.header} distance={rise.line}>
+          <TodayHeader streak={dashboard.streak.current} now={now} logToken={logToken} />
+        </TodayRise>
 
         {!hasLoaded ? (
           loadError ? <TodayLoadError onRetry={() => load().catch(() => {})} /> : <TodayLoading />
         ) : (
           <>
             {focused ? (
-              <TodayHeroCard
-                summary={focused}
-                pro={pro}
-                contentWidth={contentWidth}
-                nowMs={now}
-              />
+              <TodayRise show delay={arrivalBeats.hero} distance={rise.card}>
+                <TodayHeroCard
+                  summary={focused}
+                  pro={pro}
+                  contentWidth={contentWidth}
+                  nowMs={now}
+                  entered={hasLoaded}
+                  logToken={logToken}
+                />
+              </TodayRise>
             ) : null}
 
-            <TodayMedicationList
-              rows={rest}
-              onSelect={selectMedication}
-              onReorder={reorder}
-              onDragChange={setDragging}
-            />
+            <TodayRise show delay={arrivalBeats.list} distance={rise.card}>
+              <TodayMedicationList
+                rows={rest}
+                onSelect={selectMedication}
+                onReorder={reorder}
+                onDragChange={setDragging}
+              />
+            </TodayRise>
           </>
         )}
 
-        <TodayTrackCard
-          weight={dashboard.weight}
-          weightUnit={dashboard.weightUnit}
-          sideEffect={dashboard.sideEffect}
-        />
+        <TodayRise show delay={arrivalBeats.track} distance={rise.card}>
+          <TodayTrackCard
+            weight={dashboard.weight}
+            weightUnit={dashboard.weightUnit}
+            sideEffect={dashboard.sideEffect}
+          />
+        </TodayRise>
       </ScrollView>
     </View>
   );
 }
 
-function TodayHeader({ streak, now }: { streak: number; now: number }) {
+/**
+ * The date, and the streak if there is one to report.
+ *
+ * The flame is the last thing a logged shot touches, six beats after the band —
+ * far enough behind the curve that it reads as a consequence of it. It nudges
+ * once. A streak is a fact about the user, not a prize the app hands out.
+ */
+function TodayHeader({
+  streak,
+  now,
+  logToken,
+}: {
+  streak: number;
+  now: number;
+  logToken: number;
+}) {
+  const reduced = useReducedMotion();
+  const nudge = useSharedValue(0);
+  const played = useRef(logToken);
+  const count = useSwapTransition(streak, `${streak}`, {
+    swapAt: motion.press,
+    axis: 'y',
+    distance: 6,
+    out: motion.press,
+  });
+
+  useEffect(() => {
+    if (logToken === played.current) return;
+    played.current = logToken;
+    if (reduced) return;
+    nudge.value = withDelay(
+      logBeats.streak,
+      withSequence(
+        withTiming(1, { duration: motion.base * 0.45, easing: easing.out }),
+        withTiming(0, { duration: motion.base * 0.55, easing: easing.standard }),
+      ),
+    );
+  }, [logToken, nudge, reduced]);
+
+  const flame = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + 0.16 * nudge.value }, { rotate: `${-7 * nudge.value}deg` }],
+  }));
+
   return (
     <View style={styles.header}>
       <Text variant="bodyStrong">{format(now, 'EEEE, MMMM d')}</Text>
       {streak >= 2 ? (
         <View accessible accessibilityLabel={`${streak}-week streak`} style={styles.streakChip}>
-          <Flame size={15} fill={colors.accent} color={colors.accent} />
-          <Text variant="caption" color={colors.successDeep}>{streak}</Text>
+          <Animated.View style={flame}>
+            <Flame size={15} fill={colors.accent} color={colors.accent} />
+          </Animated.View>
+          <Animated.View style={count.style}>
+            <Text variant="caption" color={colors.successDeep}>{count.shown}</Text>
+          </Animated.View>
         </View>
       ) : null}
     </View>
@@ -324,6 +449,20 @@ function TodayLoadError({ onRetry }: { onRetry: () => void }) {
       <Button onPress={onRetry}>Try again</Button>
     </Card>
   );
+}
+
+/** Which shots on file were given today, by id, across every medication. */
+function todayShotIds(
+  injections: Readonly<Record<string, readonly InjectionRow[]>>,
+  now: number,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const rows of Object.values(injections)) {
+    for (const row of rows) {
+      if (isSameDay(row.taken_at, now)) ids.add(row.id);
+    }
+  }
+  return ids;
 }
 
 function buildDashboard({

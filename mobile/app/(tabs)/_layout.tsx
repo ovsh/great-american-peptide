@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { ChartLine, Clock3, House, Plus, UserRound } from 'lucide-react-native';
@@ -8,7 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LogActionSheet } from '@/components/LogActionSheet';
 import { Text } from '@/components/Text';
+import { usePressScale } from '@/components/today-motion';
 import { colors, elevation, fonts, spacing } from '@/theme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const TAB_ITEMS: readonly { name: string; label: string; icon: LucideIcon }[] = [
   { name: 'index', label: 'Today', icon: House },
@@ -43,6 +47,9 @@ export default function TabLayout() {
 function PokeTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [sheetOpen, setSheetOpen] = useState(false);
+  // The one control on the screen that presses further than the rest: it is the
+  // largest target and it opens a sheet, so .92 rather than .97.
+  const fab = usePressScale(0.92);
 
   return (
     <>
@@ -56,14 +63,16 @@ function PokeTabBar({ state, navigation }: BottomTabBarProps) {
           return (
             <View key={item.name} style={styles.slot}>
               {index === 2 ? (
-                <Pressable
+                <AnimatedPressable
                   accessibilityRole="button"
                   accessibilityLabel="Open the action menu"
                   onPress={() => setSheetOpen(true)}
-                  style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+                  onPressIn={fab.onPressIn}
+                  onPressOut={fab.onPressOut}
+                  style={[styles.addButton, fab.style]}
                 >
                   <Plus size={28} strokeWidth={2.4} color={colors.inkInverse} />
-                </Pressable>
+                </AnimatedPressable>
               ) : null}
               <Pressable
                 accessibilityRole="tab"

@@ -39,12 +39,6 @@ export const elevation = {
   },
 } as const;
 
-export const motion = {
-  fast: 150,
-  base: 220,
-  slow: 320,
-} as const;
-
 // Onboarding's step transition, measured off the MeAgain recording at its native
 // 59.94 fps rather than guessed. See `docs/meagain-onboarding-map.md` § Motion.
 //
