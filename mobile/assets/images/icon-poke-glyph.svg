@@ -7,9 +7,5 @@
     <path d="M-58 120H58L38 178H-38Z"/>
     <rect x="-11" y="166" width="22" height="126" rx="11"/>
     <path d="M-11 286H11L0 326Z"/>
-    <rect x="-142" y="-126" width="52" height="16" rx="8"/>
-    <rect x="-142" y="-68" width="36" height="16" rx="8"/>
-    <rect x="-142" y="-10" width="52" height="16" rx="8"/>
-    <rect x="-142" y="48" width="36" height="16" rx="8"/>
   </g>
 </svg>
