@@ -71,9 +71,10 @@ interface WheelPickerProps<T extends string | number> {
    * range, and 4 ft 0 in is nobody's opening guess at their own height, so a
    * wheel that can open unanswered says where to open instead.
    *
-   * This is a resting position and not an answer: the wheel writes nothing
-   * until the finger settles it, so `canContinue` stays false until the user
-   * has actually chosen. Leave it out and the wheel opens on row zero.
+   * The wheel itself writes nothing until the finger settles it. A screen that
+   * wants the row under the band to count as the answer from the first frame
+   * seeds its own store on mount, the way the height, weight, goal weight and
+   * birthday screens do. Leave it out and the wheel opens on row zero.
    */
   restValue?: T;
 }
@@ -116,11 +117,11 @@ export function WheelPicker<T extends string | number>({
    * The wheel scrolls itself to its opening row, and on iOS that placement comes
    * back through `onMomentumScrollEnd` looking exactly like the end of a fling.
    * A wheel that can open unanswered then took its own resting row as the
-   * answer: the height and the weight screens enabled Continue before anybody
-   * touched them, and the plan card drew a BMI and a distance from numbers
-   * nobody had given. Nothing settles until this is true. `onScrollBeginDrag`
+   * answer, and a screen that wants no answer until one is given had no way to
+   * tell the two apart. Nothing settles until this is true. `onScrollBeginDrag`
    * sets it on native, `WEB_GESTURES` sets it on web, and a tap on a row sets it
-   * because a tap is an answer too.
+   * because a tap is an answer too. A screen that does want its resting row
+   * counted from the first frame seeds its own store instead. See `restValue`.
    */
   const gestured = useRef(false);
   const webSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +191,15 @@ export function WheelPicker<T extends string | number>({
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / ITEM_HEIGHT);
     setCenterIndex((current) => (current === index ? current : index));
+    // The row under the band is the answer on the frame it arrives there, not on
+    // the frame the scroll stops. Reporting it only at the end left everything
+    // drawn from the value, such as the distance line on the goal weight screen,
+    // reading a row behind the wheel the whole way down.
+    //
+    // A bounce past either end is the one offset this skips. `settle` clamps and
+    // `centerIndex` does not, and the two disagreeing would send the effect below
+    // scrolling the wheel back mid-bounce. The end of the scroll settles it.
+    if (index >= 0 && index < values.length) settle(offsetY);
     // On web the scroll is the only signal there is, so a wheel the user has
     // moved settles when its scroll goes quiet. See `WEB_SETTLE_MS`.
     if (Platform.OS !== 'web' || !gestured.current) return;

@@ -26,7 +26,6 @@ export default function JourneyScreen() {
       backHref="/onboarding/privacy"
       transition={transition}
       title="Have you started yet?"
-      subtitle="Your answer changes the next question."
       footer={(
         <Button
           disabled={!journeyStage}

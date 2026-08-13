@@ -1,16 +1,18 @@
-import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Info } from 'lucide-react-native';
 
+import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
+import { DoseWheel } from '@/components/DoseWheel';
 import { ChoicePill, OnboardingScreen } from '@/components/OnboardingScreen';
+import { ShotDayStrip } from '@/components/ShotDayStrip';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
-import { getPreset, type Route, type Unit } from '@/domain/peptides';
+import { getPreset, type Route } from '@/domain/peptides';
 import {
   CUSTOM_MEDICATION_ID,
-  SHOT_DAY_OPTIONS,
   firstPostScheduleHref,
   medicationDisplayName,
   onboardingTotalSteps,
@@ -18,7 +20,7 @@ import {
   type OnboardingFrequency,
   useOnboardingStore,
 } from '@/stores/onboarding';
-import { twiceWeeklyScheduleNote } from '@/utils/schedule';
+import { twiceWeeklyWeekdays } from '@/utils/schedule';
 import { colors, spacing } from '@/theme';
 
 const FREQUENCIES: readonly { id: OnboardingFrequency; label: string }[] = [
@@ -27,16 +29,18 @@ const FREQUENCIES: readonly { id: OnboardingFrequency; label: string }[] = [
   { id: 'daily', label: 'Daily' },
 ];
 
-const UNITS: readonly Unit[] = ['mg', 'mcg', 'iu'];
 const ROUTES: readonly { id: Route; label: string }[] = [
   { id: 'sc', label: 'Subcutaneous' },
   { id: 'im', label: 'Intramuscular' },
 ];
 
+/** The row that opens the source, and the sheet's own title. */
+const SOURCE_TITLE = 'Half-life and source';
+
 // One screen for each medication the user picked. A single medication looks
 // exactly like the old single screen, and a second one adds a second screen.
-// The dose field starts empty on every one of them: the user types the dose,
-// Poke does not offer one.
+// The dose wheel opens on "No dose" on every one of them: the user turns the
+// wheel to a number, Poke does not offer one.
 export default function ScheduleScreen() {
   const params = useLocalSearchParams<{ index: string }>();
   const index = Number.parseInt(params.index ?? '0', 10);
@@ -52,6 +56,7 @@ export default function ScheduleScreen() {
   const setScheduleFrequency = useOnboardingStore((state) => state.setScheduleFrequency);
   const setShotDay = useOnboardingStore((state) => state.setShotDay);
   const transition = useOnboardingTransition();
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   useEffect(() => {
     prepareSchedules();
@@ -62,6 +67,17 @@ export default function ScheduleScreen() {
   const step = scheduleStepIndex(Number.isFinite(index) ? index : 0, total);
   const medicationId = Number.isInteger(index) && index >= 0 ? medicationIds[index] : undefined;
   const schedule = medicationId ? schedules[medicationId] : undefined;
+
+  // Twice a week lands on a second day the user never picked, and the domain
+  // owns which one. The strip asks for the whole week rather than restating the
+  // rule, so a change to the rule reaches this screen without an edit.
+  const frequencyKind = schedule?.frequencyKind;
+  const shotDay = schedule?.shotDay;
+  const shotDays = useMemo(() => {
+    if (shotDay === undefined) return [];
+    if (frequencyKind === 'twice_weekly') return twiceWeeklyWeekdays(shotDay);
+    return [shotDay];
+  }, [frequencyKind, shotDay]);
 
   if (!medicationId || !schedule) {
     return (
@@ -85,6 +101,14 @@ export default function ScheduleScreen() {
   const dose = Number.parseFloat(schedule.doseText);
   const canContinue = Number.isFinite(dose) && dose > 0;
 
+  // Where the level curve comes from, or why there will not be one. It is the
+  // same sentence it has always been, behind the (i) instead of under the fold.
+  const sourceLine = preset
+    ? (preset.evidence === 'unsourced'
+        ? `${preset.source} Poke shows your shots for ${name} without a level curve.`
+        : `Level curve source: ${preset.source}`)
+    : 'Poke has no half-life for a custom medication. Poke shows your shots without a level curve. You can add a half-life later in Medications.';
+
   const goNext = () => {
     if (isLast) {
       // The first screen of the post-schedule run, whichever screen that is for
@@ -105,9 +129,12 @@ export default function ScheduleScreen() {
         : { pathname: '/onboarding/schedule/[index]', params: { index: String(index - 1) } }}
       transition={transition}
       title={total > 1 ? name : "When is shot day?"}
+      // A single medication gets no subtitle: it repeated the title and named a
+      // medication the user had just picked. A run of several keeps one, because
+      // the count is the only place the run says how far along it is.
       subtitle={total > 1
         ? `Medication ${index + 1} of ${total}. Set the dose and the schedule.`
-        : `Set the usual dose and schedule for ${name}.`}
+        : undefined}
       footer={(
         <Button disabled={!canContinue} onPress={goNext}>
           {isLast ? 'Continue' : 'Next medication'}
@@ -116,28 +143,13 @@ export default function ScheduleScreen() {
     >
       <View style={styles.section}>
         <Text variant="smallStrong">Dose</Text>
-        <View style={styles.doseRow}>
-          <View style={styles.doseInput}>
-            <Input
-              value={schedule.doseText}
-              onChangeText={(value) => setScheduleDose(medicationId, value)}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              placeholder="Enter a number"
-              accessibilityLabel={`Dose for ${name}`}
-            />
-          </View>
-          <View style={styles.unitRow}>
-            {UNITS.map((unit) => (
-              <ChoicePill
-                key={unit}
-                label={unit}
-                selected={schedule.unit === unit}
-                onPress={() => setScheduleUnit(medicationId, unit)}
-              />
-            ))}
-          </View>
-        </View>
+        <DoseWheel
+          doseText={schedule.doseText}
+          unit={schedule.unit}
+          onChangeDose={(value) => setScheduleDose(medicationId, value)}
+          onChangeUnit={(unit) => setScheduleUnit(medicationId, unit)}
+          accessibilityLabel={`Dose for ${name}`}
+        />
       </View>
 
       {isCustom ? (
@@ -172,48 +184,42 @@ export default function ScheduleScreen() {
 
       {schedule.frequencyKind !== 'daily' ? (
         <View style={styles.section}>
-          <Text variant="smallStrong">Next shot day</Text>
-          <View style={styles.dayRow}>
-            {SHOT_DAY_OPTIONS.map((day) => (
-              <ChoicePill
-                key={day.value}
-                label={day.shortLabel}
-                selected={schedule.shotDay === day.value}
-                onPress={() => setShotDay(medicationId, day.value)}
-                style={styles.dayPill}
-              />
-            ))}
-          </View>
-          {/* Twice a week picks the second day for the user. Name it while the
-              day is still under their finger, rather than after the plan is built. */}
-          {schedule.frequencyKind === 'twice_weekly' ? (
-            <Text variant="small" color={colors.inkMuted}>
-              {twiceWeeklyScheduleNote(schedule.shotDay)}
-            </Text>
-          ) : null}
+          <Text variant="smallStrong">
+            {schedule.frequencyKind === 'twice_weekly' ? 'Shot days' : 'Next shot day'}
+          </Text>
+          <ShotDayStrip
+            days={shotDays}
+            onPick={(day) => setShotDay(medicationId, day)}
+            accessibilityLabel={`Shot days for ${name}`}
+          />
         </View>
       ) : null}
 
-      {/* Say here, once, where the level curve comes from — or that there will
-          not be one. It is the last screen before the plan is built. */}
-      {preset ? (
-        <Text variant="small" color={colors.inkMuted}>
-          {preset.evidence === 'unsourced'
-            ? `${preset.source} Poke shows your shots for ${name} without a level curve.`
-            : `Level curve source: ${preset.source}`}
-        </Text>
-      ) : (
-        <Text variant="small" color={colors.inkMuted}>
-          Poke has no half-life for a custom medication. Poke shows your shots without a
-          level curve. You can add a half-life later in Medications.
-        </Text>
-      )}
+      {/* Legal copy does not move, so the (i) takes no entrance and no stagger. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={SOURCE_TITLE}
+        onPress={() => setSourceOpen(true)}
+        hitSlop={8}
+        style={styles.infoRow}
+      >
+        <Info size={18} color={colors.inkSubtle} />
+        <Text variant="small" color={colors.inkMuted}>{SOURCE_TITLE}</Text>
+      </Pressable>
 
       {index === 0 && !isLast ? (
         <Text variant="small" color={colors.inkMuted}>
           Next you check the other {total - 1 === 1 ? 'medication' : `${total - 1} medications`}.
         </Text>
       ) : null}
+
+      <BottomSheet
+        visible={sourceOpen}
+        title={SOURCE_TITLE}
+        onClose={() => setSourceOpen(false)}
+      >
+        <Text color={colors.inkMuted}>{sourceLine}</Text>
+      </BottomSheet>
     </OnboardingScreen>
   );
 }
@@ -222,27 +228,15 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
   },
-  doseRow: {
-    gap: spacing.md,
-  },
-  doseInput: {
-    width: '100%',
-  },
-  unitRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
   wrapRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  dayRow: {
+  infoRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  dayPill: {
-    flex: 1,
-    paddingHorizontal: 0,
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
   },
 });

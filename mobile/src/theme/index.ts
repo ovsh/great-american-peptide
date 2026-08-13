@@ -9,6 +9,7 @@ export {
   logBeats,
   arrivalBeats,
   welcomeBeats,
+  planBeats,
   rise,
   timeTo,
   springTo,

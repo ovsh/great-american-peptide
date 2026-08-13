@@ -123,6 +123,26 @@ export const welcomeBeats = {
   proof: 7 * motion.beat,
 } as const;
 
+/**
+ * The plan reveal, once per cold mount of the last onboarding screen.
+ *
+ * The order is the reading order: the date the user came for, then the bar the
+ * date is measured on, then the fill and the dot that ride it, then the curve.
+ * The fill does not overshoot. Everywhere else a soft overshoot reads as life,
+ * and here the right end of the bar is the goal weight, so a bar that ran past
+ * it and came back would be a claim. Last frame at 655 ms.
+ */
+export const planBeats = {
+  /** The card label fades and the date rises out of its own clip. */
+  date: 0,
+  /** The empty track rises under it. */
+  bar: motion.beat,
+  /** The fill grows from the left, with the pace dot on its edge. */
+  fill: 2 * motion.beat,
+  /** The level curve draws itself, left to right, once. */
+  curve: 3 * motion.beat,
+} as const;
+
 /** How far a card travels on arrival, and how far the small header line does. */
 export const rise = { card: 14, line: 8 } as const;
 

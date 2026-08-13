@@ -43,7 +43,12 @@ import type {
   PreferencesRow,
 } from '@/db/types';
 import type { Unit } from '@/domain/peptides';
-import { estimatedLevelAt, suggestedLevelWindowHours, tmaxOrDefault } from '@/domain/pk';
+import {
+  MIN_LEVEL_WINDOW_HOURS,
+  estimatedLevelAt,
+  suggestedLevelWindowHours,
+  tmaxOrDefault,
+} from '@/domain/pk';
 import {
   medicationScheduleFromStored,
   nextScheduledDoses,
@@ -80,6 +85,11 @@ const CONTENT_MAX_WIDTH = 600;
 const WEEK_LOOKBACK_DAYS = 3;
 const CURVE_STEPS_PAST = 100;
 const CURVE_STEPS_FUTURE = 40;
+/**
+ * The run-up before the first shot, as a share of the history behind it. The
+ * curve needs a little baseline to leave, and no more than that.
+ */
+const LEVEL_WINDOW_RUN_UP = 0.15;
 
 /** Everything one load produces, held together so it can be applied in one go. */
 interface TodayData {
@@ -497,12 +507,18 @@ function buildDashboard({
       now,
     });
     const windowHours = suggestedLevelWindowHours(medication.half_life_hours);
-    const windowFromMs = now - windowHours * HOUR_MS;
+    const windowFromMs = levelWindowFrom({
+      injections: medicationInjections,
+      windowHours,
+      now,
+    });
     const nextDoseAt = nextDoseFrom(dose);
     // Ahead of now the chart draws to the next dose. With no next dose there is
     // nothing to draw toward, so it shows a fraction of the window instead and
-    // the curve simply runs off the right edge, which is what it does.
-    const windowToMs = nextDoseAt ?? now + windowHours * 0.15 * HOUR_MS;
+    // the curve simply runs off the right edge, which is what it does. The
+    // fraction is of the window actually drawn, so a short history does not put
+    // three days of empty forecast next to one day of curve.
+    const windowToMs = nextDoseAt ?? now + (now - windowFromMs) * 0.15;
 
     return {
       medication,
@@ -682,6 +698,44 @@ function buildLevelSeries({
     current: estimatedLevelAt(doses, halfLife, tmax, now),
     nextDoseAt,
   };
+}
+
+/**
+ * Where the level chart starts.
+ *
+ * Six half-lives is the right span for a medication that has been taken for a
+ * while, and the wrong one for a medication whose first shot went in this
+ * morning. Semaglutide asks for the full three weeks, so a user one shot into
+ * it got twenty days of flat zero and the whole real curve squeezed into the
+ * last few pixels under the now dot, which reads as a straight line with a
+ * vertical jump at the end rather than as a level.
+ *
+ * So the window never opens long before the first shot. It keeps a short
+ * run-up, enough to show the curve leaving the baseline, and it never shrinks
+ * below a day, because the chart has to cover the day the user is looking at.
+ * A full history is untouched: the six half-lives still win.
+ */
+function levelWindowFrom({
+  injections,
+  windowHours,
+  now,
+}: {
+  injections: readonly InjectionRow[];
+  windowHours: number;
+  now: number;
+}): number {
+  const fullFrom = now - windowHours * HOUR_MS;
+  const firstDoseAt = injections.reduce<number | null>(
+    (earliest, injection) => (earliest === null ? injection.taken_at : Math.min(earliest, injection.taken_at)),
+    null,
+  );
+  if (firstDoseAt === null) return fullFrom;
+  // The run-up is a share of the history, not of the full window. A share of
+  // the window would put forty hours of flat zero in front of a shot taken six
+  // hours ago, which is the same bug in a smaller frame.
+  const runUp = (now - firstDoseAt) * LEVEL_WINDOW_RUN_UP;
+  const shortest = now - Math.min(windowHours, MIN_LEVEL_WINDOW_HOURS) * HOUR_MS;
+  return Math.min(shortest, Math.max(fullFrom, firstDoseAt - runUp));
 }
 
 function seriesBetween(fromMs: number, toMs: number, steps: number): number[] {

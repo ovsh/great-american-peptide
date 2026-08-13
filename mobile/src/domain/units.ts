@@ -22,8 +22,13 @@ export function bmiCategory(value: number): 'Underweight' | 'Healthy' | 'Overwei
   return 'Obese';
 }
 
+/**
+ * A weight with its unit. The unit is the symbol, never a plural: every other
+ * surface in the app writes `lb`, and a row that read `128.0 lbs` beside a goal
+ * that read `118 lb` looked like two different measurements.
+ */
 export function formatWeight(value: number, unit: WeightUnit): string {
-  return `${value.toFixed(1)} ${unit === 'lb' ? 'lbs' : 'kg'}`;
+  return `${value.toFixed(1)} ${unit}`;
 }
 
 export function formatDose(value: number, unit: 'mg' | 'mcg' | 'iu'): string {

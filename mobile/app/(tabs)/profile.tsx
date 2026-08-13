@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { differenceInCalendarWeeks, startOfWeek, subWeeks } from 'date-fns';
-import { Bell, Info, Scale, Share, Sparkles, Target } from 'lucide-react-native';
+import { Activity, Bell, CalendarClock, Info, Scale, Share, Sparkles, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -34,7 +34,12 @@ import {
   type PreferencesPatch,
 } from '@/repositories/preferences';
 import { exportHistory } from '@/services/export';
-import { ensureNotificationPermission, refreshScheduledReminders } from '@/services/notifications';
+import {
+  CHECKIN_DELAY_OPTIONS,
+  checkinDelayHours,
+  ensureNotificationPermission,
+  refreshScheduledReminders,
+} from '@/services/notifications';
 import { openManageSubscriptions } from '@/services/purchases';
 import { maybePromptForReview, openWriteReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
@@ -47,6 +52,12 @@ import {
 } from '@/stores/entitlement';
 import { openPaywall } from '@/components/ProLock';
 import { arrivalBeats, colors, rise, spacing } from '@/theme';
+
+/**
+ * The three chips on the check-in row. `TimeRangeToggle` speaks strings, so the
+ * hours travel as text and `checkinDelayHours` reads them back to the union.
+ */
+const CHECKIN_DELAY_CHOICES: readonly string[] = CHECKIN_DELAY_OPTIONS.map(String);
 
 const EMPTY_RECORD: ProfileRecord = {
   weeks: new Array<number>(RECORD_WEEKS).fill(0),
@@ -74,6 +85,7 @@ export default function ProfileScreen() {
   const [savingGoal, setSavingGoal] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [delayOpen, setDelayOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const pro = useIsPro();
@@ -121,6 +133,26 @@ export default function ProfileScreen() {
       }
     }
     await savePreferences({ notifications_enabled: next }, true);
+  };
+
+  const toggleCheckin = async () => {
+    if (!preferences) return;
+    const next: 0 | 1 = preferences.notif_checkin_enabled === 1 ? 0 : 1;
+    await savePreferences({ notif_checkin_enabled: next }, true);
+  };
+
+  const toggleMissed = async () => {
+    if (!preferences) return;
+    const next: 0 | 1 = preferences.notif_missed_enabled === 1 ? 0 : 1;
+    await savePreferences({ notif_missed_enabled: next }, true);
+  };
+
+  const setCheckinDelay = async (choice: string) => {
+    if (!preferences) return;
+    const hours = checkinDelayHours(Number(choice));
+    if (hours === preferences.notif_checkin_delay_hours) return;
+    setPreferences({ ...preferences, notif_checkin_delay_hours: hours });
+    await savePreferences({ notif_checkin_delay_hours: hours }, true);
   };
 
   const setReminderTime = async (reminderTime: string) => {
@@ -244,6 +276,13 @@ export default function ProfileScreen() {
   const goalWeight = preferences?.goal_weight ?? null;
   const weightUnit = preferences?.weight_unit ?? 'lb';
   const remindersOn = preferences?.notifications_enabled === 1;
+  // `notifications_enabled` is the shot-day switch and the master switch both:
+  // with it off `refreshScheduledReminders` queues nothing at all. So the two
+  // rows under it read off and take no touch, rather than claiming a banner
+  // that cannot arrive. The stored answer survives, and comes back with them.
+  const checkinOn = remindersOn && preferences?.notif_checkin_enabled === 1;
+  const missedOn = remindersOn && preferences?.notif_missed_enabled === 1;
+  const checkinDelay = checkinDelayHours(preferences?.notif_checkin_delay_hours);
   const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null;
 
   // The rows below all wait on `loaded`, so a failed read would hold them at
@@ -277,7 +316,7 @@ export default function ProfileScreen() {
               testID="profile-reminders-row"
               divided={false}
               icon={<Bell size={22} strokeWidth={1.8} color={colors.inkMuted} />}
-              label="Shot reminders"
+              label="Shot day"
               accessibilityLabel={`Reminder time, ${clockLabel(preferences?.reminder_time ?? '09:00')}`}
               onPress={() => setTimeOpen(true)}
               value={(
@@ -293,7 +332,7 @@ export default function ProfileScreen() {
                   <View onStartShouldSetResponder={() => true}>
                     <Switch
                       testID="profile-reminders-switch"
-                      accessibilityLabel="Shot reminders"
+                      accessibilityLabel="Shot day"
                       value={remindersOn}
                       onValueChange={toggleReminders}
                       trackColor={{ true: colors.accent, false: colors.borderStrong }}
@@ -303,7 +342,58 @@ export default function ProfileScreen() {
                 </>
               )}
             />
+            {/* The delay is a pill that opens a sheet, the same shape the row
+                above uses for the reminder time. Three chips beside a switch
+                would leave the label a word wide on a phone. */}
             <ProfileRow
+              testID="profile-checkin-row"
+              icon={<Activity size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Day-after check-in"
+              accessibilityLabel={`Check-in delay, ${checkinDelay} hours after a shot`}
+              onPress={remindersOn ? () => setDelayOpen(true) : undefined}
+              value={(
+                <>
+                  <ProfileValuePill label={`${checkinDelay} h`} quiet={!checkinOn} />
+                  <View onStartShouldSetResponder={() => true}>
+                    <Switch
+                      testID="profile-checkin-switch"
+                      accessibilityLabel="Day-after check-in"
+                      disabled={!remindersOn}
+                      value={checkinOn}
+                      onValueChange={toggleCheckin}
+                      trackColor={{ true: colors.accent, false: colors.borderStrong }}
+                      thumbColor={colors.surface}
+                    />
+                  </View>
+                </>
+              )}
+            />
+            <ProfileRow
+              testID="profile-missed-row"
+              icon={<CalendarClock size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Missed shot"
+              value={(
+                <Switch
+                  testID="profile-missed-switch"
+                  accessibilityLabel="Missed shot"
+                  disabled={!remindersOn}
+                  value={missedOn}
+                  onValueChange={toggleMissed}
+                  trackColor={{ true: colors.accent, false: colors.borderStrong }}
+                  thumbColor={colors.surface}
+                />
+              )}
+            />
+          </ProfileCard>
+        </TodayRise>
+
+        {/* The same beat as the notifications card above: the two of them are
+            one settings block, split only because five rows on one surface stop
+            reading as a group. */}
+        <TodayRise show={loaded} delay={arrivalBeats.hero} distance={rise.card}>
+          <ProfileCard>
+            <ProfileRow
+              divided={false}
               testID="profile-units-row"
               icon={<Scale size={22} strokeWidth={1.8} color={colors.inkMuted} />}
               label="Units"
@@ -429,6 +519,21 @@ export default function ProfileScreen() {
           {/* The wheel saves each turn, so this closes the sheet and nothing
               else. A label that said "Save" would name work already done. */}
           <Button onPress={() => setTimeOpen(false)}>Done</Button>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet visible={delayOpen} title="Check-in delay" onClose={() => setDelayOpen(false)}>
+        <View style={styles.sheet}>
+          {/* Hours after a logged shot. Poke moves the banner to the nearest
+              hour between 10 in the morning and 8 at night, so a check-in owed
+              at 3 in the morning waits for the morning. */}
+          <TimeRangeToggle
+            options={CHECKIN_DELAY_CHOICES}
+            value={String(checkinDelay)}
+            onChange={setCheckinDelay}
+            getLabel={(option) => `${option} h`}
+          />
+          <Button onPress={() => setDelayOpen(false)}>Done</Button>
         </View>
       </BottomSheet>
 

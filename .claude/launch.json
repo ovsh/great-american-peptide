@@ -2,28 +2,44 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "static",
+      "name": "mockups",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4321"],
-      "port": 4321
-    },
-    {
-      "name": "expo-web",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web", "--port", "8084"],
-      "port": 8084,
-      "cwd": "mobile"
-    },
-    {
-      "name": "expo-web-alt",
-      "runtimeExecutable": "env",
       "runtimeArgs": [
-        "EXPO_ROUTER_IMPORT_MODE=sync",
-        "EXPO_ROUTER_IMPORT_MODE_WEB=sync",
-        "npx", "expo", "start", "--web", "--port", "8092"
+        "-m",
+        "http.server",
+        "8899",
+        "--directory",
+        "/private/tmp/claude-501/-Users-ovsh-Documents-code-poke/57e67e9f-50f2-4bed-a547-7ace35e2a139/scratchpad/variants"
       ],
-      "port": 8092,
-      "cwd": "mobile"
+      "port": 8899
+    },
+    {
+      "name": "poke-tip",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ovsh/.codex/worktrees/b046/poke/mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8082"
+      ],
+      "port": 8082
+    },
+    {
+      "name": "poke-main-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ovsh/Documents/code/poke/mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8083"
+      ],
+      "port": 8083
     }
   ]
 }

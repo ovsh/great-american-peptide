@@ -1,10 +1,10 @@
 # Poke — App Store listing copy
 
-Version 1.3.0. The subscription shipped in 1.1.0, so the description still
-carries the full guideline 3.1.2 disclosure and the review notes still answer the
-two questions Apple always asks a paid health app: how do we get in, and is this
-a medical device. 1.3.0 rebuilds the four tabs, grows the medication list to 33
-sourced presets and adds brand-name search.
+Version 1.4.0. The subscription shipped in 1.1.0, so the description still
+carries the full guideline 3.1.2 disclosure and the review notes still answer
+the two questions Apple always asks a paid health app: how do we get in, and is
+this a medical device. 1.4.0 shortens setup, adds a day-after check-in and a
+missed-shot catch-up with per-loop switches, and redraws the plan screens.
 
 > `store.config.json` is the source of truth. Every block below is the text in
 > that file, wrapped for reading. Change the JSON first, then this file.
@@ -39,7 +39,8 @@ FREE, FOR AS LONG AS YOU USE IT
 - Your next shot day, on the first screen
 - The full history of what you logged
 - Two medications, picked from a searchable list of 33 or added by you
-- One reminder time, for every medication you take
+- Reminders with their own switches: a question on shot day, a check-in the day
+  after, and a catch-up if a day slips
 
 POKE PRO
 - Your level, day by day. Poke draws the estimated curve between your shots.
@@ -132,68 +133,98 @@ cards on a 13 inch screen leave the slide nearly empty.
 
 ## What is new in this version
 
-TODAY, CALM
-One card for the medication you focus on: the level curve, your week under it, and Log shot in a fixed slot. Hold a row to reorder. The order you set is the order Poke opens with.
+A SHORTER SETUP
+Every question now fits in one look. The dose is a wheel, not a keyboard. The
+schedule strip shows both shot days. Small drawn moments replace the paragraphs.
 
-A NEW HISTORY
-Months stack in one scroll. Each day carries one lane per medication, so a kept dose, a missed dose and a planned dose read at a glance. Tap a day to open it and log a shot for that day.
+REMINDERS THAT ASK
+Ready for your shot? How do you feel today? Did you miss a day? Poke asks on
+shot day, checks in the day after, and catches a missed day the next morning.
+Each reminder has its own switch in Profile, and Poke sends at most one a day for each medication.
 
-PROGRESS, ON ONE CHART
-Weight, shots and side effects share one timeline. Free shows the shape of your line. Poke Pro shows the numbers.
+A CALMER PLAN
+The plan builds on one clock and reads in three glances: the date, the distance
+and the curve.
 
-MORE MEDICATIONS, SOURCED
-33 presets, searchable by brand name such as Ozempic, Wegovy and Zepbound. Every half-life names its source, and an estimate says it is an estimate.
-
-Plus a new first screen and many small fixes.
+FIXES
+The reminder time you pick is the time Poke uses. The free level chart draws the
+true shape of your curve. Text no longer hides behind buttons.
 
 ## App Review notes
 
-Paste this into App Store Connect > Version > App Review Information > Notes.
-
 NO ACCOUNT IS NEEDED
-Poke has no accounts, sign-in or server. All data stays in a local database on the device. There is no demo account. Open the app and finish setup.
+Poke has no accounts, sign-in or server. All data stays in a local database on
+the device. There is no demo account. Open the app and finish setup.
 
 HOW TO REVIEW POKE PRO
-Poke Pro is an auto-renewable subscription in the Poke Pro group, sold through RevenueCat and StoreKit 2.
+Poke Pro is an auto-renewable subscription in the Poke Pro group, sold through
+RevenueCat and StoreKit 2.
 
 1. Finish setup. The paywall opens at the end and can be closed.
-2. To open it later: Profile > See Poke Pro. The "Unlock exact levels" chip on the Today level chart, the "Unlock your numbers" pill on the Progress chart, Export history in Profile and adding a third medication also open it.
-3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month free trial for new subscribers.
-4. The paywall closes and Pro unlocks at once. Restore purchases is on the paywall and in Profile.
+2. To open it later: Profile > See Poke Pro. The "Unlock exact levels" chip on
+the Today level chart, the "Unlock your numbers" pill on the Progress chart,
+Export history in Profile and adding a third medication also open it.
+3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month
+free trial for new subscribers.
+4. The paywall closes and Pro unlocks at once. Restore purchases is on the
+paywall and in Profile.
 
-If the store cannot be set up on the device at all, the app unlocks all features so review is not blocked. A slow network is not that case: Poke keeps the free view, keeps the paywall in reach, and asks the store again.
+If the store cannot be set up on the device at all, the app unlocks all features
+so review is not blocked. A slow network is not that case: Poke keeps the free
+view, keeps the paywall in reach, and asks the store again.
 
 FREE AND PRO
 Free: shot logging, next shot, full history and two medications.
-Pro: exact estimated level charts, progress charts, unlimited medications and CSV export.
-Reminders are the same on both sides. The user sets one reminder time, and that one time covers every medication. Free and Pro get the same reminders.
+Pro: exact estimated level charts, progress charts, unlimited medications and
+CSV export.
+Notifications are local, free and identical on Free and Pro. Poke sends three
+kinds: a reminder at the chosen time on a scheduled shot day, a check-in the day
+after a logged shot, and a catch-up the morning after a scheduled day with no
+entry. All three are on by default and each has its own switch in Profile. The
+check-in fires only when the user picked side effects to watch during setup, and
+it asks the user to record how they feel. It gives no advice. Poke sends at most
+one notification a day and none at night. There is no push server.
 
 MEDICAL POSITIONING
-Poke is a personal record. It is not a medical device and makes no clinical claim.
+Poke is a personal record. It is not a medical device and makes no clinical
+claim.
 
-- Poke records the dose the user enters. It never recommends, calculates or suggests a dose.
+- Poke records the dose the user enters. It never recommends, calculates or
+suggests a dose.
 - Poke gives no diagnosis, treatment guidance or administration instructions.
-- A level chart is an estimate from the shots the user logged and the published half-life on file. Poke shows the half-life source. The estimate is not a measurement and is not a basis for changing a dose.
-- Every half-life on file names its source: a drug label, a human study, or a stated estimate. The app labels an estimate as an estimate. Where Poke has no sourced half-life, it draws no curve.
-- The reconstitution screen is a unit conversion for laboratory research and educational calculations only. It gives no dose instruction.
-- Setup and Profile show the full disclaimer and tell the user to speak to a clinician.
-- Brand names are their own rows in the medication picker. A picked brand is stored and shown under the name the user picked, so Wegovy stays Wegovy. Every brand row maps to one molecule, and the molecule carries the half-life and its source, so one medication is never counted twice.
-- Setup can print a target date, and only when the user enters a current weight, a goal weight and a weekly rate. The screen says the date is the distance divided by the pace the user typed, that it is arithmetic on two numbers, that it is not a forecast, and that no model of the body stands behind it. Without weight data, no date appears.
+- A level chart is an estimate from the shots the user logged and the published
+half-life on file. Poke shows the half-life source. The estimate is not a
+measurement and is not a basis for changing a dose.
+- Every half-life on file names its source: a drug label, a human study, or a
+stated estimate. The app labels an estimate as an estimate. Where Poke has no
+sourced half-life, it draws no curve.
+- The reconstitution screen is a unit conversion for laboratory research and
+educational calculations only. It gives no dose instruction.
+- Setup and Profile show the full disclaimer and tell the user to speak to a
+clinician.
+- Brand names are their own rows in the medication picker. A picked brand is
+stored and shown under the name the user picked, so Wegovy stays Wegovy. Every
+brand row maps to one molecule, and the molecule carries the half-life and its
+source, so one medication is never counted twice.
+- Setup can print a target date, and only when the user enters a current weight,
+a goal weight and a weekly rate. The screen says the date is the distance
+divided by the pace, and that it is not a forecast. Without weight data, no date
+appears.
 
-WHAT CHANGED IN 1.3.0
-This release rebuilds the four tabs. It adds no new medical claim.
+WHAT CHANGED IN 1.4.0
+This release shortens setup, adds two local notification types with switches,
+and redraws the plan screens. It adds no new medical claim.
 
-Today is one card. The card holds the medication in focus: the estimated level curve, the week under the curve, and a Log shot band that stays in the same place. Free shows the shape of the curve with no exact values. Pro shows the values. Hold a medication row to reorder the list. The order the user sets is the order Poke opens with.
+Setup: shorter questions, a dose wheel instead of a keyboard, and small animated
+explainers. Moved disclosures sit behind info buttons, unchanged in wording.
 
-History is a month board. Months stack in one scroll. Each day carries one lane for each medication, so a kept dose, a missed dose and a planned dose read at a glance. Tap a day to open a half-sheet for that day and log a shot there.
+Notifications: described above.
 
-Progress is one chart. Weight, shots and side effects share one timeline. Free shows the shape of the line. Pro shows the numbers.
+The plan screen keeps the consent paragraph verbatim and says the target date is
+distance divided by pace, not a forecast.
 
-Profile is minimal. It holds the record strip, reminders, units, goal weight, export and the account state. The old section headers are gone.
-
-The medication list has 33 presets and search. Every half-life names its source: a drug label, a human study, or a stated estimate. The app labels an estimate as an estimate. Brand names such as Ozempic, Wegovy and Zepbound are rows in the picker, and a picked brand keeps its own name.
-
-Setup opens with a new welcome screen.
+Today: the free chart draws the real curve shape. Values stay behind Poke Pro,
+opened by the same Unlock exact levels chip.
 
 CONTACT
 support@peptide.industries

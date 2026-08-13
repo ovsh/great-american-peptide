@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ChoicePill } from '@/components/OnboardingScreen';
@@ -14,14 +15,19 @@ export default function WeightScreen() {
   const setWeightUnit = useOnboardingStore((state) => state.setWeightUnit);
   const setWeightValue = useOnboardingStore((state) => state.setWeightValue);
 
+  // The row under the band is the answer, so the store agrees with the wheel
+  // from the first frame and Continue is live on arrival. Mount only: the skip
+  // below clears the answer, and an effect that watched the value would write
+  // the resting row straight back over the skip. `birthday` does the same.
+  useEffect(() => {
+    if (weight.current === null) setWeightValue('current', WEIGHT_REST[weight.unit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <OnboardingStep
       step="weight"
       title="What do you weigh right now?"
-      subtitle="This is your starting point. You can change this number whenever you weigh yourself."
-      // The resting row is a place to start scrolling from and not an answer.
-      // The plan card draws a line between this number and the goal, so Continue
-      // waits until the wheel has been settled.
       canContinue={weight.current !== null}
       secondary={{
         label: 'Skip this',

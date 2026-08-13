@@ -103,6 +103,15 @@ export interface PreferencesRow {
    * row, and stale ids are ignored rather than repaired.
    */
   focused_medication_id: string | null;
+  /**
+   * The three notification loops. `notifications_enabled` above is both the
+   * shot-day switch and the master switch, so these two only ever narrow it.
+   * `notif_checkin_delay_hours` holds 24, 36 or 48; readers normalise anything
+   * else back to 36 rather than trusting the column.
+   */
+  notif_checkin_enabled: 0 | 1;
+  notif_checkin_delay_hours: number;
+  notif_missed_enabled: 0 | 1;
   updated_at: number;
 }
 

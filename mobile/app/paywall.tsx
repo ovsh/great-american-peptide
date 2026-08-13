@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, Check, FileDown, Layers, TrendingUp, X } from 'lucide-react-native';
+import { Activity, Check, FileDown, Layers, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -13,28 +13,34 @@ import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
 
-const BENEFITS = [
+// A title that already says the thing does not get a line under it repeating
+// the thing. Only the export keeps a body, because "Take it to your doctor"
+// does not say what Poke hands over.
+const BENEFITS: readonly Benefit[] = [
   {
     icon: Activity,
     title: 'Your level day by day',
-    body: 'See the estimated amount in your body between shots.',
   },
   {
     icon: TrendingUp,
     title: 'Trends that add up',
-    body: 'See your weight, your doses and your side effects together.',
   },
   {
     icon: Layers,
     title: 'Unlimited medications',
-    body: 'Free keeps two. Pro tracks as many as you take.',
   },
   {
     icon: FileDown,
     title: 'Take it to your doctor',
     body: 'Export your whole log as a CSV file.',
   },
-] as const;
+];
+
+interface Benefit {
+  icon: LucideIcon;
+  title: string;
+  body?: string;
+}
 
 export default function PaywallScreen() {
   const params = useLocalSearchParams<{ from?: string }>();
@@ -146,7 +152,7 @@ export default function PaywallScreen() {
                 </View>
                 <View style={styles.benefitCopy}>
                   <Text variant="bodyStrong">{title}</Text>
-                  <Text variant="small" color={colors.inkMuted}>{body}</Text>
+                  {body ? <Text variant="small" color={colors.inkMuted}>{body}</Text> : null}
                 </View>
               </View>
             ))}
@@ -349,7 +355,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.xl,
+    // The pricing block sits under this list and never scrolls, so the list
+    // needs room to run out above it. Without the inset the last benefit row
+    // stops half drawn against the divider and reads as a rendering fault.
+    paddingBottom: spacing.hero,
   },
   content: {
     width: '100%',
@@ -373,7 +382,7 @@ const styles = StyleSheet.create({
   },
   benefitRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.lg,
   },
   benefitIcon: {
@@ -387,7 +396,6 @@ const styles = StyleSheet.create({
   benefitCopy: {
     flex: 1,
     gap: 2,
-    paddingTop: 2,
   },
   plans: {
     gap: spacing.md,

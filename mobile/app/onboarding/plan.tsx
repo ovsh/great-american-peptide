@@ -1,8 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { router } from 'expo-router';
-import { CircleCheck } from 'lucide-react-native';
+import { CircleCheck, Info } from 'lucide-react-native';
 
+import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { LineChart } from '@/components/LineChart';
@@ -26,12 +32,24 @@ import {
   paceBounds,
   useOnboardingStore,
 } from '@/stores/onboarding';
-import { colors, radius, spacing } from '@/theme';
+import {
+  beatDelay,
+  colors,
+  easing,
+  motion,
+  planBeats,
+  radius,
+  rise,
+  spacing,
+  timeTo,
+} from '@/theme';
 import { fmtClock } from '@/utils/date';
 
 const CURVE_CARDS = 2;
 const CHART_HEIGHT = 148;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The dot that rides the goal bar, and the height of the row it rides in. */
+const DOT_SIZE = 14;
 
 /**
  * The reveal. Recording step 28.
@@ -146,9 +164,10 @@ export default function PlanScreen() {
       totalSteps={1}
       hideProgress
       title="Your plan is ready"
-      subtitle={plan.curveCount > 0
-        ? 'Every number here comes from your answers and a published half-life.'
-        : 'Every number here comes from the answers you entered.'}
+      // The cards below are the answer. A line over them saying where the
+      // numbers came from only delays the numbers, and each card that needs a
+      // source now carries its own.
+      bodyStyle={styles.body}
       footer={(
         <View style={styles.actions}>
           {error ? <Text selectable color={colors.danger} align="center">{error}</Text> : null}
@@ -159,12 +178,19 @@ export default function PlanScreen() {
               have, and `.claude/rules/copy.md` forbids a button label inside
               legal text precisely so a label change cannot falsify it.
               `store.config.json` review notes quote this screen word for word,
-              so change both together or neither. Owner approved 8 Aug 2026. */}
-          <Text variant="small" color={colors.inkMuted} align="center" style={styles.disclaimer}>
-            Poke keeps a record of what you enter. Poke gives no medical advice, no
-            diagnosis and no dose instructions. Speak to your clinician about your
-            treatment. By finishing setup you agree.
-          </Text>
+              so change both together or neither. Owner approved 8 Aug 2026.
+
+              It sits on its own solid plate, and it never moves. The cards
+              above it arrive; this does not, because motion rule 8 says legal
+              copy does not animate, and because the plate is what stops a card
+              scrolling up behind the words the button agrees to. */}
+          <View style={styles.disclaimerPlate}>
+            <Text variant="small" color={colors.inkMuted} align="center" style={styles.disclaimer}>
+              Poke keeps a record of what you enter. Poke gives no medical advice, no
+              diagnosis and no dose instructions. Speak to your clinician about your
+              treatment. By finishing setup you agree.
+            </Text>
+          </View>
           <Button disabled={submitting} onPress={finish}>
             {submitting ? 'Saving your plan' : 'Start tracking'}
           </Button>
@@ -269,33 +295,69 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
   const step = unit === 'lb' ? 0.1 : 0.05;
   const formatPace = (value: number) => `${value.toFixed(unit === 'lb' ? 1 : 2)} ${unit}`;
 
+  const reduced = useReducedMotion();
+  const date = useSharedValue(0);
+  const bar = useSharedValue(0);
+  const fill = useSharedValue(0);
+
+  useEffect(() => {
+    date.value = timeTo(1, { duration: motion.base, easing: easing.out, reduced });
+    bar.value = timeTo(1, {
+      duration: motion.base,
+      easing: easing.out,
+      delay: beatDelay(planBeats.bar, reduced),
+      reduced,
+    });
+    fill.value = timeTo(1, {
+      duration: motion.slow,
+      easing: easing.out,
+      delay: beatDelay(planBeats.fill, reduced),
+      reduced,
+    });
+  }, [bar, date, fill, reduced]);
+
+  const dateStyle = useAnimatedStyle(() => ({
+    opacity: date.value,
+    transform: [{ translateY: (1 - date.value) * rise.line }],
+  }));
+  const barStyle = useAnimatedStyle(() => ({
+    opacity: bar.value,
+    transform: [{ translateY: (1 - bar.value) * rise.line }],
+  }));
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+  const dotStyle = useAnimatedStyle(() => ({
+    opacity: fill.value,
+    left: `${fill.value * 100}%`,
+  }));
+
   return (
     <Card padding="xl" style={styles.card}>
-      <Text variant="smallStrong" color={colors.inkMuted}>Your goal, at the pace you chose</Text>
-      {live ? (
-        <>
+      <Animated.View style={[styles.headline, dateStyle]}>
+        <Text variant="smallStrong" color={colors.inkMuted}>Your goal, at the pace you chose</Text>
+        {live ? (
           <Text variant="display">{longDate(live.reachesAt)}</Text>
-          <Text color={colors.inkMuted}>
-            {formatWeight(distance)} {unit} to {verb} at {formatPace(live.pace)} a week
-            is {formatSpan(live.reachesAt)}.
-          </Text>
-        </>
-      ) : (
-        // Reachable from the slider alone: the low end of the range against a
-        // long distance runs past `MAX_PROJECTION_WEEKS`. The card stays put so
-        // the drag stays alive, and it says what happened rather than a date.
-        <>
-          <Text variant="display">Over five years</Text>
-          <Text color={colors.inkMuted}>
-            {formatWeight(distance)} {unit} to {verb} at {formatPace(pace)} a week runs
-            past five years. Poke puts no date on that.
-          </Text>
-        </>
-      )}
+        ) : (
+          // Reachable from the slider alone: the low end of the range against a
+          // long distance runs past `MAX_PROJECTION_WEEKS`. The card stays put so
+          // the drag stays alive, and it says what happened rather than a date.
+          <>
+            <Text variant="display">Over five years</Text>
+            <Text color={colors.inkMuted}>
+              {formatWeight(distance)} {unit} to {verb} at {formatPace(pace)} a week runs
+              past five years. Poke puts no date on that.
+            </Text>
+          </>
+        )}
+      </Animated.View>
 
-      <View style={styles.track}>
-        <View style={styles.trackFill} />
-      </View>
+      {/* The bar is the distance, and the two ends carry the numbers, so the
+          dot rests on the goal end rather than anywhere between them. */}
+      <Animated.View style={[styles.bar, barStyle]}>
+        <View style={styles.track}>
+          <Animated.View style={[styles.trackFill, fillStyle]} />
+        </View>
+        <Animated.View pointerEvents="none" style={[styles.paceDot, dotStyle]} />
+      </Animated.View>
       <View style={styles.trackLabels}>
         <View>
           <Text variant="smallStrong">{formatWeight(current)} {unit}</Text>
@@ -321,11 +383,12 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
         format={formatPace}
       />
 
+      {/* The card has to name its own arithmetic. `store.config.json` review
+          notes promise App Review that this screen says where the date comes
+          from, and the slider above is what makes the claim checkable: move the
+          pace and the date moves with it. Two sentences, and no more. */}
       <Text variant="small" color={colors.inkMuted}>
-        That date is your distance divided by the pace you set. It is arithmetic on
-        two numbers you typed. It is not a forecast, and no model of your body
-        stands behind it. Move the pace above and watch the date move with it.
-        Speak to your clinician about the pace that suits you.
+        The date is your distance divided by your pace. It is not a forecast.
       </Text>
     </Card>
   );
@@ -352,8 +415,30 @@ function NextShotCard({ plan }: { plan: OnboardingPlan }) {
   );
 }
 
+/**
+ * One medication's first four weeks.
+ *
+ * What the curve is drawn from is a disclosure, not a caption: principles §6
+ * puts it behind the (i) and keeps the words themselves word for word. The
+ * chart draws itself once, under a wipe that crosses at a constant rate.
+ */
 function CurveCard({ medication }: { medication: PlanMedication }) {
   const [width, setWidth] = useState(0);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const reduced = useReducedMotion();
+  const draw = useSharedValue(0);
+
+  useEffect(() => {
+    draw.value = timeTo(1, {
+      duration: motion.draw,
+      easing: easing.linear,
+      delay: beatDelay(planBeats.curve, reduced),
+      reduced,
+    });
+  }, [draw, reduced]);
+
+  const curtainStyle = useAnimatedStyle(() => ({ left: `${draw.value * 100}%` }));
+
   const curve = medication.curve;
   if (!curve) return null;
 
@@ -367,9 +452,20 @@ function CurveCard({ medication }: { medication: PlanMedication }) {
 
   return (
     <Card padding="xl" style={styles.card}>
-      <Text variant="smallStrong" color={colors.inkMuted}>
-        {medication.name} over the first 4 weeks
-      </Text>
+      <View style={styles.curveHead}>
+        <Text variant="smallStrong" color={colors.inkMuted} style={styles.curveTitle}>
+          {medication.name} over the first 4 weeks
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="About this curve"
+          hitSlop={8}
+          onPress={() => setAboutOpen(true)}
+          style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]}
+        >
+          <Info size={18} color={colors.inkSubtle} />
+        </Pressable>
+      </View>
       <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.chartHolder}>
         {width > 0 ? (
           <LineChart
@@ -382,12 +478,22 @@ function CurveCard({ medication }: { medication: PlanMedication }) {
             yTickCount={3}
           />
         ) : null}
+        <Animated.View pointerEvents="none" style={[styles.curtain, curtainStyle]} />
       </View>
       <Text variant="bodyStrong">{steady}</Text>
-      <Text variant="small" color={colors.inkMuted}>
-        The curve is in {curve.unit}. Poke draws the curve from your dose and your
-        schedule. {medication.evidenceNote}
-      </Text>
+
+      <BottomSheet
+        visible={aboutOpen}
+        title="About this curve"
+        onClose={() => setAboutOpen(false)}
+      >
+        <View style={styles.aboutBody}>
+          <Text>
+            The curve is in {curve.unit}. Poke draws the curve from your dose and your
+            schedule. {medication.evidenceNote}
+          </Text>
+        </View>
+      </BottomSheet>
     </Card>
   );
 }
@@ -403,26 +509,6 @@ function PlanRow({ label, value }: { label: string; value: string }) {
 
 function formatWeight(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-/**
- * How far off the printed date is, in a unit the reader can check against it.
- *
- * The date carries the raw division out to the hour. A week count that rounds on
- * its own then contradicts it: at 1.6 lb a week over 6 lb the card printed "4
- * weeks" above a date 26 days away. So measure the span from the date the card
- * already shows, and the two cannot disagree. Days are exact against a calendar.
- * Weeks read better and are used only where the span is whole weeks. Past two
- * months a day count stops meaning anything, and "about" carries the rounding.
- */
-function formatSpan(reachesAt: number): string {
-  const days = Math.max(1, Math.round((startOfDay(reachesAt) - startOfDay(Date.now())) / DAY_MS));
-  if (days >= 56) {
-    const months = Math.round(days / 30.44);
-    return months === 1 ? 'about a month' : `about ${months} months`;
-  }
-  if (days % 7 === 0) return days === 7 ? 'one week' : `${days / 7} weeks`;
-  return days === 1 ? 'one day' : `${days} days`;
 }
 
 function startOfDay(timestamp: number): number {
@@ -473,12 +559,24 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
+  // The whole list clears the pinned footer. Without the inset the last card
+  // stops half drawn against the consent text, which reads as a broken card.
+  body: {
+    paddingBottom: spacing.hero,
+  },
+  headline: {
+    gap: spacing.sm,
+  },
+  bar: {
+    height: DOT_SIZE,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
   track: {
     height: 8,
     borderRadius: radius.pill,
     backgroundColor: colors.accentSoft,
     overflow: 'hidden',
-    marginTop: spacing.sm,
   },
   // The bar is the distance itself, not a progress reading. Nothing has happened
   // yet, so it fills the whole track and the two ends carry the numbers.
@@ -486,6 +584,16 @@ const styles = StyleSheet.create({
     height: '100%',
     width: '100%',
     borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  paceDot: {
+    position: 'absolute',
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    marginLeft: -DOT_SIZE / 2,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.surface,
     backgroundColor: colors.accent,
   },
   trackLabels: {
@@ -503,10 +611,41 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingTop: spacing.md,
   },
+  curveHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  curveTitle: {
+    flex: 1,
+  },
+  infoButton: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -8,
+  },
+  pressed: {
+    opacity: 0.72,
+  },
+  aboutBody: {
+    paddingBottom: spacing.md,
+  },
   chartHolder: {
     width: '100%',
     height: CHART_HEIGHT,
     paddingTop: spacing.xs,
+    overflow: 'hidden',
+  },
+  // The card is the surface the chart sits on, so the wipe is the same colour
+  // and reads as the curve drawing itself rather than as a shape passing over.
+  curtain: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.surface,
   },
   routineRow: {
     gap: spacing.xs,
@@ -521,6 +660,12 @@ const styles = StyleSheet.create({
   },
   planValue: {
     flex: 1,
+  },
+  disclaimerPlate: {
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   disclaimer: {
     maxWidth: 340,

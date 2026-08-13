@@ -16,6 +16,7 @@ import {
   type SideEffectPresetId,
 } from '@/domain/sideEffects';
 import { createSideEffect } from '@/repositories/sideEffects';
+import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
@@ -71,6 +72,8 @@ export default function LogSideEffectScreen() {
         notes: notes.trim() || null,
       });
       bumpVersion();
+      // This answers the day-after check-in, so the queue drops it.
+      await refreshScheduledReminders().catch(() => {});
       setSaved(true);
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

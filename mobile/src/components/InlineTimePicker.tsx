@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from './Text';
@@ -51,7 +52,27 @@ export function InlineTimePicker({
   const time = parseTime(value);
   const minutes = minuteValues(minuteStep, time.minute);
 
-  const update = (next: TimeParts) => onChange(formatTime(next));
+  /**
+   * The three controls write into one string, and they do not all write in the
+   * same tick: a wheel settles on a timer, so a settle that started before an
+   * AM or PM tap lands after it. Each control therefore writes only its own
+   * field into the newest string, never a whole snapshot taken at render time.
+   * Without this the late wheel wrote the pre-tap meridiem back, and a time the
+   * user picked as 9:00 AM was saved as 21:00 and read back as 9:00 PM.
+   *
+   * `sent` holds what this picker last wrote, so a value that changes outside
+   * the picker still wins.
+   */
+  const latest = useRef(value);
+  const sent = useRef(value);
+  if (value !== sent.current) latest.current = value;
+
+  const commit = (patch: Partial<TimeParts>) => {
+    const next = formatTime({ ...parseTime(latest.current), ...patch });
+    latest.current = next;
+    sent.current = next;
+    onChange(next);
+  };
 
   return (
     <View
@@ -68,7 +89,7 @@ export function InlineTimePicker({
             bare
             values={HOURS}
             value={time.hour}
-            onChange={(hour) => update({ ...time, hour })}
+            onChange={(hour) => commit({ hour })}
             accessibilityLabel={`${label} hour`}
           />
         </View>
@@ -78,7 +99,7 @@ export function InlineTimePicker({
             bare
             values={minutes}
             value={time.minute}
-            onChange={(minute) => update({ ...time, minute })}
+            onChange={(minute) => commit({ minute })}
             format={(minute) => String(minute).padStart(2, '0')}
             accessibilityLabel={`${label} minute`}
           />
@@ -93,7 +114,7 @@ export function InlineTimePicker({
               accessibilityRole="radio"
               accessibilityLabel={meridiem}
               accessibilityState={{ selected }}
-              onPress={() => update({ ...time, meridiem })}
+              onPress={() => commit({ meridiem })}
               style={[styles.period, selected && styles.periodSelected]}
             >
               <Text variant="smallStrong" color={selected ? colors.inkInverse : colors.inkMuted}>

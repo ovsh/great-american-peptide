@@ -8,9 +8,8 @@ import { colors } from '@/theme';
 // purpose: the progress bar reads 100 %, so the warmth lands on a finished job
 // rather than on a promise. Poke keeps the position, the beat and the button.
 //
-// The note is the one thing Poke can say here that MeAgain cannot. Every answer
-// behind this screen went into a SQLite file on the phone and nowhere else, so
-// the closing line is a fact, not a reassurance.
+// Two lines and a button. The screen holds no third line, because a beat that
+// asks for nothing reads as a pause only while it stays short.
 export default function ThanksScreen() {
   return (
     <Interstitial
@@ -18,7 +17,6 @@ export default function ThanksScreen() {
       icon={<CircleCheck size={40} color={colors.accent} />}
       title="Thank you for trusting Poke"
       body="That is everything Poke needs."
-      note="Every answer you gave stayed on this phone."
       continueLabel="Create my plan"
     />
   );

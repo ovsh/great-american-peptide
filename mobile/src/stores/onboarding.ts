@@ -110,9 +110,9 @@ export const WEIGHT_BOUNDS: Record<WeightUnit, { min: number; max: number }> = {
  * Where each wheel rests before it is touched.
  *
  * A wheel that opens on row zero opens on 4 ft 0 in, which is nobody's first
- * guess at their own height and reads as a broken screen. Nothing computes from
- * these and none of them reaches the draft: the wheel writes only once a finger
- * has settled it, so Continue stays off until the user has really answered.
+ * guess at their own height and reads as a broken screen. The row under the band
+ * is the answer, so each of those screens writes its resting row to the draft on
+ * mount and Continue is live on arrival. Skip clears the answer back to null.
  */
 export const HEIGHT_REST: Record<HeightUnit, number> = { in: 67, cm: 170 };
 export const WEIGHT_REST: Record<WeightUnit, number> = { lb: 180, kg: 82 };

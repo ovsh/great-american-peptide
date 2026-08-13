@@ -1,34 +1,27 @@
 import { StyleSheet, View } from 'react-native';
-import { Lock, ServerOff, UserX } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
-import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
+import { PrivacyScene, privacyRowsBeat } from '@/components/onboarding/privacy-scene';
+import { PromiseRow } from '@/components/onboarding/interstitial-scene';
+import { TodayRise } from '@/components/today-motion';
 import { onboardingTotalSteps, useOnboardingStore } from '@/stores/onboarding';
-import { colors, radius, spacing } from '@/theme';
+import { rise, spacing } from '@/theme';
 
 const PROMISES = [
-  {
-    id: 'account',
-    icon: <UserX size={20} color={colors.accent} />,
-    label: 'Poke asks for no account and no sign-in.',
-  },
-  {
-    id: 'server',
-    icon: <ServerOff size={20} color={colors.accent} />,
-    label: 'Poke sends what you log nowhere.',
-  },
-  {
-    id: 'local',
-    icon: <Lock size={20} color={colors.accent} />,
-    label: 'Your log lives on this phone.',
-  },
+  'No account. No sign-in.',
+  'Your log lives on this phone.',
+  'Poke sends it nowhere.',
 ];
 
 // Step 0. The recording opens its counted run on a promise about the answers,
 // before it asks for a single one, and the order is the point: you are told what
 // happens to the answers first, and then you are asked.
+//
+// The two sentences that used to frame the promise are gone. A phone that draws
+// itself, takes three kinds of entry and then locks says both of them in one
+// look, and `principles.md` §2 deletes any caption the visual already carries.
 export default function PrivacyScreen() {
   // Null on a first run, and set again on a run that came back here through the
   // back chevron, so the bar keeps whatever length the answer already gave it.
@@ -42,43 +35,28 @@ export default function PrivacyScreen() {
       backHref="/onboarding"
       transition={transition}
       title="Before Poke asks you anything"
-      subtitle="The next few minutes are questions about you. Here is where the answers go."
       footer={<Button onPress={() => transition.go('/onboarding/journey')}>Continue</Button>}
     >
-      <View style={styles.list}>
-        {PROMISES.map((promise) => (
-          <View key={promise.id} style={styles.row}>
-            <View style={styles.badge}>{promise.icon}</View>
-            <Text style={styles.rowLabel}>{promise.label}</Text>
-          </View>
-        ))}
-      </View>
+      <PrivacyScene />
 
-      <Text variant="small" color={colors.inkMuted}>
-        Where a question is optional, Poke puts a skip under the button.
-      </Text>
+      <TodayRise show delay={privacyRowsBeat} distance={rise.line} style={styles.list}>
+        <View style={styles.rows}>
+          {PROMISES.map((promise) => (
+            <PromiseRow key={promise}>{promise}</PromiseRow>
+          ))}
+        </View>
+      </TodayRise>
     </OnboardingScreen>
   );
 }
 
 const styles = StyleSheet.create({
   list: {
-    gap: spacing.lg,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  rows: {
     gap: spacing.md,
-  },
-  badge: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowLabel: {
-    flex: 1,
   },
 });

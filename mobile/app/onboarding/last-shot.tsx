@@ -16,7 +16,7 @@ export default function LastShotScreen() {
       // Today and yesterday are exact, so Poke starts the level curve from them.
       // The vaguer answers are stored and nothing is drawn from them, because a
       // curve drawn from "earlier this week" is a curve drawn from a guess.
-      subtitle="A rough answer is fine. Poke draws your level curve only from an exact day."
+      subtitle="A rough answer is fine."
       canContinue={lastShot !== null}
     >
       <View style={styles.list}>

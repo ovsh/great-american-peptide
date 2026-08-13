@@ -7,11 +7,8 @@ import { Text } from '@/components/Text';
 import { ensureNotificationPermission } from '@/services/notifications';
 import { medicationDisplayName, useOnboardingStore } from '@/stores/onboarding';
 import { colors, radius, spacing } from '@/theme';
-import { fmtClock } from '@/utils/date';
 
 export default function NotificationsScreen() {
-  const reminder = useOnboardingStore((state) => state.reminder);
-  const medicationCount = useOnboardingStore((state) => state.medicationIds.length);
   const setReminderEnabled = useOnboardingStore((state) => state.setReminderEnabled);
   const preview = useNotificationPreview();
   const [requesting, setRequesting] = useState(false);
@@ -64,12 +61,11 @@ export default function NotificationsScreen() {
     <OnboardingStep
       step="notifications"
       title="Can Poke send that reminder?"
-      // `services/notifications.ts` schedules per medication, not per user, so a
-      // two-medication run gets two notifications. The singular claim was true
-      // for one medication and false for everyone else.
-      subtitle={medicationCount > 1
-        ? `One notification for each medication on its shot day, at ${fmtClock(reminder.time)}. Poke sends nothing else.`
-        : `One notification on your shot day, at ${fmtClock(reminder.time)}. Poke sends nothing else.`}
+      // Three loops ship on: the shot-day reminder, the day-after check-in and
+      // the missed-shot catch-up. A line that promised one notification was true
+      // of the old build and false of this one, so the promise names all three
+      // and points at the switches that turn each of them off.
+      subtitle="A reminder on shot day, a check-in the day after, and a catch-up if a day slips. Turn any of them off in Profile. Poke sends nothing else."
       // Once iOS has been told no, pressing "Turn on reminders" again opens
       // nothing and changes nothing. The button names the one thing left that
       // can change the answer, and the skip below it says the flow carries on.
@@ -121,17 +117,17 @@ function useNotificationPreview(): { title: string; body: string | null } {
   const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
 
   const id = medicationIds[0];
-  if (!id) return { title: 'Your medication is on your schedule', body: null };
+  if (!id) return { title: 'Ready for your shot?', body: null };
 
   const name = medicationDisplayName(id, customMedicationName);
-  const title = `${name} is on your schedule`;
+  const title = `Ready for your ${name} shot?`;
   const schedule = schedules[id];
   const dose = schedule?.doseText.trim();
   if (!schedule || !dose) return { title, body: null };
 
   return {
     title,
-    body: `You set ${dose} ${schedule.unit} ${schedule.route.toUpperCase()} for today.`,
+    body: `You set ${dose} ${schedule.unit} for today. Log it to track your levels.`,
   };
 }
 

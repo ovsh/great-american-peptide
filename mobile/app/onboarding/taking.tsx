@@ -49,7 +49,10 @@ export default function TakingScreen() {
       // recording's does. Asking someone who has not started yet what they are
       // "taking" is the small wrong note that makes a flow feel generic.
       title={journeyStage === 'starting' ? 'What do you plan to use?' : 'What are you taking?'}
-      subtitle="Search the list or add your own. You can change this list later."
+      // The list is the longest in the run and it ends hard against the pinned
+      // footer, so the last row reads as sliced by the button. The inset gives
+      // the list the height of that bar to scroll clear into.
+      contentStyle={styles.content}
       footer={(
         <Button
           disabled={!canContinue}
@@ -150,6 +153,9 @@ function entryDescription(entry: PresetEntry): string | undefined {
 }
 
 const styles = StyleSheet.create({
+  content: {
+    paddingBottom: spacing.hero,
+  },
   list: {
     gap: spacing.sm,
   },

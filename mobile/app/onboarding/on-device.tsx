@@ -1,68 +1,50 @@
 import { StyleSheet, View } from 'react-native';
-import { Database, Download, WifiOff } from 'lucide-react-native';
 
 import { OnboardingStep } from '@/components/OnboardingStep';
-import { Text } from '@/components/Text';
-import { colors, radius, spacing } from '@/theme';
+import { PromiseRow } from '@/components/onboarding/interstitial-scene';
+import { OnDeviceScene, onDeviceRowsBeat } from '@/components/onboarding/on-device-scene';
+import { TodayRise } from '@/components/today-motion';
+import { rise, spacing } from '@/theme';
 
-const POINTS = [
-  {
-    id: 'local',
-    icon: <Database size={20} color={colors.accent} />,
-    label: 'Your shots, weights and side effects sit in one database.',
-  },
-  {
-    id: 'offline',
-    icon: <WifiOff size={20} color={colors.accent} />,
-    label: 'Poke works with the network off. There is nothing to sync and nothing to lose.',
-  },
-  {
-    id: 'export',
-    icon: <Download size={20} color={colors.accent} />,
-    label: 'Poke Pro exports the lot as a CSV file, for the appointment where you need it.',
-  },
+const PROMISES = [
+  'Poke asks for no health data from another app and sends none to one.',
+  'Poke works with the network off.',
 ];
 
 // This is the slot where the recording asks to connect Apple Health. Poke reads
 // no health store and writes to none, so the honest screen in this position says
 // what Poke does instead of asking for a permission it does not use.
+//
+// Two rows, not four. The database line described the storage rather than the
+// promise, and the CSV line sold Pro on a screen about privacy; the scene now
+// carries the picture both of them were standing in for.
 export default function OnDeviceScreen() {
   return (
-    <OnboardingStep
-      step="on-device"
-      title="Everything stays on this phone"
-      subtitle="Poke asks for no health data from another app and sends none to one."
-    >
-      <View style={styles.list}>
-        {POINTS.map((point) => (
-          <View key={point.id} style={styles.row}>
-            <View style={styles.badge}>{point.icon}</View>
-            <Text style={styles.rowLabel}>{point.label}</Text>
-          </View>
-        ))}
-      </View>
+    <OnboardingStep step="on-device" title="Everything stays on this phone" bodyStyle={styles.body}>
+      <OnDeviceScene />
+
+      <TodayRise show delay={onDeviceRowsBeat} distance={rise.line} style={styles.list}>
+        <View style={styles.rows}>
+          {PROMISES.map((promise) => (
+            <PromiseRow key={promise}>{promise}</PromiseRow>
+          ))}
+        </View>
+      </TodayRise>
     </OnboardingStep>
   );
 }
 
 const styles = StyleSheet.create({
+  body: {
+    gap: spacing.xl,
+    alignItems: 'center',
+  },
   list: {
-    gap: spacing.lg,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  rows: {
     gap: spacing.md,
-  },
-  badge: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowLabel: {
-    flex: 1,
   },
 });

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import Reanimated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -7,15 +12,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { reduceMotionNow } from '@/components/onboardingTransition';
-import {
-  SHOT_DAY_OPTIONS,
-  medicationDisplayName,
-  useOnboardingStore,
-  type OnboardingDraft,
-} from '@/stores/onboarding';
+import { useOnboardingStore, type OnboardingDraft } from '@/stores/onboarding';
 import { getPreset, hasUsableHalfLife } from '@/domain/peptides';
-import { colors, onboardingMotion, radius, spacing } from '@/theme';
-import { fmtClock } from '@/utils/date';
+import {
+  beatDelay,
+  colors,
+  easing as easingTokens,
+  motion,
+  onboardingMotion,
+  radius,
+  spacing,
+  springTo,
+  springs,
+  timeTo,
+} from '@/theme';
 
 const RING_SIZE = 176;
 const RING_STROKE = 10;
@@ -38,6 +48,13 @@ const CURVE = [
 ];
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+/** The hairline of an unfinished line's marker. */
+const MARKER_BORDER = 1;
+
+/** The two beats a check waits, plus the time it takes to draw. */
+const CHECK_MARK_DELAY = 2 * motion.beat;
+const CHECK_TAIL_MS = CHECK_MARK_DELAY + motion.base;
 
 export default function ComputeScreen() {
   const insets = useSafeAreaInsets();
@@ -79,21 +96,27 @@ export default function ComputeScreen() {
       easing: Easing.linear,
       useNativeDriver: false,
     });
+    let tail: ReturnType<typeof setTimeout> | undefined;
     run.start(({ finished }) => {
-      if (finished) router.replace('/onboarding/plan');
+      // The fourth line turns over on the closing frame of the ring, and its
+      // check takes two beats to arrive and a fifth of a second to draw. The
+      // beat holds for exactly that, so the list is seen to finish rather than
+      // being carried off the screen mid check.
+      if (finished) tail = setTimeout(() => router.replace('/onboarding/plan'), CHECK_TAIL_MS);
     });
 
     return () => {
       run.stop();
+      if (tail) clearTimeout(tail);
       progress.removeListener(id);
     };
   }, [clock, progress]);
 
-  // One line is active at a time and the ones above it are done, so the list
-  // reads top to bottom as it fills. A line turns over on its own share of the
-  // ring, which keeps the two in step at any line count.
+  // One clock. The ring is the clock, and a line turns over on its own quarter
+  // of it, so the fourth check and the closing of the ring are the same event.
+  // The whole list stands there from the first frame: four lines that arrive one
+  // at a time make the screen jump, and the user cannot read what is coming.
   const done = Math.floor((percent / 100) * lines.length);
-  const visible = lines.slice(0, Math.min(lines.length, done + 1));
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.hero }]}>
@@ -139,24 +162,56 @@ export default function ComputeScreen() {
       </Text>
 
       <View style={styles.lines}>
-        {visible.map((line, index) => {
-          const complete = index < done;
-          return (
-            <View key={line} style={styles.line}>
-              <View style={[styles.marker, complete && styles.markerDone]}>
-                {complete ? <Check size={12} strokeWidth={3} color={colors.inkInverse} /> : null}
-              </View>
-              <Text
-                variant="small"
-                color={complete ? colors.inkSubtle : colors.ink}
-                style={styles.lineLabel}
-              >
-                {line}
-              </Text>
-            </View>
-          );
-        })}
+        {lines.map((line, index) => (
+          <ComputeLine key={line} label={line} complete={index < done} />
+        ))}
       </View>
+    </View>
+  );
+}
+
+/** How a line reads before its quarter of the ring closes. */
+const PENDING_OPACITY = 0.55;
+
+/**
+ * One line of the list.
+ *
+ * The disc pops first and the check and the words follow two beats later, so
+ * the eye reads the mark landing and then the line it belongs to, rather than
+ * the whole row switching on at once.
+ */
+function ComputeLine({ label, complete }: { label: string; complete: boolean }) {
+  const reduced = useReducedMotion();
+  const fill = useSharedValue(complete ? 1 : 0);
+  const mark = useSharedValue(complete ? 1 : 0);
+
+  useEffect(() => {
+    fill.value = springTo(complete ? 1 : 0, { config: springs.pop, reduced });
+    mark.value = timeTo(complete ? 1 : 0, {
+      duration: motion.base,
+      easing: easingTokens.out,
+      delay: beatDelay(CHECK_MARK_DELAY, reduced),
+      reduced,
+    });
+  }, [complete, fill, mark, reduced]);
+
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scale: fill.value }] }));
+  const markStyle = useAnimatedStyle(() => ({ opacity: mark.value }));
+  const labelStyle = useAnimatedStyle(() => ({
+    opacity: PENDING_OPACITY + (1 - PENDING_OPACITY) * mark.value,
+  }));
+
+  return (
+    <View style={styles.line}>
+      <View style={styles.marker}>
+        <Reanimated.View style={[styles.markerFill, fillStyle]} />
+        <Reanimated.View style={markStyle}>
+          <Check size={12} strokeWidth={3} color={colors.inkInverse} />
+        </Reanimated.View>
+      </View>
+      <Reanimated.View style={[styles.lineLabel, labelStyle]}>
+        <Text variant="small">{label}</Text>
+      </Reanimated.View>
     </View>
   );
 }
@@ -165,66 +220,25 @@ export default function ComputeScreen() {
  * What the beat says it is doing, restricted to what the plan screen then does.
  *
  * MeAgain fills this stack with nutrition targets it invents on the spot. Every
- * line here names a calculation `services/onboardingPlan.ts` actually runs on
- * the answer it quotes, so a user who reads them and then reads the plan finds
- * the same six things. A line whose answer was skipped is not written.
+ * line here names a calculation `services/onboardingPlan.ts` actually runs.
+ *
+ * Always four, and always short. The count is fixed because the ring is the
+ * clock: four lines put a check on each quarter of it, and a list that grew or
+ * shrank with the answers left the ring turning with nothing to show. A line
+ * whose answer was skipped is not dropped, it is rewritten to the thing Poke
+ * does instead, so no line ever claims work that did not happen.
  */
 export function computeLines(draft: OnboardingDraft): string[] {
-  const lines: string[] = [];
   const firstId = draft.medicationIds[0];
-  const first = firstId ? draft.schedules[firstId] : undefined;
+  const preset = firstId ? getPreset(firstId) : undefined;
+  const modelled = Boolean(preset && hasUsableHalfLife(preset));
 
-  if (firstId) {
-    const name = medicationDisplayName(firstId, draft.customMedicationName);
-    const preset = getPreset(firstId);
-    lines.push(preset && hasUsableHalfLife(preset)
-      ? `Reading the half-life for ${name}`
-      : `Filing ${name} with the dose you set`);
-  }
-
-  if (first) {
-    lines.push(first.frequencyKind === 'daily'
-      ? 'Drawing four weeks of levels from a daily shot'
-      : `Drawing four weeks of levels from ${dayLabel(first.shotDay)}`);
-  }
-
-  if (draft.medicationIds.length > 1) {
-    // "all 2 of your medications" is what the plain template renders at the
-    // count this branch is reached at most often, and it reads like a mail
-    // merge. Two gets a word.
-    lines.push(draft.medicationIds.length === 2
-      ? 'Lining up both of your medications on one calendar'
-      : `Lining up all ${draft.medicationIds.length} of your medications on one calendar`);
-  }
-
-  lines.push('Working out the first four injection sites in the rotation');
-
-  const current = draft.weight.current;
-  const goal = draft.weight.goal;
-  if (current !== null && goal !== null && current !== goal) {
-    lines.push(`Mapping ${format(current)} ${draft.weight.unit} to ${format(goal)} ${draft.weight.unit} at your pace`);
-  }
-
-  if (draft.concerns.length > 0) {
-    lines.push('Filing the side effects you want to keep an eye on');
-  }
-
-  // Only when there is a reminder to set. A user who pressed `Not now`, or who
-  // refused the OS permission, sets no reminder, and a line that says otherwise
-  // is the one kind of claim this list exists to avoid.
-  if (draft.reminder.kind === 'enabled') {
-    lines.push(`Setting your reminder for ${fmtClock(draft.reminder.time)}`);
-  }
-
-  return lines;
-}
-
-function dayLabel(day: number): string {
-  return SHOT_DAY_OPTIONS.find((option) => option.value === day)?.label ?? 'your shot day';
-}
-
-function format(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return [
+    modelled ? 'Reading the half-life' : 'Filing your medication',
+    modelled ? 'Drawing four weeks of levels' : 'Marking four weeks of shots',
+    'Planning the site rotation',
+    draft.reminder.kind === 'enabled' ? 'Setting your reminder' : 'Saving your answers',
+  ];
 }
 
 const styles = StyleSheet.create({
@@ -263,13 +277,20 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: MARKER_BORDER,
     borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markerDone: {
-    borderColor: colors.accent,
+  // Over the ring, not inside it: an accent disc that stopped at the inside of
+  // a grey hairline would wear the hairline as a halo.
+  markerFill: {
+    position: 'absolute',
+    top: -MARKER_BORDER,
+    left: -MARKER_BORDER,
+    right: -MARKER_BORDER,
+    bottom: -MARKER_BORDER,
+    borderRadius: radius.pill,
     backgroundColor: colors.accent,
   },
   lineLabel: {

@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { ShieldCheck, Target } from 'lucide-react-native';
+import { ShieldCheck } from 'lucide-react-native';
 
 import { Interstitial } from '@/components/OnboardingStep';
+import { DateMathScene } from '@/components/onboarding/date-math-scene';
+import { InterstitialScene } from '@/components/onboarding/interstitial-scene';
 import { planProjection } from '@/services/onboardingPlan';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { colors } from '@/theme';
@@ -19,12 +21,11 @@ import { colors } from '@/theme';
 export default function ConsistencyScreen() {
   const weight = useOnboardingStore((state) => state.weight);
   const pace = useOnboardingStore((state) => state.pace);
-  const hasDate = useMemo(
-    () => planProjection(weight, pace, Date.now()) !== null,
-    [weight, pace],
-  );
+  // Fixed at mount, so the drawn date cannot shift while the screen is open.
+  const now = useMemo(() => Date.now(), []);
+  const projection = useMemo(() => planProjection(weight, pace, now), [weight, pace, now]);
 
-  if (!hasDate) {
+  if (!projection) {
     return (
       <Interstitial
         step="consistency"
@@ -36,13 +37,33 @@ export default function ConsistencyScreen() {
     );
   }
 
+  // The line about the pace moving the date is gone. The scene is the sum with
+  // the user's own three numbers in it, and the pace ticks in front of them, so
+  // a sentence saying the sum is live repeats what the drawing shows.
   return (
-    <Interstitial
+    <InterstitialScene
       step="consistency"
-      icon={<Target size={34} color={colors.accent} />}
       title="Where your date comes from"
-      body="Poke divides your distance by your pace and prints the date that falls on. That is arithmetic and nothing more."
-      note="Change the pace and the date moves with it."
+      scene={(
+        <DateMathScene
+          distance={`${formatWeight(Math.abs(projection.current - projection.goal))} ${projection.unit}`}
+          pace={`${projection.pace.toFixed(projection.unit === 'lb' ? 1 : 2)} ${projection.unit} a week`}
+          date={longDate(projection.reachesAt)}
+        />
+      )}
+      line="Poke divides your distance by your pace and prints the date that falls on. That is arithmetic and nothing more."
     />
   );
+}
+
+function formatWeight(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function longDate(at: number): string {
+  return new Date(at).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }

@@ -1,7 +1,7 @@
 // SQLite schema. Add new migrations to MIGRATIONS array
 // and bump SCHEMA_VERSION; older versions get applied in order on launch.
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const MIGRATIONS: { version: number; up: string }[] = [
   {
@@ -242,6 +242,21 @@ export const MIGRATIONS: { version: number; up: string }[] = [
       ) - 1;
 
       ALTER TABLE preferences ADD COLUMN focused_medication_id TEXT;
+    `,
+  },
+  {
+    // One switch per notification loop. `notifications_enabled` stays the master
+    // switch and the shot-day switch: with it off Poke schedules nothing at all.
+    // The two new loops ship on, which is why the permission screen names all
+    // three of them.
+    //
+    // `notif_checkin_delay_hours` holds 24, 36 or 48. The scheduler falls back
+    // to 36 for any other number, so a row edited by hand cannot break it.
+    version: 11,
+    up: `
+      ALTER TABLE preferences ADD COLUMN notif_checkin_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE preferences ADD COLUMN notif_checkin_delay_hours INTEGER NOT NULL DEFAULT 36;
+      ALTER TABLE preferences ADD COLUMN notif_missed_enabled INTEGER NOT NULL DEFAULT 1;
     `,
   },
 ];

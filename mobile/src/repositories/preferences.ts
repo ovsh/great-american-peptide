@@ -36,6 +36,10 @@ const PREFERENCE_COLUMNS = [
   'tester_pro_at',
   // Schema version 10.
   'focused_medication_id',
+  // Schema version 11.
+  'notif_checkin_enabled',
+  'notif_checkin_delay_hours',
+  'notif_missed_enabled',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {
