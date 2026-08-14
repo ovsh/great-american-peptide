@@ -48,6 +48,43 @@ export async function createMeasurement(input: NewMeasurement): Promise<Measurem
   return row;
 }
 
+export interface ImportedMeasurement {
+  kind: MeasurementKind;
+  value: number;
+  unit: string;
+  takenAt: number;
+  /** The HealthKit sample uuid. Stable across reads, so it is the dedupe key. */
+  sourceId: string;
+}
+
+/**
+ * Writes rows Poke read from Apple Health, and answers how many were new.
+ *
+ * The unique index from schema version 12 does the whole dedupe. A sample Poke
+ * already holds is dropped by `INSERT OR IGNORE` rather than compared here, so
+ * re-reading a window Poke has already read changes nothing and the caller can
+ * pick an overlapping window on purpose. `changes` then counts only the rows
+ * that were genuinely new, which is the number the screens report.
+ */
+export async function importMeasurements(rows: readonly ImportedMeasurement[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const db = await getDb();
+  const now = Date.now();
+  let added = 0;
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      const result = await db.runAsync(
+        `INSERT OR IGNORE INTO measurements
+           (id, kind, value, unit, taken_at, source, source_id, notes, deleted_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'healthkit', ?, NULL, NULL, ?)`,
+        [newId('m'), row.kind, row.value, row.unit, row.takenAt, row.sourceId, now],
+      );
+      added += result.changes;
+    }
+  });
+  return added;
+}
+
 export async function updateManualMeasurement(id: string, patch: UpdateManualMeasurement): Promise<MeasurementRow> {
   const db = await getDb();
   const sets: string[] = [];

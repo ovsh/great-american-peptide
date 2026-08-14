@@ -11,7 +11,7 @@
 // the scrim and the drag-down both dismiss it.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -21,19 +21,23 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Syringe, Trash2 } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { ChevronRight, Syringe, Trash2 } from 'lucide-react-native';
 
 import { Text } from './Text';
 import { medicationColor } from './today-hero-card';
 import type { InjectionRow, MeasurementRow, MedicationRow } from '../db/types';
 import { getBodySite } from '../domain/bodySites';
+import { doseOnDay } from '../domain/doseByDay';
 import { cadenceLabel, type BoardDay, type LaneMark } from '../domain/historyBoard';
 import { sideEffectLabel } from '../domain/sideEffects';
 import { formatDose, formatWeight, type WeightUnit } from '../domain/units';
-import { listInjections, softDeleteInjection } from '../repositories/injections';
+import { listInjections } from '../repositories/injections';
 import { listMeasurements } from '../repositories/measurements';
 import { listSideEffects, softDeleteSideEffect, type SideEffectLog } from '../repositories/sideEffects';
+import { deleteInjectionAndRefresh } from '../services/injectionMutations';
 import { colors, easing, motion, radius, spacing, text } from '../theme';
+import { confirmDelete } from '../utils/confirmDelete';
 import { endOfDay, fmtTime } from '../utils/date';
 
 const SHEET_MIN_HEIGHT = 400;
@@ -61,18 +65,6 @@ function dayAndMonth(dayStart: number): string {
   return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()}`;
 }
 
-/** `Alert.alert` does nothing on web, so the web build asks the browser instead. */
-function confirmDelete(message: string, onConfirm: () => void) {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.confirm(message)) onConfirm();
-    return;
-  }
-  Alert.alert('Delete this entry?', message, [
-    { text: 'Keep', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: onConfirm },
-  ]);
-}
-
 /* ── what a day holds ─────────────────────────────────────────────────── */
 
 interface DayEntries {
@@ -86,21 +78,29 @@ const EMPTY_ENTRIES: DayEntries = { shots: [], weights: [], effects: [] };
 /* ── a row that can be swiped away ────────────────────────────────────── */
 
 /**
- * A record row, with delete behind it.
+ * A record row, with delete behind it, and an editor in front of it when the
+ * record has one.
  *
- * There is no screen that edits a logged shot, so the sheet does not promise
- * one: no chevron, and the only verb a record carries is the one History has
- * always had. Swipe is where a phone user looks for it, and the row also
- * publishes it as an accessibility action for anyone who cannot swipe.
+ * A shot row carries two verbs now. The press opens the shot on the log screen,
+ * and the chevron on the row is the promise that it does. Delete stays behind
+ * the swipe, where a phone user looks for it, and both verbs are published as
+ * accessibility actions for anyone who cannot swipe or tap accurately.
+ *
+ * A row with no `onPress` draws no chevron and takes no tap: a weight and a
+ * missed dose have nowhere to go.
  */
 function SwipeRow({
   children,
   deleteLabel,
   onDelete,
+  openLabel,
+  onOpen,
 }: {
   children: React.ReactNode;
   deleteLabel: string;
   onDelete: () => void;
+  openLabel?: string;
+  onOpen?: () => void;
 }) {
   const offset = useSharedValue(0);
   const open = useSharedValue(0);
@@ -122,10 +122,25 @@ function SwipeRow({
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
-  const remove = () => {
+  const close = () => {
     open.value = 0;
     offset.value = withTiming(0, { duration, easing: easing.out });
+  };
+
+  const remove = () => {
+    close();
     onDelete();
+  };
+
+  const press = () => {
+    // A revealed delete button owns the next tap. It puts the row back, so a
+    // finger that reaches for the row it just uncovered cannot open a screen it
+    // did not ask for.
+    if (open.value !== 0) {
+      close();
+      return;
+    }
+    onOpen?.();
   };
 
   return (
@@ -139,15 +154,37 @@ function SwipeRow({
         <Trash2 size={19} color={colors.inkInverse} />
       </Pressable>
       <GestureDetector gesture={pan}>
+        {/*
+          The row is one accessibility element, and which node holds it depends
+          on whether the row opens anything. A row that opens a screen hands the
+          job to the pressable inside, so the row reads as a button and the press
+          is the real press. A row that opens nothing keeps it here, the way it
+          always has. Marking both is what draws a button inside a button, which
+          is invalid on the web and reads the row out twice everywhere else.
+        */}
         <Animated.View
-          accessible
-          accessibilityActions={[{ name: 'delete', label: 'Delete' }]}
+          accessible={!onOpen}
+          accessibilityActions={onOpen ? undefined : [{ name: 'delete', label: 'Delete' }]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'delete') remove();
           }}
           style={[styles.swipeSurface, style]}
         >
-          {children}
+          {onOpen ? (
+            <Pressable
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={openLabel}
+              accessibilityActions={[{ name: 'delete', label: 'Delete' }]}
+              onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === 'delete') remove();
+              }}
+              onPress={press}
+              style={({ pressed }) => (pressed ? styles.rowPressed : null)}
+            >
+              {children}
+            </Pressable>
+          ) : children}
         </Animated.View>
       </GestureDetector>
     </View>
@@ -164,6 +201,7 @@ function Row({
   meta,
   value,
   planned,
+  chevron,
 }: {
   mark: 'logged' | 'missed' | 'point';
   hex: string;
@@ -172,6 +210,8 @@ function Row({
   meta: string;
   value: string;
   planned?: boolean;
+  /** Drawn on a row that opens something. It is the row's promise of a screen. */
+  chevron?: boolean;
 }) {
   return (
     <View style={styles.row}>
@@ -200,6 +240,7 @@ function Row({
       >
         {value}
       </Text>
+      {chevron ? <ChevronRight size={18} color={colors.inkSubtle} /> : null}
     </View>
   );
 }
@@ -313,6 +354,21 @@ export function HistoryDaySheet({
     [onChanged],
   );
 
+  /**
+   * Opens one shot on the log screen, which is also the edit screen.
+   *
+   * The sheet closes first. Both are modals, and a log screen pushed over an
+   * open sheet would drop the user back onto the sheet instead of onto the day
+   * behind it, with the row it just changed still reading the old numbers.
+   */
+  const openShot = useCallback(
+    (shotId: string) => {
+      onClose();
+      router.push({ pathname: '/log-shot', params: { injectionId: shotId } });
+    },
+    [onClose],
+  );
+
   /* The medication rows, in lane order: what happened, then what the schedule
      wanted and did not get. A shot of an archived medication still gets a row. */
   const medicationRows = useMemo(() => {
@@ -332,8 +388,10 @@ export function HistoryDaySheet({
               key={shot.id}
               deleteLabel={`Delete ${medication.name} shot`}
               onDelete={() =>
-                remove(`${medication.name}, ${fmtTime(shot.taken_at)}.`, () => softDeleteInjection(shot.id))
+                remove(`${medication.name}, ${fmtTime(shot.taken_at)}.`, () => deleteInjectionAndRefresh(shot.id))
               }
+              openLabel={`Edit ${medication.name} shot, ${fmtTime(shot.taken_at)}`}
+              onOpen={() => openShot(shot.id)}
             >
               <Row
                 mark="logged"
@@ -341,6 +399,7 @@ export function HistoryDaySheet({
                 title={medication.name}
                 meta={siteMeta(shot)}
                 value={formatDose(shot.dose, shot.unit)}
+                chevron
               />
             </SwipeRow>,
           );
@@ -358,7 +417,12 @@ export function HistoryDaySheet({
           hex={hex}
           title={medication.name}
           meta={meta}
-          value={formatDose(medication.default_dose, medication.default_unit)}
+          /* The dose the plan wanted on this day, which is the default dose
+             unless the user set one per weekday. */
+          value={formatDose(
+            doseOnDay(medication.dose_by_day, medication.default_dose, shown.dayStart),
+            medication.default_unit,
+          )}
           planned
         />,
       );
@@ -376,9 +440,13 @@ export function HistoryDaySheet({
             deleteLabel="Delete shot"
             onDelete={() =>
               remove(`${medication?.name ?? 'Shot'}, ${fmtTime(shot.taken_at)}.`, () =>
-                softDeleteInjection(shot.id),
+                deleteInjectionAndRefresh(shot.id),
               )
             }
+            openLabel={medication
+              ? `Edit ${medication.name} shot, ${fmtTime(shot.taken_at)}`
+              : `Edit shot, ${fmtTime(shot.taken_at)}`}
+            onOpen={() => openShot(shot.id)}
           >
             <Row
               mark="logged"
@@ -386,13 +454,14 @@ export function HistoryDaySheet({
               title={medication?.name ?? 'Shot'}
               meta={siteMeta(shot)}
               value={formatDose(shot.dose, shot.unit)}
+              chevron
             />
           </SwipeRow>,
         );
       });
 
     return rows;
-  }, [shown, lanes, entries.shots, medicationsById, remove]);
+  }, [shown, lanes, entries.shots, medicationsById, remove, openShot]);
 
   const pointRows = useMemo(() => {
     const rows: React.ReactNode[] = [];
@@ -422,12 +491,14 @@ export function HistoryDaySheet({
           }
         >
           <Row
-            mark="point"
+            /* An all-clear draws the chart's own mark for it, the hollow violet
+               ring, and carries no severity: the title is the whole reading. */
+            mark={effect.effect.kind === 'clear' ? 'missed' : 'point'}
             round
             hex={colors.violet}
             title={sideEffectLabel(effect.effect)}
             meta={fmtTime(effect.taken_at)}
-            value={`${effect.severity} of 10`}
+            value={effect.effect.kind === 'clear' ? '' : `${effect.severity} of 10`}
           />
         </SwipeRow>,
       );
@@ -608,6 +679,9 @@ const styles = StyleSheet.create({
   },
   swipeSurface: {
     backgroundColor: colors.surface,
+  },
+  rowPressed: {
+    backgroundColor: colors.surfaceMuted,
   },
   row: {
     minHeight: 58,

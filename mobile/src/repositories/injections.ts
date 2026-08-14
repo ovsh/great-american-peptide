@@ -14,6 +14,26 @@ export interface NewInjection {
   notes?: string | null;
 }
 
+/**
+ * The fields an edit can move on a shot already on file.
+ *
+ * Every field the log screen asks for is here, `medicationId` included: a shot
+ * filed under the wrong medication is the correction users reach for first, and
+ * a record you can only delete is a record you have to log twice.
+ *
+ * `createdAt` is not here. It is when Poke wrote the row, not when the shot
+ * happened, and `takenAt` already carries the second one.
+ */
+export interface UpdateInjection {
+  medicationId?: string;
+  dose?: number;
+  unit?: Unit;
+  route?: Route;
+  siteId?: string | null;
+  takenAt?: number;
+  notes?: string | null;
+}
+
 export async function listInjections(opts?: {
   medicationId?: string;
   fromMs?: number;
@@ -56,6 +76,47 @@ export async function createInjection(input: NewInjection): Promise<InjectionRow
   );
   const row = await db.getFirstAsync<InjectionRow>(`SELECT * FROM injections WHERE id = ?`, [id]);
   if (!row) throw new Error('Failed to create injection');
+  return row;
+}
+
+/** One shot by id, or null when it is gone. A deleted row reads as gone. */
+export async function getInjection(id: string): Promise<InjectionRow | null> {
+  const db = await getDb();
+  return (await db.getFirstAsync<InjectionRow>(
+    `SELECT * FROM injections WHERE id = ? AND deleted_at IS NULL`,
+    [id],
+  )) ?? null;
+}
+
+/**
+ * Writes the fields the patch names and leaves the rest of the row alone.
+ *
+ * Partial by design, the way `updateManualMeasurement` is: the caller sends what
+ * the user changed, so a field the edit screen never showed cannot be written
+ * back as null. An empty patch reads the row instead of writing an empty SET.
+ *
+ * Callers go through `updateInjectionAndRefresh`, which invalidates the reminder
+ * queue after the write. All three reminder loops read this table.
+ */
+export async function updateInjection(id: string, patch: UpdateInjection): Promise<InjectionRow> {
+  const db = await getDb();
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if (patch.medicationId !== undefined) { sets.push('medication_id = ?'); args.push(patch.medicationId); }
+  if (patch.dose !== undefined) { sets.push('dose = ?'); args.push(patch.dose); }
+  if (patch.unit !== undefined) { sets.push('unit = ?'); args.push(patch.unit); }
+  if (patch.route !== undefined) { sets.push('route = ?'); args.push(patch.route); }
+  if (patch.siteId !== undefined) { sets.push('site_id = ?'); args.push(patch.siteId); }
+  if (patch.takenAt !== undefined) { sets.push('taken_at = ?'); args.push(patch.takenAt); }
+  if (patch.notes !== undefined) { sets.push('notes = ?'); args.push(patch.notes); }
+  if (sets.length > 0) {
+    await db.runAsync(
+      `UPDATE injections SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+      [...args, id],
+    );
+  }
+  const row = await getInjection(id);
+  if (!row) throw new Error('Shot not found');
   return row;
 }
 

@@ -1,5 +1,5 @@
-import type { InjectionRow, MeasurementRow, MedicationRow, SideEffectLogRow } from '../db/types.ts';
-import { buildExportCsv, csvCell, exportFileName } from './exportCsv.ts';
+import type { InjectionRow, MeasurementRow, MedicationRow } from '../db/types.ts';
+import { buildExportCsv, csvCell, exportFileName, type ExportSideEffect } from './exportCsv.ts';
 
 process.env.TZ = 'America/Chicago';
 
@@ -21,7 +21,7 @@ test('every event kind lands in one reverse-chronological table', () => {
     medications: [med('m1', 'Tirzepatide')],
     injections: [injection('i1', 'm1', 2.5, localTime(2026, 8, 1, 9))],
     weights: [weight('w1', 196.4, localTime(2026, 8, 5, 7))],
-    sideEffects: [sideEffect('s1', 'Nausea', 4, localTime(2026, 8, 3, 20))],
+    sideEffects: [sideEffect('Nausea', 4, localTime(2026, 8, 3, 20))],
   }, NOW);
 
   const lines = csv.trim().split('\n');
@@ -31,6 +31,17 @@ test('every event kind lands in one reverse-chronological table', () => {
   assertEqual(lines[4], '2026-08-03,20:00,side effect,Nausea,4,of 10,,', 'then the side effect');
   assertEqual(lines[5], '2026-08-01,09:00,injection,Tirzepatide,2.5,mg,left_thigh,', 'then the injection');
   assertEqual(lines.length, 6, 'no extra rows');
+});
+
+test('an all-clear day exports without the severity it never had', () => {
+  const csv = buildExportCsv({
+    medications: [],
+    injections: [],
+    weights: [],
+    sideEffects: [{ ...sideEffect('All clear', 0, localTime(2026, 8, 3, 20)), clear: true }],
+  }, NOW);
+  const row = csv.trim().split('\n')[3];
+  assertEqual(row, '2026-08-03,20:00,side effect,All clear,,,,', 'no 0 of 10 on a clear day');
 });
 
 test('an injection for a deleted medication still exports', () => {
@@ -72,8 +83,8 @@ function weight(id: string, value: number, takenAt: number): MeasurementRow {
   return { id, kind: 'weight', value, unit: 'lb', taken_at: takenAt, source: 'manual', source_id: null, notes: null, deleted_at: null, created_at: takenAt } as MeasurementRow;
 }
 
-function sideEffect(id: string, effect: string, severity: number, takenAt: number): SideEffectLogRow {
-  return { id, effect, severity, taken_at: takenAt, notes: null, deleted_at: null, created_at: takenAt };
+function sideEffect(effect: string, severity: number, takenAt: number): ExportSideEffect {
+  return { effect, severity, taken_at: takenAt, notes: null, clear: false };
 }
 
 function localTime(year: number, month: number, day: number, hour: number): number {

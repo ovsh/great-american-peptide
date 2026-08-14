@@ -61,11 +61,13 @@ export default function NotificationsScreen() {
     <OnboardingStep
       step="notifications"
       title="Can Poke send that reminder?"
-      // Three loops ship on: the shot-day reminder, the day-after check-in and
-      // the missed-shot catch-up. A line that promised one notification was true
-      // of the old build and false of this one, so the promise names all three
-      // and points at the switches that turn each of them off.
-      subtitle="A reminder on shot day, a check-in the day after, and a catch-up if a day slips. Turn any of them off in Profile. Poke sends nothing else."
+      // Four loops ship on: the shot-day reminder, the day-after check-in, the
+      // missed-shot catch-up and the cycle. A line that promised one
+      // notification was true of the old build and false of this one, so the
+      // promise names all four and points at the switches that turn each of
+      // them off. The cycle is worth exactly two banners, the last planned day
+      // and the day the break ends, so the count is in the sentence.
+      subtitle="A reminder on shot day, a check-in the day after, a catch-up if a day slips, and two notes on a cycle you set. Turn any of them off in Profile. Poke sends nothing else."
       // Once iOS has been told no, pressing "Turn on reminders" again opens
       // nothing and changes nothing. The button names the one thing left that
       // can change the answer, and the skip below it says the flow carries on.
@@ -114,12 +116,12 @@ export default function NotificationsScreen() {
 function useNotificationPreview(): { title: string; body: string | null } {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
   const schedules = useOnboardingStore((state) => state.schedules);
-  const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
+  const customNames = useOnboardingStore((state) => state.customNames);
 
   const id = medicationIds[0];
   if (!id) return { title: 'Ready for your shot?', body: null };
 
-  const name = medicationDisplayName(id, customMedicationName);
+  const name = medicationDisplayName(id, customNames);
   const title = `Ready for your ${name} shot?`;
   const schedule = schedules[id];
   const dose = schedule?.doseText.trim();

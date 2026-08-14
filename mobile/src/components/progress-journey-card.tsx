@@ -236,12 +236,20 @@ function readOutFor(journey: Journey, metric: ProgressMetric, pro: boolean, now:
   }
 
   if (metric === 'effects') {
+    // Clear days are answers, not effects, so they stay out of the count: "3
+    // logged" must mean three symptoms. The pill still speaks for the latest
+    // record of either kind, because that is the freshest thing the user said.
+    const symptoms = journey.effects.filter((effect) => effect.kind === 'symptom');
     const last = journey.effects[journey.effects.length - 1] ?? null;
     return {
-      value: String(journey.effects.length),
+      value: String(symptoms.length),
       unit: 'logged',
       tone: colors.violet,
-      pill: last !== null ? agoLabel(dayDistance(last.takenAt, now)) : null,
+      pill: last === null
+        ? null
+        : last.kind === 'clear'
+          ? clearAgoLabel(dayDistance(last.takenAt, now))
+          : agoLabel(dayDistance(last.takenAt, now)),
       direction: null,
       locked: false,
     };
@@ -273,6 +281,13 @@ function agoLabel(days: number): string {
   return `Last ${days} days ago`;
 }
 
+/** The same beat when the latest record is an all-clear rather than a symptom. */
+function clearAgoLabel(days: number): string {
+  if (days <= 0) return 'Clear today';
+  if (days === 1) return 'Clear yesterday';
+  return `Clear ${days} days ago`;
+}
+
 /** Every mark on the chart, named once, behind the (i). */
 function LegendSheet({ journey }: { journey: Journey }) {
   const shotColor = journey.medications[0]?.color ?? colors.med[0];
@@ -291,6 +306,9 @@ function LegendSheet({ journey }: { journey: Journey }) {
       </LegendRow>
       <LegendRow text="A side effect. The mark grows with the severity you logged">
         <Circle cx={10} cy={6.5} r={5} fill={colors.violet} />
+      </LegendRow>
+      <LegendRow text="A day you marked clear">
+        <Circle cx={10} cy={6.5} r={5} fill="none" stroke={colors.violet} strokeOpacity={0.7} strokeWidth={2} />
       </LegendRow>
       <LegendRow text="Your goal weight, set in Profile">
         <Line

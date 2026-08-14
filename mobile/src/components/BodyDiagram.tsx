@@ -1,9 +1,19 @@
+import { useMemo } from 'react';
 import Svg, { Path, Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import { Text } from './Text';
 import { colors, radius, spacing } from '../theme';
 import { bodySites, type BodySite, type View as BodyView } from '../domain/bodySites';
 import type { Route } from '../domain/peptides';
+import {
+  DOT_RADIUS_VB,
+  VIEWBOX,
+  diagramLayout,
+  dotCenter,
+  dotSize,
+  nearestDot,
+  tapPointFrom,
+} from './body-diagram-geometry';
 
 interface BodyDiagramProps {
   view: BodyView;
@@ -97,14 +107,32 @@ export function BodyDiagram({
   width = 200,
   height = 400,
 }: BodyDiagramProps) {
-  const visible = bodySites.filter((site) => site.view === view && (!route || site.routes.includes(route)));
+  const visible = useMemo(
+    () => bodySites.filter((site) => site.view === view && (!route || site.routes.includes(route))),
+    [view, route],
+  );
+  const layout = useMemo(() => diagramLayout(width, height), [width, height]);
   const suggested = suggestedId ? visible.find((site) => site.id === suggestedId) : undefined;
-  const VBW = 100;
-  const VBH = 200;
+  const suggestedCenter = suggested ? dotCenter(suggested, layout) : null;
+  // A screen reader's element is the dot, grown to the smallest control iOS and
+  // Android both ask for. Two of them overlap on a thigh, which costs nothing
+  // here: the layer takes no touch, so the overlap decides nothing. It buys a
+  // focus ring big enough to see and a switch target big enough to hit.
+  const readerTarget = Math.max(READER_TARGET_MIN, dotSize(layout));
+
+  // One press for the whole diagram, resolved to the dot nearest the finger.
+  // Boxes drawn per site have to overlap at this size, and the overlap handed
+  // the tap to whichever box was rendered last.
+  const onPressDiagram = (event: GestureResponderEvent) => {
+    const point = tapPointFrom(event.nativeEvent);
+    if (!point) return;
+    const hit = nearestDot(visible, point, layout);
+    if (hit) onSelect(hit);
+  };
 
   return (
     <View style={{ width, height }}>
-      <Svg width={width} height={height} viewBox={`0 0 ${VBW} ${VBH}`}>
+      <Svg width={width} height={height} viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}>
         <Defs>
           <LinearGradient id="bodyFill" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.surface} stopOpacity={1} />
@@ -150,16 +178,16 @@ export function BodyDiagram({
         {/* injection-site dots */}
         <G>
           {visible.map((s) => {
-            const cx = s.x * VBW;
-            const cy = s.y * VBH;
+            const cx = s.x * VIEWBOX.width;
+            const cy = s.y * VIEWBOX.height;
             const isSelected = s.id === selectedId;
             const isRecent = recentSiteIds.includes(s.id);
             if (isSelected) {
               return (
                 <G key={s.id}>
-                  <Circle cx={cx} cy={cy} r={9} fill={colors.accent} opacity={0.12} />
-                  <Circle cx={cx} cy={cy} r={5.5} fill={colors.accent} opacity={0.28} />
-                  <Circle cx={cx} cy={cy} r={3.2} fill={colors.accent} />
+                  <Circle cx={cx} cy={cy} r={SELECTED_HALO_VB} fill={colors.accent} opacity={0.12} />
+                  <Circle cx={cx} cy={cy} r={SELECTED_RING_VB} fill={colors.accent} opacity={0.28} />
+                  <Circle cx={cx} cy={cy} r={SELECTED_CORE_VB} fill={colors.accent} />
                 </G>
               );
             }
@@ -168,13 +196,13 @@ export function BodyDiagram({
                 <Circle
                   cx={cx}
                   cy={cy}
-                  r={3.6}
+                  r={DOT_RADIUS_VB}
                   fill={colors.surface}
                   stroke={isRecent ? colors.warning : colors.borderStrong}
-                  strokeWidth={0.8}
+                  strokeWidth={1}
                 />
                 {isRecent && (
-                  <Circle cx={cx} cy={cy} r={1.4} fill={colors.warning} opacity={0.7} />
+                  <Circle cx={cx} cy={cy} r={DOT_RADIUS_VB * 0.4} fill={colors.warning} opacity={0.7} />
                 )}
               </G>
             );
@@ -182,45 +210,58 @@ export function BodyDiagram({
         </G>
       </Svg>
 
-      {/* tap targets */}
-      <View
-        style={{
-          position: 'absolute',
-          width,
-          height,
-        }}
-        pointerEvents="box-none"
-      >
+      {/* One element per site, for a screen reader alone.
+          A finger never reaches these: they take no pointer, and the press
+          surface that follows sits over them and answers every touch. They
+          are here because a reader has to be able to move through the sites
+          one by one and activate the one it is on, which a single press
+          surface cannot offer. Where a platform turns that activation into a
+          tap at the element's own centre, the tap still resolves to this same
+          site, because the element is centred on the dot. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {visible.map((s) => {
-          const px = s.x * width - 22;
-          const py = s.y * height - 22;
+          const center = dotCenter(s, layout);
           return (
             <Pressable
               key={s.id}
               accessibilityRole="radio"
               accessibilityLabel={s.label}
+              // The state is for a phone, the ARIA prop is for the web build.
+              // react-native-web drops `accessibilityState` and reads `aria-*`.
               accessibilityState={{ selected: s.id === selectedId }}
+              aria-checked={s.id === selectedId}
               onPress={() => onSelect(s)}
+              onAccessibilityTap={() => onSelect(s)}
               style={{
                 position: 'absolute',
-                left: px,
-                top: py,
-                width: 44,
-                height: 44,
+                left: center.x - readerTarget / 2,
+                top: center.y - readerTarget / 2,
+                width: readerTarget,
+                height: readerTarget,
               }}
-              hitSlop={4}
             />
           );
         })}
       </View>
-      {suggested ? (
+
+      {/* The press surface. It carries no label and takes no focus, so the
+          reader walks the sites above and never meets one big button. */}
+      <Pressable
+        accessible={false}
+        focusable={false}
+        importantForAccessibility="no"
+        style={StyleSheet.absoluteFill}
+        onPress={onPressDiagram}
+      />
+
+      {suggested && suggestedCenter ? (
         <View
           pointerEvents="none"
           style={[
             styles.suggested,
             {
-              left: Math.max(0, Math.min(width - 88, suggested.x * width - 44)),
-              top: Math.max(0, suggested.y * height - 50),
+              left: Math.max(0, Math.min(width - SUGGESTED_WIDTH, suggestedCenter.x - SUGGESTED_WIDTH / 2)),
+              top: Math.max(0, suggestedCenter.y - SUGGESTED_LIFT),
             },
           ]}
         >
@@ -231,10 +272,25 @@ export function BodyDiagram({
   );
 }
 
+/** The smallest square a control is allowed to be, in points. */
+const READER_TARGET_MIN = 44;
+
+// The selected dot: a solid core inside two soft rings. The outer ring stops
+// short of the closest neighbour any dot has, which is 12 units on a thigh, so
+// the mark reads as one site rather than as a wash over two.
+const SELECTED_HALO_VB = 9.5;
+const SELECTED_RING_VB = 6.4;
+const SELECTED_CORE_VB = 3.9;
+
+/** The width the suggestion pill is placed by, so it centres over its dot. */
+const SUGGESTED_WIDTH = 88;
+/** How far the pill sits above the dot it names, clear of the dot's halo. */
+const SUGGESTED_LIFT = 50;
+
 const styles = StyleSheet.create({
   suggested: {
     position: 'absolute',
-    minWidth: 88,
+    minWidth: SUGGESTED_WIDTH,
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,

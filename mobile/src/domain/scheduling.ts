@@ -14,6 +14,51 @@ export const WEEKDAY_OPTIONS = [
   { value: 0, shortLabel: 'Sun', label: 'Sunday' },
 ] as const satisfies readonly { value: Weekday; shortLabel: string; label: string }[];
 
+/**
+ * A user-picked set of weekdays, packed into the `frequency_value` INTEGER.
+ *
+ * Bit n is weekday n in the `Weekday` numbering above, which is the numbering
+ * `Date.getDay()` uses: bit 0 is Sunday, bit 1 is Monday, and bit 6 is Saturday.
+ * Monday, Wednesday and Friday is therefore (1 << 1) | (1 << 3) | (1 << 5),
+ * which is 42. The whole set fits in seven bits, so it stores in the column the
+ * other kinds already use and needs no migration.
+ *
+ * Zero is no day picked. Zero is not a schedule, so it reads back as no
+ * schedule rather than as an empty week that silently never comes due.
+ */
+export function weekdayMask(weekdays: readonly Weekday[]): number {
+  let mask = 0;
+  for (const weekday of weekdays) mask |= 1 << weekday;
+  return mask;
+}
+
+/**
+ * The days a mask names, in the order the week is offered on screen, so a list
+ * built from this reads Monday first and Sunday last.
+ */
+export function weekdaysFromMask(mask: number | null): Weekday[] {
+  if (mask === null || !Number.isInteger(mask) || mask <= 0) return [];
+  return WEEKDAY_OPTIONS
+    .map((option) => option.value)
+    .filter((weekday) => (mask & (1 << weekday)) !== 0);
+}
+
+/**
+ * A set of weekdays named in full, as an enumerated list keeps its commas:
+ * "Monday, Wednesday and Friday". Empty when no day is picked, so the caller
+ * says the set is empty rather than printing a bare "and".
+ */
+export function weekdayListLabel(weekdays: readonly Weekday[]): string {
+  const names: string[] = [];
+  for (const weekday of weekdays) {
+    const label = WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.label;
+    if (label !== undefined) names.push(label);
+  }
+  const last = names[names.length - 1];
+  if (last === undefined) return '';
+  return names.length === 1 ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
+}
+
 export interface ScheduleTime {
   hour: number;
   minute: number;
@@ -27,7 +72,13 @@ export type MedicationSchedule = {
     | { kind: 'daily' }
     | { kind: 'weekly'; weekday: Weekday }
     | { kind: 'twice_weekly'; firstWeekday: Weekday }
-    | { kind: 'every_n_days'; intervalDays: number };
+    | { kind: 'every_n_days'; intervalDays: number }
+    // The days the user picked, and only those. Unlike `every_n_days` this one
+    // never drifts across the week, and unlike `twice_weekly` it decides no day
+    // for the user. `startsAt` still bounds the first dose, but the anchor sets
+    // no phase here: a fixed weekday falls on the same weekday whenever the
+    // medication or its cycle started.
+    | { kind: 'weekdays'; weekdays: readonly Weekday[] };
 };
 
 export interface ScheduledDose {
@@ -41,13 +92,21 @@ export interface StoredMedicationSchedule {
   frequencyKind: FrequencyKind;
   frequencyValue: number | null;
   createdAt: number;
+  /**
+   * The day the current cycle started, when the medication has one. It moves on
+   * every resume, and the user can backdate it, so the schedule counts from it
+   * in place of `created_at`. Optional: a caller with no cycle in hand omits it
+   * and gets the old behaviour.
+   */
+  cycleStartedAt?: number | null;
   reminderTime: string;
 }
 
 export function medicationScheduleFromStored(input: StoredMedicationSchedule): MedicationSchedule | null {
+  const anchoredAt = input.cycleStartedAt ?? input.createdAt;
   const base = {
     medicationId: input.medicationId,
-    startsAt: startOfLocalDay(input.createdAt),
+    startsAt: startOfLocalDay(anchoredAt),
     time: parseReminderTime(input.reminderTime),
   };
 
@@ -59,7 +118,7 @@ export function medicationScheduleFromStored(input: StoredMedicationSchedule): M
         ...base,
         recurrence: {
           kind: 'weekly',
-          weekday: isWeekday(input.frequencyValue) ? input.frequencyValue : localWeekday(input.createdAt),
+          weekday: isWeekday(input.frequencyValue) ? input.frequencyValue : localWeekday(anchoredAt),
         },
       };
     case 'twice_weekly':
@@ -67,13 +126,19 @@ export function medicationScheduleFromStored(input: StoredMedicationSchedule): M
         ...base,
         recurrence: {
           kind: 'twice_weekly',
-          firstWeekday: isWeekday(input.frequencyValue) ? input.frequencyValue : localWeekday(input.createdAt),
+          firstWeekday: isWeekday(input.frequencyValue) ? input.frequencyValue : localWeekday(anchoredAt),
         },
       };
     case 'every_n_days':
       return Number.isInteger(input.frequencyValue) && input.frequencyValue !== null && input.frequencyValue > 0
         ? { ...base, recurrence: { kind: 'every_n_days', intervalDays: input.frequencyValue } }
         : null;
+    case 'weekdays': {
+      // No day picked is no schedule. The form will not save an empty set, and
+      // a row that carries one anyway draws no plan rather than a silent one.
+      const weekdays = weekdaysFromMask(input.frequencyValue);
+      return weekdays.length > 0 ? { ...base, recurrence: { kind: 'weekdays', weekdays } } : null;
+    }
     case 'custom':
       return null;
     default: {
@@ -158,6 +223,8 @@ function isScheduledDay(schedule: MedicationSchedule, day: number): boolean {
     }
     case 'every_n_days':
       return calendarDayDistance(schedule.startsAt, day) % schedule.recurrence.intervalDays === 0;
+    case 'weekdays':
+      return schedule.recurrence.weekdays.includes(localWeekday(day));
     default: {
       const exhaustive: never = schedule.recurrence;
       return exhaustive;

@@ -28,26 +28,44 @@ import {
   timeTo,
 } from '@/theme';
 
-const MARK_SIZE = 17;
+/** The date cell, which is the whole mark. Every column reserves this height. */
+const CELL_SIZE = 24;
 const COLUMNS = 7;
-/** The pulse ring that leaves the mark, and where it sits over the column. */
-const PULSE_SIZE = 34;
+/** The check that rides the corner of a logged cell, and how far it hangs off it. */
+const BADGE_SIZE = 12;
+const BADGE_OFFSET = -3;
+/**
+ * The pulse ring that leaves the cell, and where it sits over the column. The
+ * layer starts at the label block, which is the label's own line box plus the
+ * column gap, and lifts by half the ring's overhang so the ring stays centred on
+ * the cell. The ring opens at `CELL_SIZE` exactly, so it reads as leaving the
+ * cell rather than as a second ring appearing over it.
+ */
+const PULSE_SIZE = 40;
 const LABEL_BLOCK = 18;
 /** The one number in the log sequence that is not a token: the pop runs a beat over `base`. */
 const MARK_POP_MS = motion.base + 40;
 
 /**
- * The x-axis of the hero chart is the week, and the marks belong to the focused
- * medication alone. A check is a shot the user logged, a filled ring is today's
- * dose, a hollow ring is a day the schedule names, a dash is a day off.
+ * The x-axis of the hero chart is the week, and the cells belong to the focused
+ * medication alone. One column is a weekday letter over one date cell, and the
+ * cell carries the state: a filled disc with a corner check is a shot the user
+ * logged, a strong ring is today's dose waiting, a hollow ring is a day the
+ * schedule names, a bare number is a day off. Today's letter is the word TODAY
+ * in the medication's colour.
+ *
+ * These seven days are the chart's own window: both read `weekWindow` and
+ * `WEEK_LOOKBACK_DAYS` in `today-level-series.ts`, and the row insets by
+ * `spacing.xl`, the chart's `PAD_X`. So a column centre is the x of that day's
+ * midpoint on the curve.
  *
  * Seven columns and no more. A month belongs to History; this row exists so the
  * curve above it has days under it rather than numbers.
  *
  * Motion. On arrival a wipe crosses the seven columns one beat apart, which is
- * also `draw ÷ 7`, so each mark lands as the curve above it is drawn. A logged
- * shot holds today's mark at its old state for five beats, then swaps it for the
- * check and pops it, and one ring leaves it in the medication's colour.
+ * also `draw ÷ 7`, so each cell lands as the curve above it is drawn. A logged
+ * shot holds today's cell at its old state for five beats, then swaps it for the
+ * checked disc and pops it, and one ring leaves it in the medication's colour.
  */
 export function TodayWeekAxis({
   week,
@@ -144,13 +162,13 @@ export function TodayWeekAxis({
         <View key={day.dayStart} style={styles.column}>
           <Text
             style={[styles.label, day.isToday && styles.labelToday]}
-            color={day.isToday ? colors.ink : colors.inkSubtle}
+            color={day.isToday ? color : colors.inkSubtle}
           >
-            {format(day.dayStart, 'EEEEE')}
-            {day.isToday ? ` ${format(day.dayStart, 'd')}` : ''}
+            {day.isToday ? 'TODAY' : format(day.dayStart, 'EEEEE')}
           </Text>
-          <DayMarkView
+          <DayCell
             mark={day.mark}
+            date={format(day.dayStart, 'd')}
             color={color}
             index={index}
             wipe={wipe}
@@ -164,17 +182,19 @@ export function TodayWeekAxis({
 }
 
 /**
- * One mark, and the two things that can move it: the arrival wipe passing its
- * column, and — for today alone — the shot landing on it.
+ * One date cell, and the two things that can move it: the arrival wipe passing
+ * its column, and — for today alone — the shot landing on it.
  */
-function DayMarkView({
+function DayCell({
   mark,
+  date,
   color,
   index,
   wipe,
   pop,
 }: {
   mark: DayMark;
+  date: string;
   color: string;
   index: number;
   wipe: SharedValue<number>;
@@ -197,27 +217,38 @@ function DayMarkView({
     };
   });
 
-  return <Animated.View style={animated}>{markBody(mark, color)}</Animated.View>;
+  return <Animated.View style={animated}>{cellBody(mark, date, color)}</Animated.View>;
 }
 
-function markBody(mark: DayMark, color: string) {
+function cellBody(mark: DayMark, date: string, color: string) {
   switch (mark) {
     case 'logged':
       return (
-        <View style={[styles.mark, { backgroundColor: color }]}>
-          <Check size={10} strokeWidth={3} color={colors.inkInverse} />
+        <View style={[styles.cell, { backgroundColor: color }]}>
+          <Text style={styles.dateStrong} color={colors.inkInverse}>{date}</Text>
+          <View style={[styles.badge, { backgroundColor: deepMedicationColor(color) }]}>
+            <Check size={7} strokeWidth={3} color={colors.inkInverse} />
+          </View>
         </View>
       );
     case 'due':
       return (
-        <View style={[styles.mark, styles.markDue]}>
-          <View style={styles.markDueCore} />
+        <View style={[styles.cell, styles.cellDue]}>
+          <Text style={styles.dateStrong} color={colors.successDeep}>{date}</Text>
         </View>
       );
     case 'scheduled':
-      return <View style={[styles.mark, styles.markScheduled]} />;
+      return (
+        <View style={[styles.cell, styles.cellScheduled]}>
+          <Text style={styles.dateStrong} color={colors.inkSubtle}>{date}</Text>
+        </View>
+      );
     case 'rest':
-      return <View style={styles.markRest} />;
+      return (
+        <View style={styles.cell}>
+          <Text style={styles.dateRest} color={colors.inkSubtle}>{date}</Text>
+        </View>
+      );
     default: {
       const exhaustive: never = mark;
       return exhaustive;
@@ -226,13 +257,32 @@ function markBody(mark: DayMark, color: string) {
 }
 
 /**
- * The whole celebration: one ring, in the medication's colour, leaving the mark
+ * The badge fill: the medication's own hue, taken to about a third of its
+ * lightness, rather than `successDeep`. The badge sits on the medication's
+ * colour, and a green check on a blue or a pink disc would read as a second
+ * meaning. The parse is the one `softMedicationColor` in `history-month-section`
+ * uses, and the ramp in `colors.med` is all six-digit hex, so a bad string can
+ * only come from a hand-edited row: that falls back to the app's ink.
+ */
+function deepMedicationColor(hex: string): string {
+  const value = hex.replace('#', '');
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue)) return colors.ink;
+  return `rgb(${Math.round(red * 0.42)},${Math.round(green * 0.42)},${Math.round(blue * 0.42)})`;
+}
+
+/**
+ * The whole celebration: one ring, in the medication's colour, leaving the cell
  * once. Poke is a medical app, and a logged shot is not confetti.
  */
 function PulseRing({ color, pulse }: { color: string; pulse: SharedValue<number> }) {
   const animated = useAnimatedStyle(() => ({
     opacity: interpolate(pulse.value, [0, 0.02, 1], [0, 0.45, 0], 'clamp'),
-    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.5, 2.5], 'clamp') }],
+    // 0.6 is `CELL_SIZE ÷ PULSE_SIZE`: the ring opens on the cell's own edge and
+    // ends where the old, smaller ring ended, so it still clears one column.
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.6, 2.1], 'clamp') }],
   }));
 
   return (
@@ -247,7 +297,9 @@ function weekSignature(week: readonly WeekDay[]): string {
 }
 
 function spokenDay(day: WeekDay): string {
-  const name = day.isToday ? 'Today' : format(day.dayStart, 'EEEE');
+  // The cell now shows the date, so the sentence says it too. Today needs no
+  // date read out: the word TODAY is the label the user sees.
+  const name = day.isToday ? 'Today' : `${format(day.dayStart, 'EEEE')} the ${format(day.dayStart, 'do')}`;
   switch (day.mark) {
     case 'logged':
       return `${name} logged`;
@@ -284,40 +336,54 @@ const styles = StyleSheet.create({
   },
   labelToday: {
     fontFamily: fonts.sansSemiBold,
+    // Five upright letters in a column of about 50 pt: the tracking gives way
+    // before the size does, because 11 px is the floor the row reads at.
+    letterSpacing: 0.2,
   },
-  mark: {
-    width: MARK_SIZE,
-    height: MARK_SIZE,
+  cell: {
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.pill,
   },
-  markDue: {
+  cellDue: {
     borderWidth: 2,
     borderColor: colors.successDeep,
   },
-  markDueCore: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.successDeep,
-  },
-  markScheduled: {
+  cellScheduled: {
     borderWidth: 1.6,
     borderColor: 'rgba(17,20,24,0.18)',
   },
-  markRest: {
-    width: 6,
-    height: 2,
-    marginVertical: (MARK_SIZE - 2) / 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(17,20,24,0.14)',
+  dateStrong: {
+    fontFamily: fonts.sansSemiBold,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  dateRest: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  badge: {
+    position: 'absolute',
+    top: BADGE_OFFSET,
+    right: BADGE_OFFSET,
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    // The card, not the disc under it: the ring has to cut the badge free of the
+    // medication colour it sits on.
+    borderWidth: 1.5,
+    borderColor: colors.surface,
   },
   pulseLayer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: LABEL_BLOCK - (PULSE_SIZE - MARK_SIZE) / 2,
+    top: LABEL_BLOCK - (PULSE_SIZE - CELL_SIZE) / 2,
     alignItems: 'center',
   },
   pulse: {

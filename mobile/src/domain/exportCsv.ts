@@ -1,10 +1,23 @@
-import type { InjectionRow, MeasurementRow, MedicationRow, SideEffectLogRow } from '../db/types';
+import type { InjectionRow, MeasurementRow, MedicationRow } from '../db/types';
+
+/**
+ * A side-effect row with its label already resolved. `clear` marks an all-clear
+ * day, whose stored severity of 0 only fills the column: exporting it as
+ * "0 of 10" would hand a clinician a symptom at the bottom of the scale.
+ */
+export interface ExportSideEffect {
+  taken_at: number;
+  effect: string;
+  severity: number;
+  notes: string | null;
+  clear: boolean;
+}
 
 export interface ExportInput {
   medications: readonly MedicationRow[];
   injections: readonly InjectionRow[];
   weights: readonly MeasurementRow[];
-  sideEffects: readonly SideEffectLogRow[];
+  sideEffects: readonly ExportSideEffect[];
 }
 
 const HEADER = ['date', 'time', 'type', 'name', 'value', 'unit', 'detail', 'notes'] as const;
@@ -51,8 +64,8 @@ export function buildExportCsv(input: ExportInput, now: number): string {
       takenAt: row.taken_at,
       type: 'side effect' as const,
       name: row.effect,
-      value: String(row.severity),
-      unit: 'of 10',
+      value: row.clear ? '' : String(row.severity),
+      unit: row.clear ? '' : 'of 10',
       detail: '',
       notes: row.notes ?? '',
     })),

@@ -18,21 +18,62 @@ import {
   FREE_MEDICATION_LIMIT,
   listMedications,
 } from '@/repositories/medications';
-import { setMedicationStatusAndRefresh } from '@/services/medicationMutations';
+import { resumeMedicationAndRefresh, setMedicationStatusAndRefresh } from '@/services/medicationMutations';
 import { refreshScheduledReminders } from '@/services/notifications';
 import type { MedicationRow } from '@/db/types';
 import { useAppStore } from '@/stores/app';
 import { useIsPro } from '@/stores/entitlement';
 import { formatDose } from '@/domain/units';
+import { doseByDayLabel, parseDoseByDay } from '@/domain/doseByDay';
+import { routeInLine } from '@/domain/peptides';
+import { weekdayListLabel, weekdaysFromMask } from '@/domain/scheduling';
+import { elapsedLabel } from '@/domain/cycle';
+import { cycleStateOf } from '@/utils/cycle';
+import { fmtDate } from '@/utils/date';
 import { colors, spacing } from '@/theme';
 
 const FREQ_LABEL: Record<string, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   twice_weekly: 'Twice weekly',
-  every_n_days: 'Every N days',
   custom: 'Custom',
 };
+
+/**
+ * How often this medication is taken, as the card says it.
+ *
+ * The two kinds that carry a number say the number, because "Every N days" and
+ * "Same days each week" name the setting rather than the schedule, and the user
+ * came to this row to read their own plan back. A day list is an enumerated
+ * list, so it keeps its commas.
+ */
+function freqLine(medication: MedicationRow): string {
+  if (medication.frequency_kind === 'every_n_days') {
+    const days = medication.frequency_value;
+    if (days === null || days < 1) return 'No schedule';
+    return days === 1 ? 'Daily' : `Every ${days} days`;
+  }
+  if (medication.frequency_kind === 'weekdays') {
+    const named = weekdayListLabel(weekdaysFromMask(medication.frequency_value));
+    return named === '' ? 'No schedule' : `Every ${named}`;
+  }
+  return FREQ_LABEL[medication.frequency_kind] ?? medication.frequency_kind;
+}
+
+/**
+ * The dose the card reads back: one number, or the whole plan when the user set
+ * a dose per weekday.
+ *
+ * A day the plan skips takes the default dose, and the schedule line under this
+ * one still names that day, so nothing goes missing from the row. The label is
+ * an enumerated list, so it keeps its commas.
+ */
+function doseLine(medication: MedicationRow): string {
+  const map = parseDoseByDay(medication.dose_by_day);
+  return map === null
+    ? formatDose(medication.default_dose, medication.default_unit)
+    : doseByDayLabel(map, medication.default_unit);
+}
 
 export default function MedicationsScreen() {
   const insets = useSafeAreaInsets();
@@ -66,9 +107,36 @@ export default function MedicationsScreen() {
       openPaywall();
       return;
     }
-    const next = m.status === 'paused' ? 'active' : 'paused';
-    await setMedicationStatusAndRefresh(m.id, next);
-    bumpVersion();
+    if (m.status !== 'paused') {
+      await setMedicationStatusAndRefresh(m.id, 'paused');
+      bumpVersion();
+      return;
+    }
+    // A resume on a medication with a cycle rewrites the anchor, so week 1 and
+    // the shot days both move to today and the old dates cannot be recovered.
+    // The sheet says that before the write, and it offers the edit screen for
+    // the user who wants a different length this time.
+    if (m.cycle_days_on === null) {
+      await resumeMedicationAndRefresh(m.id);
+      bumpVersion();
+      return;
+    }
+    const ran = m.paused_at === null ? null : elapsedLabel(m.paused_at, Date.now());
+    Alert.alert(
+      `Resume ${m.name}?`,
+      `${ran === null ? '' : `The break ran ${ran}. `}Resume starts a new cycle today. Shot days count from today again.`,
+      [
+        {
+          text: 'Resume',
+          onPress: async () => { await resumeMedicationAndRefresh(m.id); bumpVersion(); },
+        },
+        {
+          text: 'Adjust the plan first',
+          onPress: () => router.push({ pathname: '/medications/new', params: { medicationId: m.id } }),
+        },
+        { text: 'Not yet', style: 'cancel' },
+      ],
+    );
   };
 
   // Setup archives every medication past the free limit rather than drop it, so
@@ -158,23 +226,39 @@ export default function MedicationsScreen() {
           </View>
         ) : (
           <Section gap="sm">
-            {meds.map((m) => (
+            {meds.map((m) => {
+              const cycle = cycleStateOf(m);
+              const onBreak = cycle.kind === 'onBreak';
+              return (
               <Card key={m.id} padding="md" style={styles.card}>
                 <View style={styles.row}>
                   <MedVialIcon size={48} colorIndex={m.color_index} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <View style={styles.titleRow}>
                       <Text variant="h3" style={{ flex: 1 }}>{m.name}</Text>
-                      {m.status === 'paused' && <Pill tone="warning">Paused</Pill>}
+                      {/* A break is a pause with a plan around it, so it says so.
+                          A pause with no cycle keeps the plain word. */}
+                      {m.status === 'paused' && (
+                        onBreak
+                          ? <Pill tone="neutral">On break</Pill>
+                          : <Pill tone="warning">Paused</Pill>
+                      )}
                       {m.status === 'archived' && <Pill tone="neutral">Archived</Pill>}
                     </View>
                     <Text variant="small" color={colors.inkMuted}>
-                      {formatDose(m.default_dose, m.default_unit)} {m.default_route.toUpperCase()}
+                      {doseLine(m)} {routeInLine(m.default_route)}
                     </Text>
                     <Text variant="caption" color={colors.inkSubtle}>
-                      {FREQ_LABEL[m.frequency_kind] ?? m.frequency_kind}
+                      {freqLine(m)}
                       {m.half_life_hours ? ` with a ${m.half_life_hours}h half-life` : ''}
                     </Text>
+                    {/* The end date is the pause day plus the break the user
+                        set. It appears only when they set one. */}
+                    {cycle.kind === 'onBreak' && cycle.endsAt !== null ? (
+                      <Text variant="caption" color={colors.inkSubtle}>
+                        Break ends {fmtDate(cycle.endsAt)}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
                 {/* An archived medication keeps two actions: Restore, and
@@ -243,7 +327,8 @@ export default function MedicationsScreen() {
                   ) : null}
                 </View>
               </Card>
-            ))}
+              );
+            })}
           </Section>
         )}
       </ScrollView>

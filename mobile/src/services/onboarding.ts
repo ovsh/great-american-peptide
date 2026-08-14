@@ -1,8 +1,15 @@
-import type { MedicationRow } from '../db/types';
+import type { MeasurementRow, MedicationRow } from '../db/types';
 import type { PreferencesPatch } from '../repositories/preferences';
 import type { NewMedication } from '../repositories/medications';
-import { CUSTOM_MEDICATION_ID, type OnboardingDraft, type OnboardingMedicationId } from '../stores/onboarding';
-import { getPresetEntry } from '../domain/peptides';
+import {
+  isCustomMedicationId,
+  scheduleFrequencyValue,
+  type OnboardingDraft,
+  type OnboardingMedicationId,
+} from '../stores/onboarding';
+import { compositionDraft, serializeComposition } from '../domain/blends';
+import { blendParts, getPresetEntry, isBlend, type PeptidePreset } from '../domain/peptides';
+import { kgToLb, lbToKg, type WeightUnit } from '../domain/units';
 import { createInjection, listInjections } from '../repositories/injections';
 import { createMeasurement, latestMeasurement } from '../repositories/measurements';
 import {
@@ -40,10 +47,18 @@ function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
     const schedule = draft.schedules[selectionId];
     if (!schedule) throw new Error('Add a dose and a schedule for every medication.');
     const dose = parsePositive(schedule.doseText, 'dose');
-    const frequencyValue = schedule.frequencyKind === 'daily' ? null : schedule.shotDay;
+    const frequencyValue = scheduleFrequencyValue(schedule);
+    // Every kind but daily needs its number. The schedule screen holds Continue
+    // until it has one, so this only catches a draft that arrived another way.
+    if (schedule.frequencyKind === 'every_n_days' && frequencyValue === null) {
+      throw new Error('Enter how many days pass between shots.');
+    }
+    if (schedule.frequencyKind === 'weekdays' && frequencyValue === null) {
+      throw new Error('Pick at least one shot day.');
+    }
 
-    if (selectionId === CUSTOM_MEDICATION_ID) {
-      const name = draft.customMedicationName.trim();
+    if (isCustomMedicationId(selectionId)) {
+      const name = (draft.customNames[selectionId] ?? '').trim();
       if (!name) throw new Error('Enter a name for your custom medication.');
       return {
         selectionId,
@@ -80,9 +95,25 @@ function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
         // so rather than drawing a curve nobody can cite.
         halfLifeHours: preset.halfLifeHours,
         tmaxHours: preset.tmaxHours,
+        composition: seedComposition(preset, schedule.compositionMg),
       },
     };
   });
+}
+
+/**
+ * The vial label as the medication row stores it, or undefined when the user
+ * skipped the boxes. A partial label also lands here as undefined: the schedule
+ * screen holds Continue on partial, so one can only arrive another way, and
+ * saving nothing is safe where saving a half-copied label is not.
+ */
+function seedComposition(
+  preset: PeptidePreset,
+  compositionMg: Record<string, string>,
+): string | undefined {
+  if (!isBlend(preset)) return undefined;
+  const draft = compositionDraft(blendParts(preset).map((part) => part.id), compositionMg);
+  return draft.kind === 'complete' ? serializeComposition(draft.components) : undefined;
 }
 
 /** The row this seed already has, when setup runs a second time. */
@@ -90,7 +121,7 @@ function findMedication(
   medications: readonly MedicationRow[],
   seed: MedicationSeed,
 ): MedicationRow | undefined {
-  if (seed.selectionId === CUSTOM_MEDICATION_ID) {
+  if (isCustomMedicationId(seed.selectionId)) {
     return medications.find((medication) => medication.preset_id === null
       && medication.name.trim().toLocaleLowerCase() === seed.medication.name.trim().toLocaleLowerCase());
   }
@@ -190,7 +221,7 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
 
   if (currentWeight !== null) {
     const latest = await latestMeasurement('weight');
-    const alreadyRecorded = latest?.value === currentWeight && latest.unit === draft.weight.unit;
+    const alreadyRecorded = latest !== null && sameWeight(latest, currentWeight, draft.weight.unit);
     if (!alreadyRecorded) {
       await createMeasurement({
         kind: 'weight',
@@ -215,6 +246,22 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
 
 function positive(value: number | null): number | null {
   return value !== null && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Whether a row already holds the weight the setup wheel is showing.
+ *
+ * The wheel can be showing a weigh-in Poke read from Apple Health on the weight
+ * screen, and that row is always in kilograms whatever the wheel reads, so the
+ * comparison converts before it compares. Both sides are then rounded to the one
+ * decimal place the wheel offers: a user who moved the wheel after the import
+ * moved it by at least that much and meant the new number, which is written as
+ * their own row.
+ */
+function sameWeight(row: MeasurementRow, wheel: number, unit: WeightUnit): boolean {
+  const rowUnit = row.unit === 'kg' || row.unit === 'lb' ? row.unit : unit;
+  const inWheelUnit = rowUnit === unit ? row.value : unit === 'kg' ? lbToKg(row.value) : kgToLb(row.value);
+  return Math.round(inWheelUnit * 10) === Math.round(wheel * 10);
 }
 
 function parseOptionalInt(value: string): number | null {

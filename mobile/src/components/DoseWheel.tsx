@@ -167,7 +167,10 @@ export function DoseWheel({
             <Pressable
               key={option}
               accessibilityRole="radio"
+              // The state is for a phone, the ARIA prop is for the web build.
+              // react-native-web drops `accessibilityState` and reads `aria-*`.
               accessibilityState={{ selected }}
+              aria-checked={selected}
               accessibilityLabel={option}
               onPress={() => onChangeUnit(option)}
               style={[styles.unit, selected && styles.unitSelected]}

@@ -17,7 +17,12 @@ import type {
   MedicationRow,
   PreferencesRow,
 } from '@/db/types';
-import { medicationScheduleFromStored, scheduledDosesBetween } from '@/domain/scheduling';
+import {
+  medicationScheduleFromStored,
+  scheduledDosesBetween,
+  weekdayListLabel,
+  weekdaysFromMask,
+} from '@/domain/scheduling';
 import { sideEffectLabel } from '@/domain/sideEffects';
 import {
   SCHEDULE_GRACE_DAYS,
@@ -358,6 +363,7 @@ function buildJourney({
         day: dayOf(log.taken_at),
         label: sideEffectLabel(log.effect),
         severity: log.severity,
+        kind: log.effect.kind === 'clear' ? ('clear' as const) : ('symptom' as const),
         takenAt: log.taken_at,
       })),
     shotTotal: Object.values(injections).reduce((total, rows) => total + rows.length, 0),
@@ -446,6 +452,10 @@ function frequencyLabel(medication: MedicationRow): string {
   if (medication.frequency_kind === 'every_n_days') {
     const days = medication.frequency_value ?? 0;
     return days === 1 ? 'Every day' : `Every ${days} days`;
+  }
+  if (medication.frequency_kind === 'weekdays') {
+    const named = weekdayListLabel(weekdaysFromMask(medication.frequency_value));
+    return named === '' ? 'No schedule' : `Every ${named}`;
   }
   return FREQUENCY_LABEL[medication.frequency_kind] ?? 'No schedule';
 }

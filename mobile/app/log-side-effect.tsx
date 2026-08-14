@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import Svg, { Circle, Line } from 'react-native-svg';
 
 import { Button } from '@/components/Button';
 import { Header } from '@/components/Header';
@@ -15,10 +16,11 @@ import {
   type SideEffect,
   type SideEffectPresetId,
 } from '@/domain/sideEffects';
-import { createSideEffect } from '@/repositories/sideEffects';
+import { createSideEffect, listSideEffects, markDayAllClear } from '@/repositories/sideEffects';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
+import { fmtTime, startOfDay } from '@/utils/date';
 import { safeBack } from '@/utils/nav';
 
 type EffectChoice =
@@ -50,10 +52,31 @@ export default function LogSideEffectScreen() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Separate from `saving`: the Log button prints "Saving" off that flag, and
+  // the all-clear writing under it must not make the symptom button claim work
+  // it is not doing. Each flow still disables the other while it runs.
+  const [marking, setMarking] = useState(false);
+  /** When today's all-clear was recorded, or null. Drives the band's done face. */
+  const [clearedAt, setClearedAt] = useState<number | null>(null);
   const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (returnTimer.current) clearTimeout(returnTimer.current);
+  }, []);
+
+  // The band has two faces, so it has to know on arrival whether today already
+  // carries a clear. A wrong first face would flash the offer at a user who
+  // answered this morning.
+  useEffect(() => {
+    let alive = true;
+    listSideEffects({ fromMs: startOfDay(Date.now()) })
+      .then((logs) => {
+        if (!alive) return;
+        const clear = logs.find((log) => log.effect.kind === 'clear');
+        if (clear) setClearedAt(clear.taken_at);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   const typedPreset = choice.kind === 'custom' ? presetForLabel(customEffect) : null;
@@ -62,7 +85,7 @@ export default function LogSideEffectScreen() {
     : typedPreset ?? makeCustomSideEffect(customEffect);
 
   const save = async () => {
-    if (saving || !effect || severity === null) return;
+    if (saving || marking || !effect || severity === null) return;
     setSaving(true);
     try {
       await createSideEffect({
@@ -85,6 +108,27 @@ export default function LogSideEffectScreen() {
     }
   };
 
+  // One clear per day: the repository returns the existing record on a second
+  // press, so pressing the done face confirms and closes rather than dead-tapping.
+  const markClear = async () => {
+    if (saving || marking) return;
+    setMarking(true);
+    try {
+      const record = await markDayAllClear(Date.now());
+      bumpVersion();
+      // This answers the day-after check-in, so the queue drops it.
+      await refreshScheduledReminders().catch(() => {});
+      setClearedAt(record.taken_at);
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      returnTimer.current = setTimeout(() => safeBack('/'), 650);
+    } catch (error: unknown) {
+      Alert.alert('Poke could not mark the day clear', error instanceof Error ? error.message : 'Try again.');
+      setMarking(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <Header
@@ -96,6 +140,32 @@ export default function LogSideEffectScreen() {
         )}
       />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* The other answer to the check-in. It draws the mark it leaves: the
+            same hollow ring on the baseline that a clear day gets on the
+            Progress chart, so the record and the control share one language. */}
+        <Pressable
+          testID="side-effect-all-clear"
+          accessibilityRole="button"
+          accessibilityLabel={clearedAt === null
+            ? 'Mark today clear'
+            : `Today is marked clear at ${fmtTime(clearedAt).toLowerCase()}`}
+          disabled={saving || marking}
+          onPress={markClear}
+          style={[styles.clearBand, clearedAt !== null && styles.clearBandDone]}
+        >
+          <ClearMark />
+          {clearedAt !== null ? (
+            <View style={styles.clearDone}>
+              <Check size={16} strokeWidth={2.5} color={colors.successDeep} />
+              <Text variant="smallStrong" color={colors.successDeep}>
+                Marked clear at {fmtTime(clearedAt).toLowerCase()}
+              </Text>
+            </View>
+          ) : (
+            <Text variant="smallStrong">Mark today clear</Text>
+          )}
+        </Pressable>
+
         <View style={styles.section}>
           <Text variant="smallStrong">What are you feeling?</Text>
           <View style={styles.wrap}>
@@ -185,11 +255,25 @@ export default function LogSideEffectScreen() {
             <Text variant="smallStrong" color={colors.accent}>Saved</Text>
           </View>
         ) : null}
-        <Button disabled={saving || !effect || severity === null} onPress={save}>
+        <Button disabled={saving || marking || !effect || severity === null} onPress={save}>
           {saving ? 'Saving' : 'Log side effect'}
         </Button>
       </ScrollView>
     </View>
+  );
+}
+
+/**
+ * A clear day as the chart draws it: a hollow ring sitting on the baseline.
+ * Violet is the side-effect hue everywhere; hollow is what "asked, and nothing
+ * to report" looks like next to the filled dot of a logged symptom.
+ */
+function ClearMark() {
+  return (
+    <Svg width={44} height={20}>
+      <Line x1={2} y1={13} x2={42} y2={13} stroke={colors.violet} strokeOpacity={0.3} strokeWidth={1.6} strokeLinecap="round" />
+      <Circle cx={22} cy={13} r={5.5} fill={colors.surface} stroke={colors.violet} strokeOpacity={0.7} strokeWidth={2} />
+    </Svg>
   );
 }
 
@@ -214,6 +298,26 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.md,
+  },
+  clearBand: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  clearBandDone: {
+    borderColor: colors.accentSoft,
+    backgroundColor: colors.accentSoft,
+  },
+  clearDone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   wrap: {
     flexDirection: 'row',

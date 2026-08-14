@@ -1,5 +1,7 @@
 import * as SQLite from 'expo-sqlite';
-import { MIGRATIONS } from './schema';
+import { runMigrations, type MigrationDriver } from './migrate';
+
+const DATABASE_NAME = 'peptide_tracker.db';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbOpenPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -8,7 +10,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
   if (!dbOpenPromise) {
     dbOpenPromise = (async () => {
-      const db = await SQLite.openDatabaseAsync('peptide_tracker.db');
+      const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
       await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
       await migrate(db);
       dbInstance = db;
@@ -25,27 +27,36 @@ export async function initDb(): Promise<void> {
   await getDb();
 }
 
+/**
+ * The same database file, opened without a migration, for the rescue export on
+ * the launch error screen.
+ *
+ * A device that cannot finish an upgrade still holds every row it ever wrote,
+ * and this is the only door to them. It is a separate connection, so it neither
+ * waits for nor disturbs the one `getDb` failed on, and `query_only` makes
+ * SQLite refuse every write on it. A rescue must not be able to change a
+ * database Poke has already failed to upgrade.
+ *
+ * The caller closes it.
+ */
+export async function openUnmigratedDb(): Promise<SQLite.SQLiteDatabase> {
+  const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+  await db.execAsync('PRAGMA query_only = ON;');
+  return db;
+}
+
+/** The expo-sqlite side of the runner in `migrate.ts`. */
+function driverFor(db: SQLite.SQLiteDatabase): MigrationDriver {
+  return {
+    execute: (sql) => db.execAsync(sql),
+    run: async (sql, params) => {
+      await db.runAsync(sql, params);
+    },
+    first: <T,>(sql: string) => db.getFirstAsync<T>(sql),
+    transaction: (body) => db.withTransactionAsync(body),
+  };
+}
+
 async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.execAsync(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
-  const row = await db.getFirstAsync<{ value: string }>(
-    `SELECT value FROM _meta WHERE key = 'schema_version'`,
-  );
-  const current = row ? Number(row.value) : 0;
-  for (const m of MIGRATIONS) {
-    if (m.version > current) {
-      // The SQL and the version that records it go in together or not at all.
-      // SQLite rolls DDL back inside a transaction, so an app killed mid-upgrade
-      // reopens on the old schema and runs the same migration again. Without
-      // this, the `ALTER` lands, the version does not, and every later launch
-      // replays the migration onto columns that already exist and fails there
-      // forever.
-      await db.withTransactionAsync(async () => {
-        await db.execAsync(m.up);
-        await db.runAsync(
-          `INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`,
-          [String(m.version)],
-        );
-      });
-    }
-  }
+  await runMigrations(driverFor(db));
 }

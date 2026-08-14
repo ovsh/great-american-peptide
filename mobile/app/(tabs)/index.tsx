@@ -25,8 +25,8 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { TodayHeroCard } from '@/components/today-hero-card';
-import { buildLevelSeries, levelWindow } from '@/components/today-level-series';
-import { TodayMedicationList } from '@/components/today-medication-list';
+import { WEEK_LOOKBACK_DAYS, buildLevelSeries, weekWindow } from '@/components/today-level-series';
+import { TodayBreakStrip, TodayMedicationList } from '@/components/today-medication-list';
 import { TodayRise, useSwapTransition } from '@/components/today-motion';
 import { TodayTrackCard } from '@/components/today-track-card';
 import type {
@@ -46,6 +46,7 @@ import {
   nextScheduledDoses,
   scheduledDosesBetween,
 } from '@/domain/scheduling';
+import { hasNewTodayShot, shotIds } from '@/domain/shotEdit';
 import {
   computeMedicationScheduleStreak,
   type ScheduleStreak,
@@ -54,6 +55,7 @@ import type { WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
 import { listMeasurements } from '@/repositories/measurements';
 import { listMedications, reorderMedications } from '@/repositories/medications';
+import { setMedicationStatusAndRefresh } from '@/services/medicationMutations';
 import { getPreferences, setFocusedMedicationId } from '@/repositories/preferences';
 import { listSideEffects, type SideEffectLog } from '@/repositories/sideEffects';
 import { maybePromptForReview } from '@/services/review';
@@ -69,15 +71,16 @@ import {
   rise,
   spacing,
 } from '@/theme';
+import { cycleStateOf } from '@/utils/cycle';
 import { endOfDay, startOfDay } from '@/utils/date';
 
 const CONTENT_MAX_WIDTH = 600;
-/** Three days behind today and three ahead: the week the axis draws. */
-const WEEK_LOOKBACK_DAYS = 3;
 
 /** Everything one load produces, held together so it can be applied in one go. */
 interface TodayData {
   medications: MedicationRow[];
+  /** Paused medications with a cycle on them. Today shows them as a break strip. */
+  onBreak: MedicationRow[];
   injections: Record<string, InjectionRow[]>;
   weights: MeasurementRow[];
   preferences: PreferencesRow | null;
@@ -101,6 +104,7 @@ export default function TodayScreen() {
   const pro = useIsPro();
 
   const [medications, setMedications] = useState<MedicationRow[]>([]);
+  const [onBreak, setOnBreak] = useState<MedicationRow[]>([]);
   const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
@@ -116,13 +120,17 @@ export default function TodayScreen() {
    * the cue to play the log sequence. Zero is a screen with nothing to celebrate.
    */
   const [logToken, setLogToken] = useState(0);
-  /** Today's shot ids as the screen last drew them. Null until the first load. */
+  /**
+   * Every shot id the screen has loaded, not only today's. Null until the first
+   * load. `hasNewTodayShot` says why the memory is that wide.
+   */
   const drawnShots = useRef<Set<string> | null>(null);
   const onScreen = useRef(false);
   const held = useRef<{ data: TodayData; logged: boolean } | null>(null);
 
   const apply = useCallback((data: TodayData, logged: boolean) => {
     setMedications(data.medications);
+    setOnBreak(data.onBreak);
     setInjections(data.injections);
     setWeights(data.weights);
     setPreferences(data.preferences);
@@ -151,13 +159,15 @@ export default function TodayScreen() {
         byMedication[medication.id] = shotLists[index] ?? [];
       });
 
-      const today = todayShotIds(byMedication, Date.now());
-      const seen = drawnShots.current;
-      const logged = seen !== null && [...today].some((id) => !seen.has(id));
-      drawnShots.current = today;
+      const ids = shotIds(byMedication, Date.now());
+      const logged = hasNewTodayShot(drawnShots.current, ids.today);
+      drawnShots.current = ids.all;
 
       const data: TodayData = {
         medications: active,
+        // A paused medication leaves Today, and one on a planned break leaves a
+        // line behind so the day it ends does not have to be remembered.
+        onBreak: medicationRows.filter((medication) => medication.status === 'paused'),
         injections: byMedication,
         weights: weightRows,
         preferences: preferenceRow,
@@ -286,6 +296,19 @@ export default function TodayScreen() {
     reorderMedications(fullIds).catch(() => {});
   }, [focused?.medication.id, medications]);
 
+  /**
+   * Start break, from the hero card on the last planned day.
+   *
+   * It is the pause the app already had, taken from the one day where the plan
+   * says it is due. `paused_at` is written by the same repository call as every
+   * other pause, so the break end date comes out of the same arithmetic.
+   */
+  const startBreak = useCallback((medicationId: string) => {
+    setMedicationStatusAndRefresh(medicationId, 'paused')
+      .then(() => load())
+      .catch(() => {});
+  }, [load]);
+
   const contentWidth = Math.max(
     0,
     Math.min(windowWidth, CONTENT_MAX_WIDTH) - spacing.screen * 2,
@@ -339,6 +362,7 @@ export default function TodayScreen() {
                   nowMs={now}
                   entered={hasLoaded}
                   logToken={logToken}
+                  onStartBreak={startBreak}
                 />
               </TodayRise>
             ) : null}
@@ -351,6 +375,7 @@ export default function TodayScreen() {
                 onReorder={reorder}
                 onDragChange={setDragging}
               />
+              <TodayBreakStrip medications={onBreak} />
             </TodayRise>
           </>
         )}
@@ -446,20 +471,6 @@ function TodayLoadError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** Which shots on file were given today, by id, across every medication. */
-function todayShotIds(
-  injections: Readonly<Record<string, readonly InjectionRow[]>>,
-  now: number,
-): Set<string> {
-  const ids = new Set<string>();
-  for (const rows of Object.values(injections)) {
-    for (const row of rows) {
-      if (isSameDay(row.taken_at, now)) ids.add(row.id);
-    }
-  }
-  return ids;
-}
-
 function buildDashboard({
   medications,
   injections,
@@ -483,6 +494,7 @@ function buildDashboard({
       frequencyKind: medication.frequency_kind,
       frequencyValue: medication.frequency_value,
       createdAt: medication.created_at,
+      cycleStartedAt: medication.cycle_started_at,
       reminderTime,
     });
     const dose = buildDoseState({
@@ -491,12 +503,13 @@ function buildDashboard({
       now,
     });
     const nextDoseAt = nextDoseFrom(dose);
-    const { fromMs: windowFromMs, toMs: windowToMs } = levelWindow({
-      injections: medicationInjections,
-      halfLifeHours: medication.half_life_hours,
-      nextDoseAt,
-      now,
-    });
+    // The chart is drawn in the same seven days the axis under it labels, so a
+    // spike sits over the day it happened on. The left edge is not zero: the
+    // curve there carries what earlier shots left behind.
+    const { fromMs: windowFromMs, toMs: windowToMs } = weekWindow(now);
+    // A next dose past the last column has no place on this chart, and drawn
+    // anyway it lands pinned to the right edge on the wrong day.
+    const nextDoseInWeek = nextDoseAt !== null && nextDoseAt <= windowToMs ? nextDoseAt : null;
 
     return {
       medication,
@@ -508,8 +521,9 @@ function buildDashboard({
         now,
         fromMs: windowFromMs,
         toMs: windowToMs,
-        nextDoseAt,
+        nextDoseAt: nextDoseInWeek,
       }),
+      cycle: cycleStateOf(medication, now),
       windowFromMs,
       windowToMs,
     };

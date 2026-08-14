@@ -19,6 +19,12 @@ interface ShotDayStripProps {
   days: readonly Weekday[];
   /** Moves the day the schedule counts from. Any day on the strip accepts it. */
   onPick: (day: Weekday) => void;
+  /**
+   * How many days the strip can hold. `one` is a choice between seven days, and
+   * `many` is a set the user builds a day at a time. It changes only what the
+   * screen reader says: the fill already draws as many days as it is given.
+   */
+  selection?: 'one' | 'many';
   accessibilityLabel: string;
 }
 
@@ -29,11 +35,17 @@ interface ShotDayStripProps {
  * two green discs already do, and a caption that repeats a visual is the caption
  * this screen deleted.
  */
-export function ShotDayStrip({ days, onPick, accessibilityLabel }: ShotDayStripProps) {
+export function ShotDayStrip({ days, onPick, selection = 'one', accessibilityLabel }: ShotDayStripProps) {
   const reduced = useReducedMotion();
 
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={styles.row}>
+    <View
+      // React Native has no group role, and radiogroup would promise a choice of
+      // one. A set of checkboxes under a labelled container says it plainly.
+      accessibilityRole={selection === 'many' ? undefined : 'radiogroup'}
+      accessibilityLabel={accessibilityLabel}
+      style={styles.row}
+    >
       {WEEKDAY_OPTIONS.map((day) => (
         <DayDot
           key={day.value}
@@ -42,6 +54,7 @@ export function ShotDayStrip({ days, onPick, accessibilityLabel }: ShotDayStripP
           letter={day.shortLabel.slice(0, 1)}
           name={day.label}
           selected={days.includes(day.value)}
+          selection={selection}
           reduced={reduced}
           onPress={() => onPick(day.value)}
         />
@@ -58,12 +71,14 @@ function DayDot({
   letter,
   name,
   selected,
+  selection,
   reduced,
   onPress,
 }: {
   letter: string;
   name: string;
   selected: boolean;
+  selection: 'one' | 'many';
   reduced: boolean;
   onPress: () => void;
 }) {
@@ -87,8 +102,11 @@ function DayDot({
 
   return (
     <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityRole={selection === 'many' ? 'checkbox' : 'radio'}
+      // The state is for a phone, the ARIA prop is for the web build.
+      // react-native-web drops `accessibilityState` and reads `aria-*`.
+      accessibilityState={selection === 'many' ? { checked: selected } : { selected }}
+      aria-checked={selected}
       accessibilityLabel={name}
       onPress={onPress}
       style={styles.day}

@@ -13,3 +13,9 @@ research/
 # research/. The teardown in mobile/docs/meagain-onboarding-map.md stands alone.
 docs/onboarding-flow.mp4
 mobile/docs/meagain-frames/
+
+# Local build artifacts and generated reports
+*.ipa
+output/
+.playwright-cli/
+mobile/ai-eval-report.json

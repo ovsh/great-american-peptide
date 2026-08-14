@@ -1,6 +1,7 @@
 import type { MedicationRow } from '../db/types';
 import {
   createMedication,
+  resumeMedication,
   setMedicationStatus,
   updateMedicationDefaults,
   type NewMedication,
@@ -26,5 +27,17 @@ export async function setMedicationStatusAndRefresh(
   status: MedicationRow['status'],
 ): Promise<void> {
   await setMedicationStatus(id, status);
+  await refreshScheduledReminders().catch(() => {});
+}
+
+/**
+ * The way back on, and the only one that restarts the cycle.
+ *
+ * Separate from `setMedicationStatusAndRefresh` because it moves the schedule
+ * anchor as well as the status, and the queue has to be rebuilt around the new
+ * anchor rather than around the one the pause left behind.
+ */
+export async function resumeMedicationAndRefresh(id: string): Promise<void> {
+  await resumeMedication(id);
   await refreshScheduledReminders().catch(() => {});
 }

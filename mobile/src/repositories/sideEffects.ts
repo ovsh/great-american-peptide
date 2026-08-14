@@ -1,10 +1,12 @@
 import { getDb } from '../db/client';
 import type { SideEffectLogRow } from '../db/types';
 import {
+  ALL_CLEAR,
   parseStoredSideEffect,
   sideEffectStorageKey,
   type SideEffect,
 } from '../domain/sideEffects';
+import { endOfDay, startOfDay } from '../utils/date';
 import { newId } from '../utils/id';
 
 export interface NewSideEffect {
@@ -63,6 +65,29 @@ export async function createSideEffect(input: NewSideEffect): Promise<SideEffect
   );
   if (!row) throw new Error('Failed to create side-effect log');
   return { ...row, effect: parseStoredSideEffect(row.effect) };
+}
+
+/**
+ * Records that the day of `takenAt` passed with nothing to report.
+ *
+ * One clear per local day: marking a day clear twice returns the first record
+ * rather than writing a second, because "the day is clear" is a fact about the
+ * day and a duplicate would draw two marks on the chart. Severity 0 fills the
+ * NOT NULL column; the `all_clear` kind is what says there is nothing to
+ * measure. A symptom logged on the same day is allowed to stand beside it —
+ * both are things the user said, and the record keeps both.
+ */
+export async function markDayAllClear(takenAt: number): Promise<SideEffectLog> {
+  const db = await getDb();
+  const dayStart = startOfDay(takenAt);
+  const existing = await db.getFirstAsync<SideEffectLogRow>(
+    `SELECT * FROM side_effect_logs
+      WHERE deleted_at IS NULL AND effect = ? AND taken_at >= ? AND taken_at <= ?
+      LIMIT 1`,
+    [sideEffectStorageKey(ALL_CLEAR), dayStart, endOfDay(dayStart)],
+  );
+  if (existing) return { ...existing, effect: parseStoredSideEffect(existing.effect) };
+  return createSideEffect({ effect: ALL_CLEAR, severity: 0, takenAt });
 }
 
 export async function softDeleteSideEffect(id: string): Promise<void> {

@@ -2,18 +2,38 @@ import type { Href } from 'expo-router';
 import { create } from 'zustand';
 
 import type { ActivityLevel, GoalKind, JourneyStage, Sex } from '../db/types';
-import { getPreset, getPresetEntry, type FrequencyKind, type Route, type Unit } from '../domain/peptides';
-import { WEEKDAY_OPTIONS, type Weekday } from '../domain/scheduling';
+import { compositionDraft } from '../domain/blends';
+import {
+  blendParts,
+  getPreset,
+  getPresetEntry,
+  isBlend,
+  type FrequencyKind,
+  type Route,
+  type Unit,
+} from '../domain/peptides';
+import { WEEKDAY_OPTIONS, weekdayMask, type Weekday } from '../domain/scheduling';
 import { cmToIn, inToCm, kgToLb, lbToKg, type HeightUnit, type WeightUnit } from '../domain/units';
 
-// The one id that is not a catalog preset. The user types the name instead.
-export const CUSTOM_MEDICATION_ID = 'custom';
+// The ids that are not catalog presets. Each custom medication the user names
+// gets its own id, `custom:1`, `custom:2` and so on, so setup can hold as many
+// as they take. The name lives in `customNames` under the same id.
+export const CUSTOM_MEDICATION_PREFIX = 'custom:';
 
-// A picker entry id, which is a molecule id or a brand id, or
-// CUSTOM_MEDICATION_ID. The picker searches the whole catalog, so this cannot
-// be a fixed union of ids.
+export function isCustomMedicationId(id: string): boolean {
+  return id.startsWith(CUSTOM_MEDICATION_PREFIX);
+}
+
+// A picker entry id, which is a molecule id or a brand id, or a custom id with
+// the prefix above. The picker searches the whole catalog, so this cannot be a
+// fixed union of ids.
 export type OnboardingMedicationId = string;
-export type OnboardingFrequency = 'daily' | 'twice_weekly' | 'weekly';
+/**
+ * Every schedule setup can express. It used to stop at three, so a user on an
+ * every-three-days protocol, or on a fixed Monday, Wednesday and Friday, had no
+ * way to say so on the one screen that asks.
+ */
+export type OnboardingFrequency = 'daily' | 'twice_weekly' | 'weekly' | 'every_n_days' | 'weekdays';
 export type SideEffectConcern = 'nausea' | 'fatigue' | 'constipation' | 'injection_site' | 'none';
 export type ShotDay = Weekday;
 export type LastShotChoice = 'today' | 'yesterday' | 'this_week' | 'longer' | 'none';
@@ -84,9 +104,39 @@ export const SHOT_DAY_OPTIONS = WEEKDAY_OPTIONS;
 // slider, not its numbers: MeAgain runs 0.2 to 3.0 lb. Poke stops at 2.0 because
 // the projection is arithmetic, and a 3 lb-a-week line drawn out to a date reads
 // as a target rather than as a sum.
-export const PACE_MIN_LB = 0.2;
+//
+// The floor is zero and not 0.2. A user in maintenance sets no rate of change,
+// and a slider that refuses zero tells that user their own plan is not a plan.
+// Zero is a value with its own word, `MAINTAIN_PACE_LABEL`, and its own branch
+// in `planProjection`. Never print it as "0.0 lb".
+export const PACE_MIN_LB = 0;
 export const PACE_MAX_LB = 2;
 export const PACE_DEFAULT_LB = 1;
+
+/** What Poke calls a weekly pace of zero. One word, and never a unit after it. */
+export const MAINTAIN_PACE_LABEL = 'Maintain';
+
+// A unit switch divides the pace, so a value that means zero can arrive a hair
+// off zero. Anything under a fifth of the finest step either slider offers is
+// the same answer, and only an exact zero can land inside this.
+const PACE_ZERO_EPSILON = 0.001;
+
+/** Whether the pace holds the weight rather than changes it. */
+export function isMaintainPace(pace: number): boolean {
+  return Number.isFinite(pace) && Math.abs(pace) < PACE_ZERO_EPSILON;
+}
+
+/** The pace as a value: "1.0 lb", "0.45 kg", or the maintain word on its own. */
+export function formatPace(pace: number, unit: WeightUnit): string {
+  if (isMaintainPace(pace)) return MAINTAIN_PACE_LABEL;
+  return `${pace.toFixed(unit === 'lb' ? 1 : 2)} ${unit}`;
+}
+
+/** The pace as a readout. A maintain pace takes no rate after it. */
+export function formatPaceRate(pace: number, unit: WeightUnit): string {
+  if (isMaintainPace(pace)) return MAINTAIN_PACE_LABEL;
+  return `${formatPace(pace, unit)} a week`;
+}
 
 /**
  * The ends of the height and weight wheels.
@@ -130,6 +180,64 @@ export interface MedicationScheduleDraft {
   route: Route;
   frequencyKind: OnboardingFrequency;
   shotDay: ShotDay;
+  /** Days between shots, when the kind is `every_n_days`. Held as typed. */
+  intervalText: string;
+  /** The days picked, when the kind is `weekdays`. Empty until one is pressed. */
+  weekdays: Weekday[];
+  /**
+   * The vial label of a blend, held as typed: milligrams per part, keyed by the
+   * part's preset id. Empty for everything that is not a blend, and empty for a
+   * blend whose label the user skipped, which is allowed as a whole.
+   */
+  compositionMg: Record<string, string>;
+}
+
+/**
+ * What the draft writes into the `frequency_value` column.
+ *
+ * One column carries four different things, so one function decides which, and
+ * both the writer and the plan preview call it. They disagreed once and the
+ * plan card drew a week the reminders never sent. Null means the schedule needs
+ * no number, or the user has not given one yet.
+ */
+export function scheduleFrequencyValue(schedule: MedicationScheduleDraft): number | null {
+  switch (schedule.frequencyKind) {
+    case 'daily':
+      return null;
+    case 'every_n_days': {
+      const days = Number.parseInt(schedule.intervalText, 10);
+      return Number.isFinite(days) && days >= 1 ? days : null;
+    }
+    case 'weekdays': {
+      const mask = weekdayMask(schedule.weekdays);
+      return mask === 0 ? null : mask;
+    }
+    default:
+      return schedule.shotDay;
+  }
+}
+
+/** Whether the user has finished this schedule. The Continue button reads it. */
+export function scheduleIsComplete(schedule: MedicationScheduleDraft): boolean {
+  const dose = Number.parseFloat(schedule.doseText);
+  if (!Number.isFinite(dose) || dose <= 0) return false;
+  if (!compositionSettled(schedule)) return false;
+  if (schedule.frequencyKind === 'daily') return true;
+  return scheduleFrequencyValue(schedule) !== null;
+}
+
+/**
+ * Whether the blend label boxes allow a save: every box filled or every box
+ * empty. A label copied halfway hands the missing parts' milligrams to the
+ * typed parts, so Continue waits rather than saving a vial nobody owns.
+ * Anything that is not a blend has no boxes and always passes.
+ */
+function compositionSettled(schedule: MedicationScheduleDraft): boolean {
+  if (isCustomMedicationId(schedule.medicationId)) return true;
+  const preset = getPreset(schedule.medicationId);
+  if (!preset || !isBlend(preset)) return true;
+  const partIds = blendParts(preset).map((part) => part.id);
+  return compositionDraft(partIds, schedule.compositionMg).kind !== 'partial';
 }
 
 // Current weight, goal weight and height each get their own screen and each can
@@ -159,7 +267,10 @@ export type ReminderDraft =
 export interface OnboardingDraft {
   journeyStage: JourneyStage | null;
   medicationIds: OnboardingMedicationId[];
-  customMedicationName: string;
+  // The name behind each custom id in `medicationIds`. An entry exists exactly
+  // as long as its id is selected: `addCustomMedication` writes both together
+  // and `toggleMedication` removes both together.
+  customNames: Record<OnboardingMedicationId, string>;
   // One schedule per selected medication, keyed by medication id. Every
   // selection gets its own screen, so nothing is filled in behind the user.
   schedules: Record<OnboardingMedicationId, MedicationScheduleDraft>;
@@ -182,13 +293,16 @@ export interface OnboardingState extends OnboardingDraft {
   setGate: (gate: OnboardingGate) => void;
   setJourneyStage: (stage: JourneyStage) => void;
   toggleMedication: (id: OnboardingMedicationId) => void;
-  setCustomMedicationName: (name: string) => void;
+  addCustomMedication: (name: string) => OnboardingMedicationId;
   prepareSchedules: () => void;
   setScheduleDose: (id: OnboardingMedicationId, doseText: string) => void;
   setScheduleUnit: (id: OnboardingMedicationId, unit: Unit) => void;
   setScheduleRoute: (id: OnboardingMedicationId, route: Route) => void;
   setScheduleFrequency: (id: OnboardingMedicationId, frequencyKind: OnboardingFrequency) => void;
   setShotDay: (id: OnboardingMedicationId, shotDay: ShotDay) => void;
+  setScheduleInterval: (id: OnboardingMedicationId, intervalText: string) => void;
+  toggleScheduleWeekday: (id: OnboardingMedicationId, weekday: Weekday) => void;
+  setScheduleCompositionMg: (id: OnboardingMedicationId, partId: string, text: string) => void;
   setLastShot: (choice: LastShotChoice) => void;
   setSex: (sex: Sex) => void;
   setBirthYearText: (value: string) => void;
@@ -209,7 +323,7 @@ export interface OnboardingState extends OnboardingDraft {
 const initialDraft: OnboardingDraft = {
   journeyStage: null,
   medicationIds: [],
-  customMedicationName: '',
+  customNames: {},
   schedules: {},
   lastShot: null,
   sex: null,
@@ -224,7 +338,7 @@ const initialDraft: OnboardingDraft = {
   reminder: { kind: 'skipped', time: '09:00' },
 };
 
-export const useOnboardingStore = create<OnboardingState>((set) => ({
+export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   ...initialDraft,
   gate: { kind: 'checking' },
   setGate: (gate) => set({ gate }),
@@ -244,9 +358,21 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     // Keep the draft of anything still selected. Deselecting and reselecting a
     // medication is a common slip, and losing the dose you typed is annoying.
     const schedules = selected ? withoutKey(state.schedules, id) : state.schedules;
-    return { medicationIds, schedules };
+    // A deselected custom has no row to reselect from, so its name goes with
+    // it. Adding it again is one typed name away.
+    const customNames = selected && isCustomMedicationId(id)
+      ? withoutName(state.customNames, id)
+      : state.customNames;
+    return { medicationIds, schedules, customNames };
   }),
-  setCustomMedicationName: (customMedicationName) => set({ customMedicationName }),
+  addCustomMedication: (name) => {
+    const id = nextCustomId(get().customNames);
+    set((state) => ({
+      medicationIds: [...state.medicationIds, id],
+      customNames: { ...state.customNames, [id]: name.trim() },
+    }));
+    return id;
+  },
   prepareSchedules: () => set((state) => {
     const schedules: Record<OnboardingMedicationId, MedicationScheduleDraft> = {};
     let changed = Object.keys(state.schedules).length !== state.medicationIds.length;
@@ -266,6 +392,19 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setScheduleRoute: (id, route) => set((state) => patchSchedule(state, id, { route })),
   setScheduleFrequency: (id, frequencyKind) => set((state) => patchSchedule(state, id, { frequencyKind })),
   setShotDay: (id, shotDay) => set((state) => patchSchedule(state, id, { shotDay })),
+  setScheduleInterval: (id, intervalText) => set((state) => patchSchedule(state, id, { intervalText })),
+  toggleScheduleWeekday: (id, weekday) => set((state) => {
+    const current = state.schedules[id]?.weekdays ?? [];
+    return patchSchedule(state, id, {
+      weekdays: current.includes(weekday)
+        ? current.filter((item) => item !== weekday)
+        : [...current, weekday],
+    });
+  }),
+  setScheduleCompositionMg: (id, partId, text) => set((state) => {
+    const current = state.schedules[id]?.compositionMg ?? {};
+    return patchSchedule(state, id, { compositionMg: { ...current, [partId]: text } });
+  }),
   setLastShot: (lastShot) => set({ lastShot }),
   setSex: (sex) => set({ sex }),
   setBirthYearText: (birthYearText) => set({ birthYearText }),
@@ -335,7 +474,14 @@ function clampToBounds(value: number, bounds: { min: number; max: number }): num
   return Math.min(bounds.max, Math.max(bounds.min, value));
 }
 
-function convertPace(pace: number, from: WeightUnit, to: WeightUnit): number {
+/**
+ * A weekly pace, carried across a unit switch.
+ *
+ * Exported because Profile switches units on a pace that is already saved, and
+ * the setup flow switches units on one that is not saved yet. Both are the same
+ * sum, and two copies of it would let a stored plan and a drafted plan disagree.
+ */
+export function convertPace(pace: number, from: WeightUnit, to: WeightUnit): number {
   if (from === to) return pace;
   return to === 'kg' ? pace / LB_PER_KG : pace * LB_PER_KG;
 }
@@ -355,6 +501,27 @@ function withoutKey(
   return next;
 }
 
+function withoutName(
+  customNames: Record<OnboardingMedicationId, string>,
+  id: OnboardingMedicationId,
+): Record<OnboardingMedicationId, string> {
+  const next = { ...customNames };
+  delete next[id];
+  return next;
+}
+
+// One above the highest number currently in use. A removed custom's number can
+// come back, and that is safe: removal drops the name and the schedule draft
+// together, so a reused id starts as clean as a fresh one.
+function nextCustomId(customNames: Record<OnboardingMedicationId, string>): OnboardingMedicationId {
+  let highest = 0;
+  for (const key of Object.keys(customNames)) {
+    const value = Number.parseInt(key.slice(CUSTOM_MEDICATION_PREFIX.length), 10);
+    if (Number.isFinite(value) && value > highest) highest = value;
+  }
+  return `${CUSTOM_MEDICATION_PREFIX}${highest + 1}`;
+}
+
 function patchSchedule(
   state: OnboardingState,
   id: OnboardingMedicationId,
@@ -366,7 +533,7 @@ function patchSchedule(
 }
 
 export function defaultScheduleDraft(id: OnboardingMedicationId): MedicationScheduleDraft {
-  const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
+  const preset = isCustomMedicationId(id) ? undefined : getPreset(id);
   return {
     medicationId: id,
     // Empty. The preset carries no dose to read, because `store.config.json`
@@ -379,14 +546,26 @@ export function defaultScheduleDraft(id: OnboardingMedicationId): MedicationSche
     route: preset?.defaultRoute ?? 'sc',
     frequencyKind: preset ? onboardingFrequency(preset.defaultFrequency.kind) : 'weekly',
     shotDay: currentShotDay(),
+    // The interval a published protocol names, the same number `medications/new`
+    // reads from the same field. It is a citation and not a dose, and the user
+    // reads it on the screen and changes it before Continue is live.
+    intervalText: preset?.defaultFrequency.value ? String(preset.defaultFrequency.value) : '',
+    // Nothing preselected. No preset names a weekday set, and Poke picks no
+    // shot day for anybody.
+    weekdays: [],
+    // Empty until the user copies their vial label. Poke proposes no split.
+    compositionMg: {},
   };
 }
 
-// The catalog has more frequency kinds than onboarding offers. Anything that
-// does not map lands on weekly, and the user confirms it on the schedule screen.
+// The catalog has more frequency kinds than onboarding offers. `custom` is the
+// only one left with nowhere to land, and it falls to weekly, which the user
+// confirms on the schedule screen.
 function onboardingFrequency(kind: FrequencyKind): OnboardingFrequency {
   if (kind === 'daily') return 'daily';
   if (kind === 'twice_weekly') return 'twice_weekly';
+  if (kind === 'every_n_days') return 'every_n_days';
+  if (kind === 'weekdays') return 'weekdays';
   return 'weekly';
 }
 
@@ -400,7 +579,7 @@ export function getOnboardingDraft(state: OnboardingState): OnboardingDraft {
   return {
     journeyStage: state.journeyStage,
     medicationIds: state.medicationIds,
-    customMedicationName: state.customMedicationName,
+    customNames: state.customNames,
     schedules: state.schedules,
     lastShot: state.lastShot,
     sex: state.sex,
@@ -418,9 +597,9 @@ export function getOnboardingDraft(state: OnboardingState): OnboardingDraft {
 
 export function medicationDisplayName(
   id: OnboardingMedicationId,
-  customMedicationName: string,
+  customNames: Record<OnboardingMedicationId, string>,
 ): string {
-  if (id === CUSTOM_MEDICATION_ID) return customMedicationName.trim() || 'Your medication';
+  if (isCustomMedicationId(id)) return customNames[id]?.trim() || 'Your medication';
   // A brand row keeps its brand from here to the plan card and the reminder.
   return getPresetEntry(id)?.name ?? id;
 }

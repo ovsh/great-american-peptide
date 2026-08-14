@@ -40,6 +40,48 @@
         "8083"
       ],
       "port": 8083
+    },
+    {
+      "name": "poke-main-web-pace",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ovsh/Documents/code/poke/mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8085"
+      ],
+      "port": 8085
+    },
+    {
+      "name": "poke-main-web-dose",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ovsh/Documents/code/poke/mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8086"
+      ],
+      "port": 8086
+    },
+    {
+      "name": "poke-main-web-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ovsh/Documents/code/poke/mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8084"
+      ],
+      "port": 8084
     }
   ]
 }

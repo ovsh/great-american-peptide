@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -18,6 +18,7 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
+import { exportWithoutMigrating } from '@/services/export';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
 import { useEntitlementSettled, useEntitlementStore } from '@/stores/entitlement';
@@ -107,20 +108,13 @@ export default function RootLayout() {
 
   if (gate.kind === 'error') {
     return (
-      <SafeAreaProvider>
-        <View style={styles.error}>
-          <Text variant="h2" align="center">Poke could not open your data.</Text>
-          <Text selectable color={colors.inkMuted} align="center">{gate.message}</Text>
-          <Button
-            onPress={() => {
-              setReady(false);
-              setGate({ kind: 'checking' });
-            }}
-          >
-            Try again
-          </Button>
-        </View>
-      </SafeAreaProvider>
+      <DatabaseErrorScreen
+        message={gate.message}
+        onRetry={() => {
+          setReady(false);
+          setGate({ kind: 'checking' });
+        }}
+      />
     );
   }
 
@@ -161,6 +155,66 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * The launch stopped before the database opened, so this screen is the whole
+ * app for as long as it shows. It says the records are still on the phone, and
+ * it offers the one action that works without the upgrade Poke could not
+ * finish: `exportWithoutMigrating` opens the file on its own read-only
+ * connection, reads whatever schema it meets, and shares a CSV. The retry
+ * replays the same migration, so the copy asks for the export first.
+ */
+function DatabaseErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const [exporting, setExporting] = useState(false);
+
+  const runExport = async () => {
+    setExporting(true);
+    const outcome = await exportWithoutMigrating();
+    setExporting(false);
+    if (outcome.kind === 'empty') {
+      Alert.alert(
+        'Poke found no records to export',
+        'This database holds no shots, no weights and no side effects.',
+      );
+    } else if (outcome.kind === 'failed') {
+      Alert.alert('Poke could not export your data', outcome.message);
+    }
+  };
+
+  return (
+    <SafeAreaProvider>
+      <ScrollView style={styles.errorScroll} contentContainerStyle={styles.error}>
+        <View style={styles.errorBlock}>
+          <Text variant="h2" align="center">Poke could not open your data.</Text>
+          <Text color={colors.inkMuted} align="center">
+            Your records are still on this phone. Poke could not finish a database upgrade, so
+            Poke cannot show the records yet.
+          </Text>
+          <Text color={colors.inkMuted} align="center">
+            Export your data to a file before you try again, and keep the file somewhere safe.
+          </Text>
+          <Text variant="small" selectable color={colors.inkSubtle} align="center">{message}</Text>
+        </View>
+        <View style={styles.errorBlock}>
+          <Button
+            onPress={() => { runExport().catch(() => {}); }}
+            disabled={exporting}
+            accessibilityLabel="Export your data to a file and open the share sheet"
+          >
+            Export your data
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={onRetry}
+            accessibilityLabel="Try to open your data again"
+          >
+            Try again
+          </Button>
+        </View>
+      </ScrollView>
+    </SafeAreaProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -171,12 +225,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: {
+  errorScroll: {
     flex: 1,
     backgroundColor: colors.background,
-    alignItems: 'center',
+  },
+  // A scroll view, because the SQLite message under the copy can run long and
+  // the two buttons have to stay reachable on the shortest phone.
+  error: {
+    flexGrow: 1,
     justifyContent: 'center',
-    gap: spacing.lg,
+    gap: spacing.xl,
     padding: spacing.screen,
+  },
+  errorBlock: {
+    gap: spacing.md,
   },
 });

@@ -4,7 +4,7 @@ import { Card } from '@/components/Card';
 import { OnboardingStep } from '@/components/OnboardingStep';
 import { Slider } from '@/components/Slider';
 import { Text } from '@/components/Text';
-import { paceBounds, useOnboardingStore } from '@/stores/onboarding';
+import { formatPace, formatPaceRate, paceBounds, useOnboardingStore } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
 
 export default function PaceScreen() {
@@ -14,7 +14,10 @@ export default function PaceScreen() {
 
   const bounds = paceBounds(weight.unit);
   const step = weight.unit === 'lb' ? 0.1 : 0.05;
-  const format = (value: number) => `${value.toFixed(weight.unit === 'lb' ? 1 : 2)} ${weight.unit}`;
+  // The slider snaps to a multiple of the step and clamps to the bounds, so the
+  // low end of both units is an exact zero and the readout below is the word,
+  // not "0.0 lb". Do not give this slider a step the floor is not a multiple of.
+  const format = (value: number) => formatPace(value, weight.unit);
 
   return (
     <OnboardingStep
@@ -40,7 +43,7 @@ export default function PaceScreen() {
     >
       <Card padding="xl" style={styles.readout}>
         <Text variant="smallStrong" color={colors.inkMuted}>Your pace</Text>
-        <Text variant="display">{format(pace)} a week</Text>
+        <Text variant="display">{formatPaceRate(pace, weight.unit)}</Text>
       </Card>
 
       <View style={styles.sliderHolder}>
