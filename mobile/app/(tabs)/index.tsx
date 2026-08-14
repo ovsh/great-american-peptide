@@ -25,14 +25,13 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { TodayHeroCard } from '@/components/today-hero-card';
+import { buildLevelSeries, levelWindow } from '@/components/today-level-series';
 import { TodayMedicationList } from '@/components/today-medication-list';
 import { TodayRise, useSwapTransition } from '@/components/today-motion';
 import { TodayTrackCard } from '@/components/today-track-card';
 import type {
   DayMark,
   DoseState,
-  LevelPoint,
-  LevelSeries,
   TodayMedicationSummary,
   WeekDay,
 } from '@/components/today-types';
@@ -42,13 +41,6 @@ import type {
   MedicationRow,
   PreferencesRow,
 } from '@/db/types';
-import type { Unit } from '@/domain/peptides';
-import {
-  MIN_LEVEL_WINDOW_HOURS,
-  estimatedLevelAt,
-  suggestedLevelWindowHours,
-  tmaxOrDefault,
-} from '@/domain/pk';
 import {
   medicationScheduleFromStored,
   nextScheduledDoses,
@@ -79,17 +71,9 @@ import {
 } from '@/theme';
 import { endOfDay, startOfDay } from '@/utils/date';
 
-const HOUR_MS = 60 * 60 * 1000;
 const CONTENT_MAX_WIDTH = 600;
 /** Three days behind today and three ahead: the week the axis draws. */
 const WEEK_LOOKBACK_DAYS = 3;
-const CURVE_STEPS_PAST = 100;
-const CURVE_STEPS_FUTURE = 40;
-/**
- * The run-up before the first shot, as a share of the history behind it. The
- * curve needs a little baseline to leave, and no more than that.
- */
-const LEVEL_WINDOW_RUN_UP = 0.15;
 
 /** Everything one load produces, held together so it can be applied in one go. */
 interface TodayData {
@@ -506,19 +490,13 @@ function buildDashboard({
       schedule,
       now,
     });
-    const windowHours = suggestedLevelWindowHours(medication.half_life_hours);
-    const windowFromMs = levelWindowFrom({
+    const nextDoseAt = nextDoseFrom(dose);
+    const { fromMs: windowFromMs, toMs: windowToMs } = levelWindow({
       injections: medicationInjections,
-      windowHours,
+      halfLifeHours: medication.half_life_hours,
+      nextDoseAt,
       now,
     });
-    const nextDoseAt = nextDoseFrom(dose);
-    // Ahead of now the chart draws to the next dose. With no next dose there is
-    // nothing to draw toward, so it shows a fraction of the window instead and
-    // the curve simply runs off the right edge, which is what it does. The
-    // fraction is of the window actually drawn, so a short history does not put
-    // three days of empty forecast next to one day of curve.
-    const windowToMs = nextDoseAt ?? now + (now - windowFromMs) * 0.15;
 
     return {
       medication,
@@ -645,117 +623,6 @@ function buildWeek({
     else if (scheduledDays.has(dayStart)) mark = 'scheduled';
     return { dayStart, mark, isToday };
   });
-}
-
-function buildLevelSeries({
-  injections,
-  medication,
-  now,
-  fromMs,
-  toMs,
-  nextDoseAt,
-}: {
-  injections: readonly InjectionRow[];
-  medication: MedicationRow;
-  now: number;
-  fromMs: number;
-  toMs: number;
-  nextDoseAt: number | null;
-}): LevelSeries {
-  const halfLife = medication.half_life_hours;
-  // A medication with no half-life on file draws its shots instead of a curve.
-  // Poke cannot model it, and saying so in a sentence shows nothing.
-  if (halfLife === null || halfLife <= 0) {
-    return {
-      kind: 'shots',
-      shots: injections
-        .filter((injection) => injection.taken_at >= fromMs && injection.taken_at <= toMs)
-        .map((injection) => injection.taken_at),
-    };
-  }
-  if (injections.length === 0) return { kind: 'empty', nextDoseAt };
-
-  const doses = injections
-    .map((injection) => {
-      const dose = doseIn(injection.dose, injection.unit, medication.default_unit);
-      return dose === null ? null : { takenAt: injection.taken_at, dose };
-    })
-    .filter((dose): dose is { takenAt: number; dose: number } => dose !== null);
-  if (doses.length === 0) return { kind: 'empty', nextDoseAt };
-
-  const tmax = tmaxOrDefault(halfLife, medication.tmax_hours);
-  const sample = (t: number): LevelPoint => ({
-    t,
-    v: estimatedLevelAt(doses, halfLife, tmax, t),
-  });
-  const past = seriesBetween(fromMs, now, CURVE_STEPS_PAST).map(sample);
-  const future = toMs > now ? seriesBetween(now, toMs, CURVE_STEPS_FUTURE).map(sample) : [];
-
-  return {
-    kind: 'curve',
-    past,
-    future,
-    current: estimatedLevelAt(doses, halfLife, tmax, now),
-    nextDoseAt,
-  };
-}
-
-/**
- * Where the level chart starts.
- *
- * Six half-lives is the right span for a medication that has been taken for a
- * while, and the wrong one for a medication whose first shot went in this
- * morning. Semaglutide asks for the full three weeks, so a user one shot into
- * it got twenty days of flat zero and the whole real curve squeezed into the
- * last few pixels under the now dot, which reads as a straight line with a
- * vertical jump at the end rather than as a level.
- *
- * So the window never opens long before the first shot. It keeps a short
- * run-up, enough to show the curve leaving the baseline, and it never shrinks
- * below a day, because the chart has to cover the day the user is looking at.
- * A full history is untouched: the six half-lives still win.
- */
-function levelWindowFrom({
-  injections,
-  windowHours,
-  now,
-}: {
-  injections: readonly InjectionRow[];
-  windowHours: number;
-  now: number;
-}): number {
-  const fullFrom = now - windowHours * HOUR_MS;
-  const firstDoseAt = injections.reduce<number | null>(
-    (earliest, injection) => (earliest === null ? injection.taken_at : Math.min(earliest, injection.taken_at)),
-    null,
-  );
-  if (firstDoseAt === null) return fullFrom;
-  // The run-up is a share of the history, not of the full window. A share of
-  // the window would put forty hours of flat zero in front of a shot taken six
-  // hours ago, which is the same bug in a smaller frame.
-  const runUp = (now - firstDoseAt) * LEVEL_WINDOW_RUN_UP;
-  const shortest = now - Math.min(windowHours, MIN_LEVEL_WINDOW_HOURS) * HOUR_MS;
-  return Math.min(shortest, Math.max(fullFrom, firstDoseAt - runUp));
-}
-
-function seriesBetween(fromMs: number, toMs: number, steps: number): number[] {
-  const out: number[] = [];
-  for (let index = 0; index <= steps; index += 1) {
-    out.push(fromMs + ((toMs - fromMs) * index) / steps);
-  }
-  return out;
-}
-
-/**
- * A logged shot keeps the unit it was logged in, and the curve adds numbers, so
- * they all have to be in the medication's unit before anything sums them. IU is
- * medication specific and converts to nothing, so that shot stays out.
- */
-function doseIn(value: number, from: Unit, to: Unit): number | null {
-  if (from === to) return value;
-  if (from === 'mg' && to === 'mcg') return value * 1000;
-  if (from === 'mcg' && to === 'mg') return value / 1000;
-  return null;
 }
 
 function mergeOrder(

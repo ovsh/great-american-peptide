@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, Check, FileDown, Layers, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
+import { Activity, Check, FileDown, Layers, X, type LucideIcon } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { PaywallHero } from '@/components/paywall-hero';
 import { Text } from '@/components/Text';
 import { PRIVACY_URL, TERMS_URL } from '@/config/legal';
 import { buildPlanOptions, type PlanId, type PlanOption } from '@/domain/plans';
@@ -12,17 +13,13 @@ import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
 
-// A title that already says the thing does not get a line under it repeating
-// the thing. Only the export keeps a body, because "Take it to your doctor"
-// does not say what Poke hands over.
+// The hero draws the level, so the list no longer names it. What is left is the
+// three things the drawing cannot show, one line each, in the order a user
+// meets them.
 const BENEFITS: readonly Benefit[] = [
   {
     icon: Activity,
-    title: 'Your level day by day',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Trends that add up',
+    title: 'Exact numbers and progress charts',
   },
   {
     icon: Layers,
@@ -30,15 +27,13 @@ const BENEFITS: readonly Benefit[] = [
   },
   {
     icon: FileDown,
-    title: 'Take it to your doctor',
-    body: 'Export your whole log as a CSV file.',
+    title: 'Export your whole log as a CSV file',
   },
 ];
 
 interface Benefit {
   icon: LucideIcon;
   title: string;
-  body?: string;
 }
 
 export default function PaywallScreen() {
@@ -135,22 +130,21 @@ export default function PaywallScreen() {
             <View style={styles.badge}>
               <Text variant="caption" color={colors.accent}>POKE PRO</Text>
             </View>
-            <Text variant="h1">Every shot you log becomes a chart.</Text>
+            <Text variant="h1">Your estimated level, day by day</Text>
             <Text color={colors.inkMuted}>
-              Logging is free forever. Pro adds the numbers.
+              Poke draws the curve from the shots you log.
             </Text>
           </View>
 
+          <PaywallHero />
+
           <View style={styles.benefits}>
-            {BENEFITS.map(({ icon: Icon, title, body }) => (
+            {BENEFITS.map(({ icon: Icon, title }) => (
               <View key={title} style={styles.benefitRow}>
                 <View style={styles.benefitIcon}>
                   <Icon size={20} color={colors.accent} strokeWidth={2} />
                 </View>
-                <View style={styles.benefitCopy}>
-                  <Text variant="bodyStrong">{title}</Text>
-                  {body ? <Text variant="small" color={colors.inkMuted}>{body}</Text> : null}
-                </View>
+                <Text variant="bodyStrong" style={styles.benefitCopy}>{title}</Text>
               </View>
             ))}
           </View>
@@ -387,7 +381,6 @@ const styles = StyleSheet.create({
   },
   benefitCopy: {
     flex: 1,
-    gap: 2,
   },
   plans: {
     gap: spacing.md,
