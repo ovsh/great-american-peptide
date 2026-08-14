@@ -36,7 +36,7 @@ console, change it in the source too, or the paywall will find nothing.
 | Yearly product id | `poke_pro_annual` | `src/services/purchases.ts` |
 | Monthly price | 9.99 USD | `src/domain/plans.ts` |
 | Yearly price | 39.99 USD | `src/domain/plans.ts` |
-| Free trial | 1 month, yearly only | `src/domain/plans.ts` |
+| Free trial | 3 days, yearly only | `src/domain/plans.ts` |
 
 Why these numbers, from the category as it stood in August 2026:
 
@@ -45,10 +45,12 @@ Why these numbers, from the category as it stood in August 2026:
   and 59.99. Several free apps (Glapp, GLP3 Planner, GLP-1 Plotter) give the
   level chart away, so a new app with no ratings should not lead on price.
 - 39.99 puts the yearly saving at 67% against the monthly price, not 58%.
-- The trial is a month because everything Pro sells is a trend across shots. A
-  weekly injector logs one shot in seven days and four in a month. RevenueCat's
-  2026 report also measures trials of 17 to 32 days converting at 42.5% against
-  25.5% for four days or fewer.
+- The trial is 3 days, on the yearly plan only. Owner's call, August 2026: match
+  the category (Pep AI runs 3 days, Shotsy 7) and collect revenue in days, not
+  weeks. The data that argues the other way is on record — RevenueCat 2026
+  measures 17-to-32-day trials converting at 42.5% against 25.5% for four days
+  or fewer, and a weekly injector logs at most one shot in 3 days — so trial
+  length is the first A/B test after launch, not a settled fact.
 - No discount ladder. About 90% of subscriptions in the category sell at full
   price; the yearly anchor is the discount.
 
@@ -96,7 +98,7 @@ In the group, create two auto-renewable subscriptions.
 - Reference name: `Poke Pro Yearly`
 - Duration: 1 year
 - Price: 39.99 USD
-- Introductory offer: **Free trial, 1 month, new subscribers**
+- Introductory offer: **Free trial, 3 days, new subscribers**
 
 Set the yearly rank above the monthly one in the group, so an upgrade is an
 upgrade.

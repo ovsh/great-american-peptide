@@ -63,7 +63,7 @@ Poke is a record of what you enter and nothing more. Poke gives no medical advic
 
 SUBSCRIPTION
 Poke Pro is an auto-renewable subscription.
-- Poke Pro Yearly: 39.99 USD per year, after a 1-month free trial for new subscribers.
+- Poke Pro Yearly: 39.99 USD per year, after a 3-day free trial for new subscribers.
 - Poke Pro Monthly: 9.99 USD per month, no trial.
 Prices are in US dollars and may differ in your region. The app always shows the price you will pay before you buy. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews on its own unless you turn off auto-renew at least 24 hours before the period ends. Your Apple Account is charged for renewal within 24 hours before the current period ends. Manage or cancel a subscription in your Apple Account settings after purchase. Any unused part of a free trial is forfeited when you buy a subscription.
 
@@ -109,7 +109,7 @@ RevenueCat and StoreKit 2.
 2. To open it later: Profile > See Poke Pro. The "Unlock exact levels" chip on
 the Today level chart, the "Unlock your numbers" pill on the Progress chart,
 Export history in Profile and adding a third medication also open it.
-3. Buy either plan with a sandbox Apple Account. The yearly plan has a one-month
+3. Buy either plan with a sandbox Apple Account. The yearly plan has a 3-day
 free trial for new subscribers.
 4. The paywall closes and Pro unlocks at once. Restore purchases is on the
 paywall and in Profile.

@@ -34,7 +34,7 @@ test('placeholder pricing is used when no offering exists', () => {
   const [annual, monthly] = buildPlanOptions(null);
   assertEqual(annual.pkg, null, 'annual has no package');
   assertEqual(annual.badge, 'Save 67%', 'placeholder badge');
-  assertEqual(annual.trialLabel, '1 month free', 'placeholder trial');
+  assertEqual(annual.trialLabel, '3 days free', 'placeholder trial');
   assertEqual(monthly.badge, null, 'monthly never carries a badge');
   assertEqual(monthly.perMonthLabel, null, 'monthly needs no per-month line');
 });

@@ -28,10 +28,10 @@ const PLACEHOLDER = {
   monthly: { price: 9.99, currency: 'USD' },
 } as const;
 
-// A month, not a week. Everything Pro sells is a trend across shots, and a
-// weekly injector logs one shot in seven days and four in a month. A short
-// trial would show an empty chart.
-const PLACEHOLDER_TRIAL = '1 month free';
+// 3 days, matching the introductory offer configured in App Store Connect.
+// The category standard (Pep AI runs 3 days, Shotsy 7). Trial length is an
+// A/B candidate; the store value wins whenever the store is reachable.
+const PLACEHOLDER_TRIAL = '3 days free';
 
 export function buildPlanOptions(offering: PurchasesOffering | null): PlanOption[] {
   const annualPkg = offering?.annual ?? findByType(offering, 'ANNUAL');
