@@ -129,7 +129,7 @@ export default function PlanScreen() {
       // dismissing leaves you already home.
       router.replace('/');
       if (paywallEnabledNow() && !isProNow()) {
-        router.push('/paywall?from=onboarding');
+        router.push('/paywall');
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Poke could not save your plan. Try again.');

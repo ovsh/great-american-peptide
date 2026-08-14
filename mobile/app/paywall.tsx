@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Activity, Check, FileDown, Layers, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 
@@ -43,8 +42,6 @@ interface Benefit {
 }
 
 export default function PaywallScreen() {
-  const params = useLocalSearchParams<{ from?: string }>();
-  const fromOnboarding = params.from === 'onboarding';
   const insets = useSafeAreaInsets();
 
   const offering = useEntitlementStore((state) => state.offering);
@@ -186,11 +183,6 @@ export default function PaywallScreen() {
         <Button disabled={busy || action === 'waiting'} onPress={runAction}>
           {ctaLabel(action, plan)}
         </Button>
-        {fromOnboarding && action !== 'close' ? (
-          <Button variant="ghost" size="sm" disabled={busy} onPress={dismiss}>
-            Keep using the free version
-          </Button>
-        ) : null}
         {/* Only when the App Store priced this plan. The renewal terms are the
             one line that must never carry a number Poke made up. */}
         {storeReady ? (
