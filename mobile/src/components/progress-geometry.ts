@@ -46,7 +46,10 @@ export interface JourneyMedication {
 export interface JourneyEffect {
   day: number;
   label: string;
+  /** 0 for a clear day: it fills the column, and `kind` carries the meaning. */
   severity: number;
+  /** A logged symptom, or a day the user marked clear. */
+  kind: 'symptom' | 'clear';
   takenAt: number;
 }
 

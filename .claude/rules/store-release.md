@@ -13,6 +13,11 @@ submission order. Getting the order wrong makes App Store Connect refuse the sub
 
 - **The listing is code.** Edit `store.config.json`, then run `npx eas metadata:push`.
   Do not edit the listing by hand in App Store Connect. A hand edit is lost on the next push.
+- **Release notes are written in `mobile/CHANGELOG.md` first.** Work that is built and not
+  shipped goes under Unreleased. A version bump renames that section to the version, and its
+  lines become `releaseNotes` in `store.config.json`. Never write `releaseNotes` straight into
+  the config: that field holds one release and keeps no history. The header of `CHANGELOG.md`
+  holds the copy rules for an entry.
 - **The medical wording is deliberate.** It was written to pass App Review guidelines 1.4.1
   and 1.4.2. Do not remove a disclaimer. Do not add advice, diagnosis, treatment, dose
   recommendation, or a drug brand name.

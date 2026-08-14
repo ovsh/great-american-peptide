@@ -1,9 +1,17 @@
-// SQLite schema. Add new migrations to MIGRATIONS array
-// and bump SCHEMA_VERSION; older versions get applied in order on launch.
+// SQLite schema. Append a migration to MIGRATIONS with the next version number
+// and nothing else: `SCHEMA_VERSION` reads itself off the end of the array now,
+// and the runner in `migrate.ts` applies every version above the one the device
+// holds, in order, each inside its own transaction.
+//
+// Migrations are append-only. Never edit a migration that has shipped, because
+// a device that already ran it never sees the edit.
 
-export const SCHEMA_VERSION = 11;
+export interface Migration {
+  version: number;
+  up: string;
+}
 
-export const MIGRATIONS: { version: number; up: string }[] = [
+export const MIGRATIONS: Migration[] = [
   {
     version: 1,
     up: `
@@ -259,4 +267,104 @@ export const MIGRATIONS: { version: number; up: string }[] = [
       ALTER TABLE preferences ADD COLUMN notif_missed_enabled INTEGER NOT NULL DEFAULT 1;
     `,
   },
+  {
+    // Weight read from Apple Health. `measurements.source` was typed
+    // 'manual' | 'healthkit' from the first schema, so the rows have always had
+    // a place to land; this migration adds the two things that were missing.
+    //
+    // The index is what makes a sync idempotent. A HealthKit sample carries a
+    // stable uuid, so a re-read of the same window offers rows Poke already
+    // holds, and `INSERT OR IGNORE` against this index drops them instead of
+    // drawing the same weigh-in twice. Without it the importer would need an
+    // anchor it could lose, or a read-back per sample. It is partial because
+    // every manual row holds a NULL `source_id` and must keep doing so.
+    //
+    // `health_sync_enabled` defaults to 0. A permission is the user's to give,
+    // and an install that upgrades into this version must not start reading
+    // Health because it updated.
+    //
+    // `health_synced_at` is the last read Poke completed, which Profile shows.
+    // It is not an anchor: the importer re-reads a window that opens a month
+    // before it and the index absorbs the overlap, so a lost timestamp costs one
+    // slow read of the whole history and no wrong rows.
+    version: 12,
+    up: `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_measurements_source_id
+        ON measurements(source, source_id) WHERE source_id IS NOT NULL;
+
+      ALTER TABLE preferences ADD COLUMN health_sync_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE preferences ADD COLUMN health_synced_at INTEGER;
+    `,
+  },
+  {
+    // A cycle is a plan the user wrote down, and these four columns hold all of
+    // it. There is no cycles table, because pause was already the primitive: a
+    // paused medication draws no reminder, holds no free slot and keeps its
+    // history. What pause never had was a date. `paused_at` is that date, and
+    // it is written on every pause, a cycle or not, so a plain pause finally
+    // says when it started as well.
+    //
+    // The two nulls say different things and neither can be read off the other.
+    // `cycle_days_on` NULL means this medication has no cycle, which is every
+    // row on the disk the day this ships. `cycle_days_off` NULL means the user
+    // chose no break reminder on a medication that does have a cycle.
+    //
+    // `cycle_started_at` is the anchor the week count reads. It is backdatable,
+    // because the users who asked for this are already part way through a cycle
+    // and a plan that can only start today would make the app wrong about them
+    // on the first screen. `scheduling.ts` now starts a schedule at
+    // `cycle_started_at ?? created_at`, so a resume re-anchors an every_n_days
+    // medication rather than letting it drift by the length of the break.
+    //
+    // Days and not weeks, because a protocol counted in days exists and a column
+    // that could not hold one would round the user's own plan. The screens show
+    // weeks only when the number divides by seven, and days otherwise.
+    //
+    // `notif_cycle_enabled` ships on beside the other loops, and
+    // `notifications_enabled` stays the master switch over it.
+    version: 13,
+    up: `
+      ALTER TABLE medications ADD COLUMN cycle_days_on INTEGER;
+      ALTER TABLE medications ADD COLUMN cycle_days_off INTEGER;
+      ALTER TABLE medications ADD COLUMN cycle_started_at INTEGER;
+      ALTER TABLE medications ADD COLUMN paused_at INTEGER;
+
+      ALTER TABLE preferences ADD COLUMN notif_cycle_enabled INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
+  {
+    // What the vial label says a blend holds, as a JSON array of
+    // `{presetId, mg}` lines. The user types every number off their own label,
+    // because Poke proposes no composition and no ratio. The level chart
+    // splits each logged dose across the parts by these milligrams and draws
+    // each part at its own sourced rate.
+    //
+    // Null means no composition entered, and the medication then behaves as
+    // any unsourced preset does: shot marks and no curve. The column is
+    // meaningful only on a medication whose preset is a blend; readers get to
+    // the lines through `parseComposition` in `domain/blends.ts`, which reads
+    // anything malformed as null instead of throwing.
+    version: 14,
+    up: `ALTER TABLE medications ADD COLUMN composition TEXT;`,
+  },
+  {
+    // The dose each scheduled weekday carries, as a JSON map keyed by the
+    // `Date.getDay()` weekday: `{"1":6,"4":2}` is 6 mg on Monday and 2 mg on
+    // Thursday. The user types every number; `default_dose` stays and covers
+    // any day the map skips. Null means one dose for every day, which is every
+    // medication written before this column existed. Readers go through
+    // `parseDoseByDay` in `domain/doseByDay.ts`, which reads anything
+    // malformed as null instead of throwing.
+    version: 15,
+    up: `ALTER TABLE medications ADD COLUMN dose_by_day TEXT;`,
+  },
 ];
+
+/**
+ * The version a finished upgrade lands on. Read off the array, never typed by
+ * hand: it was a hand-bumped constant at the top of this file and it sat at 11
+ * while the array held 12. `migrations.test.ts` holds it to the last migration,
+ * and the same test holds the array to one strictly increasing run of versions,
+ * so the last entry is always the highest one.
+ */
+export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

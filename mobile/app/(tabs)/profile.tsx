@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { differenceInCalendarWeeks, startOfWeek, subWeeks } from 'date-fns';
-import { Activity, Bell, CalendarClock, Info, Scale, Share, Sparkles, Target } from 'lucide-react-native';
+import { Activity, Bell, CalendarClock, Gauge, HeartPulse, Info, RefreshCw, Scale, Share, Sparkles, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -11,6 +11,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { clockLabel, InlineTimePicker } from '@/components/InlineTimePicker';
 import { Input } from '@/components/Input';
+import { Slider } from '@/components/Slider';
 import { ProfileRecordStrip, RECORD_WEEKS, type ProfileRecord } from '@/components/profile-record-strip';
 import {
   ProfileCard,
@@ -35,14 +36,29 @@ import {
 } from '@/repositories/preferences';
 import { exportHistory } from '@/services/export';
 import {
+  importHealthWeights,
+  isHealthSupported,
+  stopHealthSync,
+  type HealthImport,
+} from '@/services/health';
+import {
   CHECKIN_DELAY_OPTIONS,
   checkinDelayHours,
   ensureNotificationPermission,
+  hasSideEffectWatchList,
   refreshScheduledReminders,
 } from '@/services/notifications';
 import { openManageSubscriptions } from '@/services/purchases';
 import { maybePromptForReview, openWriteReview } from '@/services/review';
 import { useAppStore } from '@/stores/app';
+import {
+  convertPace,
+  formatPace,
+  formatPaceRate,
+  paceBounds,
+  PACE_DEFAULT_LB,
+} from '@/stores/onboarding';
+import { fmtDateTime } from '@/utils/date';
 import {
   useEntitlementStore,
   useIsPro,
@@ -83,7 +99,15 @@ export default function ProfileScreen() {
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
+  const [paceOpen, setPaceOpen] = useState(false);
+  /** Held as a number, in the saved weight unit. The slider hands over a value. */
+  const [paceDraft, setPaceDraft] = useState(PACE_DEFAULT_LB);
+  const [savingPace, setSavingPace] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [healthBusy, setHealthBusy] = useState(false);
+  /** What the last read did. Null before the first one of this visit. */
+  const [healthNote, setHealthNote] = useState<string | null>(null);
   const [timeOpen, setTimeOpen] = useState(false);
   const [delayOpen, setDelayOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -107,6 +131,7 @@ export default function ProfileScreen() {
     setPreferences(row);
     setInjections(shots);
     setGoalDraft(row.goal_weight === null ? '' : String(row.goal_weight));
+    setPaceDraft(row.weekly_pace ?? restingPace(row.weight_unit));
   }, []);
 
   useEffect(() => {
@@ -147,6 +172,12 @@ export default function ProfileScreen() {
     await savePreferences({ notif_missed_enabled: next }, true);
   };
 
+  const toggleCycle = async () => {
+    if (!preferences) return;
+    const next: 0 | 1 = preferences.notif_cycle_enabled === 1 ? 0 : 1;
+    await savePreferences({ notif_cycle_enabled: next }, true);
+  };
+
   const setCheckinDelay = async (choice: string) => {
     if (!preferences) return;
     const hours = checkinDelayHours(Number(choice));
@@ -171,6 +202,13 @@ export default function ProfileScreen() {
       goal_weight: preferences.goal_weight === null
         ? null
         : convertWeight(preferences.goal_weight, preferences.weight_unit, weightUnit),
+      // The pace is stored in the weight unit, the same way the setup store
+      // holds it, so a switch has to carry it over. Left alone, a saved pace of
+      // 1 lb a week reads as 1 kg a week on the row below, which is more than
+      // twice the plan the user set.
+      weekly_pace: preferences.weekly_pace === null
+        ? null
+        : convertPace(preferences.weekly_pace, preferences.weight_unit, weightUnit),
     };
     await savePreferences(patch, false);
   };
@@ -203,6 +241,44 @@ export default function ProfileScreen() {
     } finally {
       setSavingGoal(false);
     }
+  };
+
+  // The slider fires on every step of a drag, so the value is held in the draft
+  // and written once, on the press. A write per step would put a hundred UPDATE
+  // statements and a hundred reloads under one thumb.
+  const savePace = async () => {
+    setSavingPace(true);
+    try {
+      await updatePreferences({ weekly_pace: paceDraft });
+      bumpVersion();
+      await load();
+      setPaceOpen(false);
+    } catch (error: unknown) {
+      Alert.alert('Poke could not save your pace', error instanceof Error ? error.message : 'Try again.');
+    } finally {
+      setSavingPace(false);
+    }
+  };
+
+  // A read is also the connect: the first one raises the iOS permission sheet,
+  // and every later one is the same call with a shorter window. There is no
+  // separate "connect" step to write, because iOS owns that state and never
+  // reports it back.
+  const readHealth = async () => {
+    setHealthBusy(true);
+    const result = await importHealthWeights();
+    setHealthBusy(false);
+    setHealthNote(healthNoteFor(result, weightUnit));
+    if (result.kind !== 'imported') return;
+    bumpVersion();
+    await load();
+  };
+
+  const stopHealth = async () => {
+    await stopHealthSync();
+    setHealthNote(null);
+    bumpVersion();
+    await load();
   };
 
   const runExport = async () => {
@@ -275,6 +351,15 @@ export default function ProfileScreen() {
 
   const goalWeight = preferences?.goal_weight ?? null;
   const weightUnit = preferences?.weight_unit ?? 'lb';
+  const weeklyPace = preferences?.weekly_pace ?? null;
+  const paceRange = paceBounds(weightUnit);
+  // The step the floor is a multiple of, so the low end of either unit is an
+  // exact zero and the readout is the maintain word rather than "0.0 lb".
+  const paceStep = weightUnit === 'lb' ? 0.1 : 0.05;
+  // Poke's own switch, which is not the iOS permission. iOS never says whether a
+  // read was granted, so this reads "on" only after weight actually arrived.
+  const healthOn = preferences?.health_sync_enabled === 1;
+  const healthReadAt = preferences?.health_synced_at ?? null;
   const remindersOn = preferences?.notifications_enabled === 1;
   // `notifications_enabled` is the shot-day switch and the master switch both:
   // with it off `refreshScheduledReminders` queues nothing at all. So the two
@@ -282,7 +367,14 @@ export default function ProfileScreen() {
   // that cannot arrive. The stored answer survives, and comes back with them.
   const checkinOn = remindersOn && preferences?.notif_checkin_enabled === 1;
   const missedOn = remindersOn && preferences?.notif_missed_enabled === 1;
+  const cycleOn = remindersOn && preferences?.notif_cycle_enabled === 1;
   const checkinDelay = checkinDelayHours(preferences?.notif_checkin_delay_hours);
+  // The scheduler is silent when the user named nothing to watch, whatever the
+  // switch says. The row reads the list with the scheduler's own check, so a
+  // toggle that shows on cannot quietly promise a banner that never comes: the
+  // pill names the reason the loop is idle instead of the delay it would use.
+  const checkinWatching = hasSideEffectWatchList(preferences?.side_effect_concerns ?? null);
+  const checkinIdle = checkinOn && !checkinWatching;
   const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null;
 
   // The rows below all wait on `loaded`, so a failed read would hold them at
@@ -349,11 +441,16 @@ export default function ProfileScreen() {
               testID="profile-checkin-row"
               icon={<Activity size={22} strokeWidth={1.8} color={colors.inkMuted} />}
               label="Day-after check-in"
-              accessibilityLabel={`Check-in delay, ${checkinDelay} hours after a shot`}
+              accessibilityLabel={checkinIdle
+                ? 'Day-after check-in. You named no side effects to watch, so Poke sends no check-in.'
+                : `Check-in delay, ${checkinDelay} hours after a shot`}
               onPress={remindersOn ? () => setDelayOpen(true) : undefined}
               value={(
                 <>
-                  <ProfileValuePill label={`${checkinDelay} h`} quiet={!checkinOn} />
+                  <ProfileValuePill
+                    label={checkinIdle ? 'Nothing to watch' : `${checkinDelay} h`}
+                    quiet={!checkinOn || checkinIdle}
+                  />
                   <View onStartShouldSetResponder={() => true}>
                     <Switch
                       testID="profile-checkin-switch"
@@ -379,6 +476,24 @@ export default function ProfileScreen() {
                   disabled={!remindersOn}
                   value={missedOn}
                   onValueChange={toggleMissed}
+                  trackColor={{ true: colors.accent, false: colors.borderStrong }}
+                  thumbColor={colors.surface}
+                />
+              )}
+            />
+            {/* Two banners in a whole cycle, and only for a medication that has
+                one. A user with no cycle set never meets this loop. */}
+            <ProfileRow
+              testID="profile-cycle-row"
+              icon={<RefreshCw size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+              label="Cycle end"
+              value={(
+                <Switch
+                  testID="profile-cycle-switch"
+                  accessibilityLabel="Cycle end"
+                  disabled={!remindersOn}
+                  value={cycleOn}
+                  onValueChange={toggleCycle}
                   trackColor={{ true: colors.accent, false: colors.borderStrong }}
                   thumbColor={colors.surface}
                 />
@@ -418,6 +533,42 @@ export default function ProfileScreen() {
                 />
               )}
             />
+            {/* The pace sits under the goal it belongs to, and only under a goal
+                that exists. `services/onboarding.ts` writes `weekly_pace` only
+                beside a goal weight, because a pace with nothing to apply it to
+                is a slider position and not a plan, and a row offering one would
+                take an answer Poke then throws away. Setting a goal on the row
+                above brings this row back with it. */}
+            {goalWeight === null ? null : (
+              <ProfileRow
+                testID="profile-pace-row"
+                icon={<Gauge size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+                label="Weekly pace"
+                accessibilityLabel={weeklyPace === null
+                  ? 'Weekly pace. Poke holds no pace for you'
+                  : `Weekly pace, ${formatPaceRate(weeklyPace, weightUnit)}`}
+                onPress={() => setPaceOpen(true)}
+                value={(
+                  <ProfileValuePill
+                    label={weeklyPace === null ? 'Set a pace' : formatPace(weeklyPace, weightUnit)}
+                  />
+                )}
+              />
+            )}
+            {/* This card is where a weight is read, so the place it can be read
+                from belongs on it. It is a row and a sheet rather than a switch:
+                a switch promises that flipping it back undoes the permission, and
+                only the user can do that, in the Health app. */}
+            {isHealthSupported() ? (
+              <ProfileRow
+                testID="profile-health-row"
+                icon={<HeartPulse size={22} strokeWidth={1.8} color={colors.inkMuted} />}
+                label="Apple Health"
+                accessibilityLabel="Apple Health"
+                onPress={() => setHealthOpen(true)}
+                value={<ProfileValuePill label={healthOn ? 'On' : 'Connect'} quiet={!healthOn} />}
+              />
+            ) : null}
           </ProfileCard>
         </TodayRise>
 
@@ -552,6 +703,65 @@ export default function ProfileScreen() {
         </View>
       </BottomSheet>
 
+      {/* The setup slider, in a sheet. The sheet is a Modal and not a
+          ScrollView, so the drag belongs to the slider the whole way across.
+          Nothing here names a date: the pace is a number the user owns, and the
+          one screen that draws a projection from it is the setup plan. */}
+      <BottomSheet visible={paceOpen} title="Weekly pace" onClose={() => setPaceOpen(false)}>
+        <View style={styles.sheet}>
+          <Text variant="display">{formatPaceRate(paceDraft, weightUnit)}</Text>
+          <Slider
+            value={paceDraft}
+            min={paceRange.min}
+            max={paceRange.max}
+            step={paceStep}
+            onChange={setPaceDraft}
+            accessibilityLabel="Weekly pace"
+            format={(value) => formatPace(value, weightUnit)}
+          />
+          <Text variant="small" color={colors.inkMuted}>
+            Speak to your clinician about the pace that suits you. Poke gives no medical
+            advice and recommends no rate of change.
+          </Text>
+          <Button disabled={savingPace} onPress={savePace}>{savingPace ? 'Saving' : 'Save pace'}</Button>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet visible={healthOpen} title="Apple Health" onClose={() => setHealthOpen(false)}>
+        <View style={styles.sheet}>
+          {/* Every sentence here is checkable in `services/health.ts`: the query
+              names one type, the permission asks to read and never to write, and
+              nothing on this path reaches the network. */}
+          <Text color={colors.inkMuted}>
+            Poke reads your weight from Apple Health and adds it to your log. Poke reads nothing else. Poke writes nothing back and sends nothing anywhere.
+          </Text>
+          {healthOn && healthReadAt !== null ? (
+            <Text variant="small" color={colors.inkMuted}>
+              {`Poke last read Apple Health on ${fmtDateTime(healthReadAt)}.`}
+            </Text>
+          ) : null}
+          {healthNote === null ? null : (
+            <Text variant="small" color={colors.inkMuted}>{healthNote}</Text>
+          )}
+          <Button disabled={healthBusy} onPress={() => { void readHealth(); }}>
+            {healthBusy ? 'Reading Apple Health' : healthOn ? 'Read Apple Health now' : 'Read my weight from Apple Health'}
+          </Button>
+          {healthOn ? (
+            <>
+              {/* Stopping is Poke's own switch and not the permission, and it
+                  keeps the weigh-ins Poke has already read. The row would be a
+                  lie if it did not say which of the two it does. */}
+              <Button variant="ghost" disabled={healthBusy} onPress={() => { void stopHealth(); }}>
+                Stop reading Apple Health
+              </Button>
+              <Text variant="caption" color={colors.inkSubtle}>
+                Stopping keeps the weigh-ins Poke already read. Take the permission back in the Health app under Sharing.
+              </Text>
+            </>
+          ) : null}
+        </View>
+      </BottomSheet>
+
       <BottomSheet visible={aboutOpen} title="About Poke" onClose={() => setAboutOpen(false)}>
         <View style={styles.aboutSheet}>
           <View style={styles.aboutHead}>
@@ -572,6 +782,14 @@ export default function ProfileScreen() {
             <Text color={colors.inkMuted}>
               Your log stays on this device. Poke has no account and no sign-in. Poke sends no health data anywhere.
             </Text>
+            {/* The one door into the app from outside it. The paragraph above
+                promises nothing leaves, and this says what may come in, so a
+                reader meets both halves in the same place. */}
+            {isHealthSupported() ? (
+              <Text variant="small" color={colors.inkMuted}>
+                Poke reads your weight from Apple Health only after you ask. Poke reads nothing else and writes nothing back.
+              </Text>
+            ) : null}
             <Text variant="small" color={colors.inkMuted}>
               Poke keeps no copy on a server, so export your history before you remove the app.
             </Text>
@@ -637,6 +855,38 @@ function formatWeight(value: number): string {
 function convertWeight(value: number, from: WeightUnit, to: WeightUnit): number {
   if (from === to) return value;
   return from === 'kg' ? kgToLb(value) : lbToKg(value);
+}
+
+/**
+ * Where the pace slider rests for a user who has none saved.
+ *
+ * The same resting position the setup slider opens on, in whichever unit the
+ * user reads. It is a position and not a proposal: the row above it says "Set a
+ * pace" rather than a number, and nothing reaches the database until the user
+ * presses the button.
+ */
+function restingPace(unit: WeightUnit): number {
+  return convertPace(PACE_DEFAULT_LB, 'lb', unit);
+}
+
+/**
+ * What the sheet says a read did.
+ *
+ * `empty` is the honest end of a refused permission as well as of an empty Health
+ * store, because iOS reports the two the same way, so the line names both the
+ * thing Poke saw and the place the user can check.
+ */
+function healthNoteFor(result: HealthImport, unit: WeightUnit): string {
+  if (result.kind === 'unsupported') return 'Apple Health is not available on this device.';
+  if (result.kind === 'failed') return `Poke could not read Apple Health. ${result.message}`;
+  if (result.kind === 'empty') {
+    return 'Poke found no weight in Apple Health. Check that Poke has access to weight in the Health app.';
+  }
+
+  const newest = `${formatWeight(convertWeight(result.latestKg, 'kg', unit))} ${unit}`;
+  if (result.added === 0) return `Poke is up to date. The newest weigh-in is ${newest}.`;
+  if (result.added === 1) return `Poke added 1 weigh-in. The newest is ${newest}.`;
+  return `Poke added ${result.added} weigh-ins. The newest is ${newest}.`;
 }
 
 const styles = StyleSheet.create({

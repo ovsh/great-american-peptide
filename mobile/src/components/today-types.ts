@@ -1,4 +1,5 @@
 import type { InjectionRow, MedicationRow } from '@/db/types';
+import type { CycleState } from '@/domain/cycle';
 
 /** Where a medication stands today. One state, read by the band, the row chip and the axis. */
 export type DoseState =
@@ -7,7 +8,7 @@ export type DoseState =
   | { kind: 'loggedToday'; injection: InjectionRow; nextScheduledAt: number | null }
   | { kind: 'unscheduled' };
 
-/** One mark under one day of the week axis, for the focused medication only. */
+/** The state of one date cell in the week axis, for the focused medication only. */
 export type DayMark = 'logged' | 'due' | 'scheduled' | 'rest';
 
 export interface WeekDay {
@@ -44,6 +45,8 @@ export interface TodayMedicationSummary {
   dose: DoseState;
   week: readonly WeekDay[];
   level: LevelSeries;
+  /** Where the medication stands in the cycle the user set, or `none`. */
+  cycle: CycleState;
   /** The x range of the hero chart: the level window behind now, the next dose ahead of it. */
   windowFromMs: number;
   windowToMs: number;

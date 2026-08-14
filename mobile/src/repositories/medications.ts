@@ -13,6 +13,25 @@ export interface NewMedication {
   frequencyValue?: number | null;
   halfLifeHours?: number | null;
   tmaxHours?: number | null;
+  /**
+   * The cycle, in days, and always a number the user typed. Poke has no default
+   * length for any peptide and offers none, so undefined and null both mean the
+   * user set no cycle rather than meaning "use the usual one".
+   */
+  cycleDaysOn?: number | null;
+  cycleDaysOff?: number | null;
+  /** The day week 1 counts from. Backdatable, because users arrive mid cycle. */
+  cycleStartedAt?: number | null;
+  /**
+   * The vial label of a blend, serialized by `serializeComposition` in
+   * `domain/blends.ts`. Undefined and null both mean no composition entered.
+   */
+  composition?: string | null;
+  /**
+   * The per-weekday dose map, serialized by `serializeDoseByDay` in
+   * `domain/doseByDay.ts`. Undefined and null both mean one dose every day.
+   */
+  doseByDay?: string | null;
   colorIndex: number;
 }
 
@@ -89,9 +108,9 @@ export async function createMedication(input: NewMedication): Promise<Medication
   const id = newId('med');
   await db.runAsync(
     `INSERT INTO medications
-      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, sort_order, created_at, updated_at)
+      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, sort_order, cycle_days_on, cycle_days_off, cycle_started_at, composition, dose_by_day, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active',
-        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM medications), ?, ?)`,
+        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM medications), ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
@@ -104,6 +123,13 @@ export async function createMedication(input: NewMedication): Promise<Medication
       input.halfLifeHours ?? null,
       input.tmaxHours ?? null,
       input.colorIndex,
+      input.cycleDaysOn ?? null,
+      input.cycleDaysOff ?? null,
+      // A cycle with no day picked starts today. No cycle leaves the column
+      // null, so `scheduling.ts` keeps anchoring on `created_at`.
+      input.cycleDaysOn == null ? null : (input.cycleStartedAt ?? now),
+      input.composition ?? null,
+      input.doseByDay ?? null,
       now,
       now,
     ],
@@ -122,6 +148,9 @@ export async function updateMedicationDefaults(
     `UPDATE medications SET
       name = ?, preset_id = ?, default_dose = ?, default_unit = ?, default_route = ?,
       frequency_kind = ?, frequency_value = ?, half_life_hours = ?, tmax_hours = ?,
+      cycle_days_on = ?, cycle_days_off = ?, cycle_started_at = ?,
+      composition = CASE WHEN ? = 1 THEN ? ELSE composition END,
+      dose_by_day = CASE WHEN ? = 1 THEN ? ELSE dose_by_day END,
       updated_at = ?
      WHERE id = ?`,
     [
@@ -134,15 +163,68 @@ export async function updateMedicationDefaults(
       input.frequencyValue ?? null,
       input.halfLifeHours ?? null,
       input.tmaxHours ?? null,
+      input.cycleDaysOn ?? null,
+      input.cycleDaysOff ?? null,
+      // Turning the cycle off clears the anchor, which hands the schedule back
+      // to `created_at`. The editor always sends the day it drew, so an edit
+      // that leaves the cycle alone rewrites the same number.
+      input.cycleDaysOn == null ? null : (input.cycleStartedAt ?? Date.now()),
+      // Undefined means the caller never drew the composition, so the row
+      // keeps what it holds. Null is the user clearing it, and that writes.
+      input.composition === undefined ? 0 : 1,
+      input.composition ?? null,
+      // The same keep-or-write split. The form always sends the map it drew,
+      // so undefined only comes from callers that never touch doses.
+      input.doseByDay === undefined ? 0 : 1,
+      input.doseByDay ?? null,
       Date.now(),
       id,
     ],
   );
 }
 
+/**
+ * Status, and the one date that goes with it.
+ *
+ * `paused_at` is written on every pause, whether or not the medication has a
+ * cycle: the break readout needs a date, and a column filled only for the
+ * medications that had a cycle at pause time would leave a user who adds the
+ * cycle afterwards with a break that started at no time at all. Archiving keeps
+ * whatever date is there, because an archived medication shows no cycle anyway.
+ */
 export async function setMedicationStatus(id: string, status: 'active' | 'paused' | 'archived'): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`UPDATE medications SET status = ?, updated_at = ? WHERE id = ?`, [status, Date.now(), id]);
+  const now = Date.now();
+  if (status === 'paused') {
+    await db.runAsync(
+      `UPDATE medications SET status = 'paused', paused_at = ?, updated_at = ? WHERE id = ?`,
+      [now, now, id],
+    );
+    return;
+  }
+  await db.runAsync(`UPDATE medications SET status = ?, updated_at = ? WHERE id = ?`, [status, now, id]);
+}
+
+/**
+ * Back on, and a new cycle from today.
+ *
+ * A resume is the start of the next cycle rather than the continuation of the
+ * last one, so week 1 counts from today and the shot days count from today too.
+ * The confirm sheet on `medications/index.tsx` says exactly that before this
+ * runs, because the old anchor cannot be recovered once it is overwritten.
+ */
+export async function resumeMedication(id: string): Promise<void> {
+  const db = await getDb();
+  const now = Date.now();
+  await db.runAsync(
+    `UPDATE medications SET
+       status = 'active',
+       cycle_started_at = CASE WHEN cycle_days_on IS NULL THEN cycle_started_at ELSE ? END,
+       paused_at = NULL,
+       updated_at = ?
+     WHERE id = ?`,
+    [now, now, id],
+  );
 }
 
 /**

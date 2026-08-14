@@ -40,6 +40,11 @@ const PREFERENCE_COLUMNS = [
   'notif_checkin_enabled',
   'notif_checkin_delay_hours',
   'notif_missed_enabled',
+  // Schema version 12.
+  'health_sync_enabled',
+  'health_synced_at',
+  // Schema version 13.
+  'notif_cycle_enabled',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {

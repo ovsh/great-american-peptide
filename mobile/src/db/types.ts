@@ -19,6 +19,34 @@ export interface MedicationRow {
    * last and fall back to `created_at`.
    */
   sort_order: number | null;
+  /**
+   * The cycle, which is a plan the user typed and nothing Poke worked out.
+   *
+   * `cycle_days_on` null means this medication has no cycle at all, and every
+   * cycle readout is then off. `cycle_days_off` null on a medication that does
+   * have a cycle means the user chose no break reminder. `cycle_started_at` is
+   * the day week 1 counts from, backdatable and rewritten on every resume, and
+   * `scheduling.ts` uses it as the schedule anchor in place of `created_at`.
+   *
+   * `paused_at` is written on every pause, cycle or not.
+   */
+  cycle_days_on: number | null;
+  cycle_days_off: number | null;
+  cycle_started_at: number | null;
+  paused_at: number | null;
+  /**
+   * The vial label of a blend, as JSON `{presetId, mg}` lines the user typed.
+   * Null means no composition entered and the blend draws no curve. Read it
+   * with `parseComposition` in `domain/blends.ts`, never with a bare
+   * `JSON.parse`.
+   */
+  composition: string | null;
+  /**
+   * The dose each scheduled weekday carries, as JSON keyed by the getDay
+   * weekday. Null means the one default dose covers every day. Read it with
+   * `parseDoseByDay` in `domain/doseByDay.ts`, never with a bare JSON.parse.
+   */
+  dose_by_day: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -112,6 +140,19 @@ export interface PreferencesRow {
   notif_checkin_enabled: 0 | 1;
   notif_checkin_delay_hours: number;
   notif_missed_enabled: 0 | 1;
+  /**
+   * The cycle loop: the last planned day, and the day a break ends. Two banners
+   * per cycle and no repeat, so this switch turns off a total of two.
+   */
+  notif_cycle_enabled: 0 | 1;
+  /**
+   * Apple Health weight sync. `health_sync_enabled` is Poke's own switch and
+   * not the iOS permission: HealthKit never tells an app whether a read was
+   * granted, so this column records what the user asked Poke to do and nothing
+   * about what iOS allows. `health_synced_at` is the last read that finished.
+   */
+  health_sync_enabled: 0 | 1;
+  health_synced_at: number | null;
   updated_at: number;
 }
 

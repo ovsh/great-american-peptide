@@ -1,37 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Info } from 'lucide-react-native';
 
+import { BlendCompositionFields } from '@/components/BlendCompositionFields';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { DoseWheel } from '@/components/DoseWheel';
 import { ChoicePill, OnboardingScreen } from '@/components/OnboardingScreen';
+import { RouteChoice } from '@/components/RouteChoice';
 import { ShotDayStrip } from '@/components/ShotDayStrip';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
-import { getPreset, type Route } from '@/domain/peptides';
+import { blendParts, getPreset, isBlend } from '@/domain/peptides';
 import {
-  CUSTOM_MEDICATION_ID,
+  isCustomMedicationId,
   firstPostScheduleHref,
   medicationDisplayName,
   onboardingTotalSteps,
+  scheduleIsComplete,
   scheduleStepIndex,
   type OnboardingFrequency,
   useOnboardingStore,
 } from '@/stores/onboarding';
+import { weekdayListLabel, type Weekday } from '@/domain/scheduling';
 import { twiceWeeklyWeekdays } from '@/utils/schedule';
 import { colors, spacing } from '@/theme';
 
+// Five, in plain words. Three of them left a user on an every-three-days
+// protocol, or on a fixed Monday, Wednesday and Friday, with nothing true to
+// press. "Every few days" is the phrase people use for the first; the row under
+// the chip asks for the number.
 const FREQUENCIES: readonly { id: OnboardingFrequency; label: string }[] = [
   { id: 'weekly', label: 'Weekly' },
   { id: 'twice_weekly', label: 'Twice weekly' },
   { id: 'daily', label: 'Daily' },
-];
-
-const ROUTES: readonly { id: Route; label: string }[] = [
-  { id: 'sc', label: 'Subcutaneous' },
-  { id: 'im', label: 'Intramuscular' },
+  { id: 'every_n_days', label: 'Every few days' },
+  { id: 'weekdays', label: 'Same days each week' },
 ];
 
 /** The row that opens the source, and the sheet's own title. */
@@ -48,13 +53,16 @@ export default function ScheduleScreen() {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
   const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const schedules = useOnboardingStore((state) => state.schedules);
-  const customMedicationName = useOnboardingStore((state) => state.customMedicationName);
+  const customNames = useOnboardingStore((state) => state.customNames);
   const prepareSchedules = useOnboardingStore((state) => state.prepareSchedules);
   const setScheduleDose = useOnboardingStore((state) => state.setScheduleDose);
   const setScheduleUnit = useOnboardingStore((state) => state.setScheduleUnit);
   const setScheduleRoute = useOnboardingStore((state) => state.setScheduleRoute);
   const setScheduleFrequency = useOnboardingStore((state) => state.setScheduleFrequency);
   const setShotDay = useOnboardingStore((state) => state.setShotDay);
+  const setScheduleInterval = useOnboardingStore((state) => state.setScheduleInterval);
+  const toggleScheduleWeekday = useOnboardingStore((state) => state.toggleScheduleWeekday);
+  const setScheduleCompositionMg = useOnboardingStore((state) => state.setScheduleCompositionMg);
   const transition = useOnboardingTransition();
   const [sourceOpen, setSourceOpen] = useState(false);
 
@@ -94,19 +102,24 @@ export default function ScheduleScreen() {
     );
   }
 
-  const name = medicationDisplayName(medicationId, customMedicationName);
-  const preset = medicationId === CUSTOM_MEDICATION_ID ? undefined : getPreset(medicationId);
-  const isCustom = medicationId === CUSTOM_MEDICATION_ID;
+  const name = medicationDisplayName(medicationId, customNames);
+  const isCustom = isCustomMedicationId(medicationId);
+  const preset = isCustom ? undefined : getPreset(medicationId);
+  const compositionParts = preset && isBlend(preset) ? blendParts(preset) : [];
   const isLast = index >= total - 1;
-  const dose = Number.parseFloat(schedule.doseText);
-  const canContinue = Number.isFinite(dose) && dose > 0;
+  // The dose and the schedule together. A frequency that carries a number is
+  // not finished until the user gives the number, so Continue waits for it
+  // rather than saving an interval or a week nobody chose.
+  const canContinue = scheduleIsComplete(schedule);
 
   // Where the level curve comes from, or why there will not be one. It is the
   // same sentence it has always been, behind the (i) instead of under the fold.
   const sourceLine = preset
-    ? (preset.evidence === 'unsourced'
-        ? `${preset.source} Poke shows your shots for ${name} without a level curve.`
-        : `Level curve source: ${preset.source}`)
+    ? (isBlend(preset)
+        ? `${preset.source} With the milligrams from your vial label Poke draws the level curve as the sum of the parts.`
+        : preset.evidence === 'unsourced'
+          ? `${preset.source} Poke shows your shots for ${name} without a level curve.`
+          : `Level curve source: ${preset.source}`)
     : 'Poke has no half-life for a custom medication. Poke shows your shots without a level curve. You can add a half-life later in Medications.';
 
   const goNext = () => {
@@ -152,19 +165,27 @@ export default function ScheduleScreen() {
         />
       </View>
 
+      {/* The vial label, for a blend only. Skippable as a whole: with no
+          milligrams entered Poke shows the shots without a curve, exactly as
+          any unsourced preset does. */}
+      {compositionParts.length > 0 ? (
+        <View style={styles.section}>
+          <Text variant="smallStrong">Milligrams in the vial (optional)</Text>
+          <BlendCompositionFields
+            parts={compositionParts}
+            values={schedule.compositionMg}
+            onChange={(partId, text) => setScheduleCompositionMg(medicationId, partId, text)}
+          />
+        </View>
+      ) : null}
+
       {isCustom ? (
         <View style={styles.section}>
           <Text variant="smallStrong">Injection route</Text>
-          <View style={styles.wrapRow}>
-            {ROUTES.map((route) => (
-              <ChoicePill
-                key={route.id}
-                label={route.label}
-                selected={schedule.route === route.id}
-                onPress={() => setScheduleRoute(medicationId, route.id)}
-              />
-            ))}
-          </View>
+          <RouteChoice
+            value={schedule.route}
+            onChange={(route) => setScheduleRoute(medicationId, route)}
+          />
         </View>
       ) : null}
 
@@ -182,7 +203,7 @@ export default function ScheduleScreen() {
         </View>
       </View>
 
-      {schedule.frequencyKind !== 'daily' ? (
+      {schedule.frequencyKind === 'weekly' || schedule.frequencyKind === 'twice_weekly' ? (
         <View style={styles.section}>
           <Text variant="smallStrong">
             {schedule.frequencyKind === 'twice_weekly' ? 'Shot days' : 'Next shot day'}
@@ -192,6 +213,43 @@ export default function ScheduleScreen() {
             onPick={(day) => setShotDay(medicationId, day)}
             accessibilityLabel={`Shot days for ${name}`}
           />
+        </View>
+      ) : null}
+
+      {/* The number sits inside the sentence it belongs to, and the line under
+          it reads the sentence back. An empty box says it is empty rather than
+          showing an interval nobody chose. */}
+      {schedule.frequencyKind === 'every_n_days' ? (
+        <View style={styles.section}>
+          <Text variant="smallStrong">How many days apart?</Text>
+          <View style={styles.inlineRow}>
+            <Text variant="small" color={colors.inkMuted}>Poke expects a shot every</Text>
+            <TextInput
+              value={schedule.intervalText}
+              onChangeText={(value) => setScheduleInterval(medicationId, value)}
+              keyboardType="number-pad"
+              placeholderTextColor={colors.inkSubtle}
+              style={styles.intervalInput}
+              accessibilityLabel={`Days between shots for ${name}`}
+            />
+            <Text variant="small" color={colors.inkMuted}>days</Text>
+          </View>
+          <Text variant="small" color={colors.inkMuted}>{intervalNote(schedule.intervalText)}</Text>
+        </View>
+      ) : null}
+
+      {/* The same strip, pressed as many times as the week needs. Nothing opens
+          filled, so the line below asks for a day until the user gives one. */}
+      {schedule.frequencyKind === 'weekdays' ? (
+        <View style={styles.section}>
+          <Text variant="smallStrong">Shot days</Text>
+          <ShotDayStrip
+            days={schedule.weekdays}
+            onPick={(day) => toggleScheduleWeekday(medicationId, day)}
+            selection="many"
+            accessibilityLabel={`Shot days for ${name}`}
+          />
+          <Text variant="small" color={colors.inkMuted}>{weekdayNote(schedule.weekdays)}</Text>
         </View>
       ) : null}
 
@@ -224,9 +282,40 @@ export default function ScheduleScreen() {
   );
 }
 
+/**
+ * The interval read back as a sentence, or the line that says the box is empty.
+ * Never a number the user did not type.
+ */
+function intervalNote(text: string): string {
+  const days = Number.parseInt(text, 10);
+  if (!Number.isFinite(days) || days < 1) return 'Enter how many days pass between shots.';
+  return days === 1 ? 'Shots land every day.' : `Shots land every ${days} days.`;
+}
+
+/** The picked days read back, or the line that says none is picked yet. */
+function weekdayNote(weekdays: readonly Weekday[]): string {
+  const named = weekdayListLabel(weekdays);
+  return named === '' ? 'Pick the days you take your shot.' : `Poke schedules ${named}.`;
+}
+
 const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  intervalInput: {
+    width: 60,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 16,
+    color: colors.ink,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+    textAlign: 'center',
   },
   wrapRow: {
     flexDirection: 'row',

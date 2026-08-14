@@ -37,6 +37,21 @@ export default function ConsistencyScreen() {
     );
   }
 
+  // A pace of zero answers the slider, so this screen cannot fall back to the
+  // "you skipped something" panel above. There is simply no division to draw:
+  // the scene below is distance over pace, and this user set the pace to zero.
+  if (projection.kind === 'maintain') {
+    return (
+      <Interstitial
+        step="consistency"
+        icon={<ShieldCheck size={34} color={colors.accent} />}
+        title="Poke puts no date on a zero pace"
+        body="You set your weekly pace to zero. Poke reaches a date by dividing your distance by your pace, and zero gives no date."
+        note="Poke keeps the goal you set and records every weight you log."
+      />
+    );
+  }
+
   // The line about the pace moving the date is gone. The scene is the sum with
   // the user's own three numbers in it, and the pace ticks in front of them, so
   // a sentence saying the sum is live repeats what the drawing shows.

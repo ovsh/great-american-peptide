@@ -13,6 +13,15 @@ export interface BodySite {
   side: Side;
   view: View;
   routes: Route[];
+  /**
+   * The routes Poke proposes this site for on its own. Absent means every route
+   * in `routes`, which is the case for all but the glutes.
+   *
+   * A site Poke offers is not always a site Poke puts forward. The rotation
+   * names one site as "Suggested", and that is Poke speaking, so it stays
+   * inside what the labels describe.
+   */
+  suggestRoutes?: Route[];
   label: string;
   // Normalized coordinates within the body diagram viewBox (0–1)
   x: number;
@@ -42,9 +51,19 @@ export const bodySites: BodySite[] = [
   { id: 'thigh_left_outer',  region: 'thigh', side: 'left',  view: 'front', routes: ['im'], label: 'Left outer thigh',  x: 0.24, y: 0.66 },
   { id: 'thigh_right_outer', region: 'thigh', side: 'right', view: 'front', routes: ['im'], label: 'Right outer thigh', x: 0.76, y: 0.66 },
 
-  // Glute — back, IM (dorsogluteal / ventrogluteal)
-  { id: 'glute_left_back',  region: 'glute', side: 'left',  view: 'back', routes: ['im'], label: 'Left glute',  x: 0.38, y: 0.58 },
-  { id: 'glute_right_back', region: 'glute', side: 'right', view: 'back', routes: ['im'], label: 'Right glute', x: 0.62, y: 0.58 },
+  // Glute — back, SC + IM (dorsogluteal / ventrogluteal).
+  //
+  // SC as well as IM: the buttock is a recognized subcutaneous site in standard
+  // injection teaching, insulin included. The GLP-1 labels are narrower and name
+  // only the abdomen, the thigh and the upper arm, so Ozempic, Wegovy and
+  // Mounjaro do not describe a shot here. Poke offers the site because users
+  // asked for it, and `suggestRoutes` keeps Poke from putting it forward on a
+  // subcutaneous shot the labels do not cover.
+  //
+  // Every preset ships `defaultRoute: 'sc'`, so an IM-only row was a dot the
+  // diagram filtered out and nobody could reach.
+  { id: 'glute_left_back',  region: 'glute', side: 'left',  view: 'back', routes: ['sc', 'im'], suggestRoutes: ['im'], label: 'Left glute',  x: 0.38, y: 0.58 },
+  { id: 'glute_right_back', region: 'glute', side: 'right', view: 'back', routes: ['sc', 'im'], suggestRoutes: ['im'], label: 'Right glute', x: 0.62, y: 0.58 },
 ];
 
 export function getBodySite(id: string): BodySite | undefined {

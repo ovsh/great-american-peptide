@@ -36,7 +36,11 @@ import {
 
 /**
  * The hero curve. No grid, no axis numbers, no legend: the shape is the reading
- * and the week axis under it carries the time.
+ * and the week axis under it carries the time. On Today the window is
+ * `weekWindow`, the same seven days that axis labels, so the x here and the
+ * columns there are one range and a spike sits over its own day. The chart
+ * insets by `PAD_X`, which is `spacing.xl`, the padding the axis row uses, so
+ * the two agree at the edges as well.
  *
  * The height is fixed rather than a ratio of the width, because the card sits
  * above a list whose height the user controls, and a chart that grows with an
@@ -50,7 +54,8 @@ import {
  * so a device that will not animate it still draws the right curve.
  */
 export const HERO_CHART_HEIGHT = 170;
-const PAD_X = 20;
+/** The same inset the week axis row uses, so a day column centres on its own x. */
+const PAD_X = spacing.xl;
 const BASELINE_INSET = 16;
 const CURVE_HEADROOM = 42;
 /** How much room the tallest point leaves above itself, so the peak is not clipped by the card. */

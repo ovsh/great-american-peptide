@@ -27,8 +27,12 @@ export function TodayTrackCard({
   const weightValue = weight
     ? formatWeight(convertWeight(weight.value, weight.unit, weightUnit), weightUnit)
     : 'Not logged';
+  // An all-clear has no severity: "All clear, 0 of 10" would read as a symptom
+  // at the bottom of the scale rather than an answered day.
   const sideEffectValue = sideEffect
-    ? `${sideEffectLabel(sideEffect.effect)}, ${sideEffect.severity} of 10`
+    ? sideEffect.effect.kind === 'clear'
+      ? 'All clear'
+      : `${sideEffectLabel(sideEffect.effect)}, ${sideEffect.severity} of 10`
     : 'None logged';
 
   return (

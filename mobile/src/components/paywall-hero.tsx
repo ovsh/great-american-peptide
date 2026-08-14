@@ -6,7 +6,13 @@ import { HalfLifeScene } from '@/components/onboarding/half-life-scene';
 import { Text } from '@/components/Text';
 import { medicationColor, unitLabel } from '@/components/today-hero-card';
 import { HERO_CHART_HEIGHT, TodayLevelChart } from '@/components/today-level-chart';
-import { buildLevelSeries, levelWindow } from '@/components/today-level-series';
+import {
+  blendCurvePartsFor,
+  buildLevelSeries,
+  convertedDoses,
+  levelWindow,
+} from '@/components/today-level-series';
+import { slowestBlendHalfLifeHours } from '@/domain/blends';
 import type { LevelSeries } from '@/components/today-types';
 import type { MedicationRow } from '@/db/types';
 import { listInjections } from '@/repositories/injections';
@@ -125,9 +131,13 @@ async function loadHero(): Promise<Hero> {
     // No next dose is passed, so the window ends on a short forecast tail
     // instead of on a scheduled date. The estimate is the same either way: the
     // curve only ever falls out of shots already logged.
+    // The paywall keeps the six half-life window: it has no day axis under the
+    // chart, so the whole decay is what it has to show. A blend sizes that
+    // window by its slowest part, the one whose tail the chart has to hold.
+    const blendParts = blendCurvePartsFor(medication);
     const { fromMs, toMs } = levelWindow({
-      injections,
-      halfLifeHours: medication.half_life_hours,
+      doses: convertedDoses(injections, medication),
+      halfLifeHours: blendParts ? slowestBlendHalfLifeHours(blendParts) : medication.half_life_hours,
       nextDoseAt: null,
       now: nowMs,
     });

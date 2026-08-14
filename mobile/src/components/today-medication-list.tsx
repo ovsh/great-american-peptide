@@ -20,7 +20,14 @@ import { Text } from '@/components/Text';
 import { medicationColor } from '@/components/today-hero-card';
 import { PressScale, usePressScale } from '@/components/today-motion';
 import type { DoseState, TodayMedicationSummary } from '@/components/today-types';
+// The row component below is also called MedicationRow, and it came first, so
+// the stored row takes the alias here rather than renaming a component every
+// caller in this file already reads.
+import type { MedicationRow as StoredMedication } from '@/db/types';
+import { cycleShortLabel } from '@/domain/cycle';
 import { FREE_MEDICATION_LIMIT } from '@/repositories/medications';
+import { cycleStateOf } from '@/utils/cycle';
+import { fmtDate } from '@/utils/date';
 import {
   colors,
   easing,
@@ -301,6 +308,9 @@ function MedicationRow({
   const reduced = useReducedMotion();
   const medication = summary.medication;
   const chip = rowChip(summary);
+  const cycleLabel = summary.cycle.kind === 'running' || summary.cycle.kind === 'pastPlan'
+    ? cycleShortLabel(summary.cycle.frame)
+    : null;
   const press = usePressScale();
 
   const pan = Gesture.Pan()
@@ -400,6 +410,11 @@ function MedicationRow({
         >
           <RowHandle color={medicationColor(medication.color_index)} lift={lift} />
           <Text numberOfLines={1} style={styles.name}>{medication.name}</Text>
+          {/* Beside the name rather than under it: the row height is fixed, and
+              the drop placeholder counts rows to work out where a drag lands. */}
+          {cycleLabel === null ? null : (
+            <Text variant="caption" color={colors.inkSubtle}>{cycleLabel}</Text>
+          )}
           <RowChip label={chip.label} due={chip.tone === 'due'} reduced={reduced} />
         </AnimatedPressable>
       </Animated.View>
@@ -509,11 +524,60 @@ function rowChip(summary: TodayMedicationSummary): {
   }
 }
 
+/**
+ * The medications that are on break, one quiet line each, under the list.
+ *
+ * Today hides a paused medication, which is right while it is off, and wrong on
+ * the day the break ends: the user would have to remember on their own. The
+ * strip is the trace, and it opens the Medications screen where Resume lives.
+ * It renders nothing when nothing is on break, so no empty box appears.
+ */
+export function TodayBreakStrip({ medications }: { medications: readonly StoredMedication[] }) {
+  const onBreak = medications
+    .map((medication) => ({ medication, cycle: cycleStateOf(medication) }))
+    .filter((entry) => entry.cycle.kind === 'onBreak');
+  if (onBreak.length === 0) return null;
+
+  return (
+    <View style={styles.breakStrip}>
+      {onBreak.map(({ medication, cycle }) => {
+        const endsAt = cycle.kind === 'onBreak' ? cycle.endsAt : null;
+        const label = endsAt === null
+          ? `${medication.name} on break`
+          : `${medication.name} on break, ends ${fmtDate(endsAt)}`;
+        return (
+          <Pressable
+            key={medication.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${label}. Opens your medications.`}
+            onPress={() => router.push('/medications')}
+            style={styles.breakRow}
+          >
+            <View style={[styles.dot, { backgroundColor: colors.inkSubtle }]} />
+            <Text variant="caption" color={colors.inkSubtle} numberOfLines={1}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
     ...elevation.card,
+  },
+  breakStrip: {
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  breakRow: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
   },
   rows: {
     borderTopLeftRadius: radius.xl,

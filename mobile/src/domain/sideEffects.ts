@@ -13,7 +13,18 @@ export type SideEffectPresetId = (typeof SIDE_EFFECT_PRESETS)[number]['id'];
 
 export type SideEffect =
   | { kind: 'preset'; id: SideEffectPresetId }
-  | { kind: 'custom'; label: string };
+  | { kind: 'custom'; label: string }
+  /**
+   * An all-clear: the user marked the day clear instead of logging a symptom.
+   * It lives in the same table because everything that reads the side-effect
+   * timeline — the check-in scheduler, the Effects chart, History, export —
+   * needs clears and symptoms in one ordered stream. The row's severity is 0
+   * only to fill the NOT NULL column; the kind says there is nothing to measure.
+   */
+  | { kind: 'clear' };
+
+export const ALL_CLEAR: SideEffect = { kind: 'clear' };
+const ALL_CLEAR_KEY = 'all_clear';
 
 const CUSTOM_PREFIX = 'custom:';
 const MAX_CUSTOM_LENGTH = 60;
@@ -24,6 +35,7 @@ export function makeCustomSideEffect(value: string): SideEffect | null {
 }
 
 export function sideEffectStorageKey(effect: SideEffect): string {
+  if (effect.kind === 'clear') return ALL_CLEAR_KEY;
   return effect.kind === 'preset'
     ? effect.id
     : `${CUSTOM_PREFIX}${encodeURIComponent(effect.label)}`;
@@ -32,6 +44,9 @@ export function sideEffectStorageKey(effect: SideEffect): string {
 export function parseStoredSideEffect(value: string): SideEffect {
   const preset = SIDE_EFFECT_PRESETS.find((option) => option.id === value);
   if (preset) return { kind: 'preset', id: preset.id };
+  // A build older than the all-clear control humanizes this key into a custom
+  // effect named "All clear", so the key degrades softly rather than breaking.
+  if (value === ALL_CLEAR_KEY) return { kind: 'clear' };
 
   if (value.startsWith(CUSTOM_PREFIX)) {
     const encoded = value.slice(CUSTOM_PREFIX.length);
@@ -48,6 +63,7 @@ export function parseStoredSideEffect(value: string): SideEffect {
 }
 
 export function sideEffectLabel(effect: SideEffect): string {
+  if (effect.kind === 'clear') return 'All clear';
   if (effect.kind === 'custom') return effect.label;
   return SIDE_EFFECT_PRESETS.find((option) => option.id === effect.id)?.label ?? 'Side effect';
 }

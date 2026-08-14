@@ -25,6 +25,8 @@ import {
   isWeekday,
   medicationScheduleFromStored,
   scheduledDosesBetween,
+  weekdayListLabel,
+  weekdaysFromMask,
   type MedicationSchedule,
 } from './scheduling';
 import { SCHEDULE_GRACE_DAYS } from './streaks';
@@ -200,6 +202,12 @@ export function cadenceLabel(medication: MedicationRow): string | null {
     }
     case 'twice_weekly':
       return 'twice a week';
+    case 'weekdays': {
+      // The days themselves, because the user picked them and a count of them
+      // would say less than the list does.
+      const named = weekdayListLabel(weekdaysFromMask(medication.frequency_value));
+      return named === '' ? null : `every ${named}`;
+    }
     case 'every_n_days': {
       const days = medication.frequency_value;
       if (days === null || !Number.isInteger(days) || days < 1) return null;

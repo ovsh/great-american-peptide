@@ -6,11 +6,15 @@ import { listMedications } from '../repositories/medications';
 import { getPreferences } from '../repositories/preferences';
 import { listSideEffects } from '../repositories/sideEffects';
 import type { PreferencesRow } from '../db/types';
+import { cycleDurationLabel, cycleFrame, cycleProgressLabel } from '../domain/cycle';
+import { doseOnDay } from '../domain/doseByDay';
 import {
   medicationScheduleFromStored,
   nextScheduledDoses,
+  parseReminderTime,
   scheduledDosesBetween,
 } from '../domain/scheduling';
+import { cycleStateOf } from '../utils/cycle';
 import { startOfDay } from '../utils/date';
 
 type ExpoNotifications = typeof import('expo-notifications');
@@ -83,13 +87,15 @@ export function checkinDelayHours(value: number | null | undefined): CheckinDela
 }
 
 /**
- * The three loops, in the order they win a day.
+ * The four loops, in the order they win a day.
  *
  * A shot-day reminder is the one the user asked for on the permission screen, so
- * it takes the day. The catch-up names a shot that is already late, which beats
- * a check-in the user can answer any time.
+ * it takes the day. A cycle banner ranks with it: it fires twice in a cycle of
+ * weeks and names a day the user wrote down, so dropping it would lose the whole
+ * loop rather than one of many. The catch-up names a shot that is already late,
+ * which beats a check-in the user can answer any time.
  */
-type ReminderKind = 'shot' | 'missed' | 'checkin';
+type ReminderKind = 'shot' | 'cycle' | 'missed' | 'checkin';
 
 interface PlannedReminder {
   kind: ReminderKind;
@@ -116,6 +122,7 @@ export async function refreshScheduledReminders(): Promise<void> {
   const now = Date.now();
   const planned = [
     ...(await planShotDayReminders(now, prefs)),
+    ...(await planCycleReminders(now, prefs)),
     ...(await planMissedShotReminders(now, prefs)),
     ...(await planCheckinReminders(now, prefs)),
   ];
@@ -150,12 +157,12 @@ export async function refreshScheduledReminders(): Promise<void> {
 function oneNewLoopPerDay(planned: readonly PlannedReminder[]): PlannedReminder[] {
   const takenDays = new Set<number>();
   for (const reminder of planned) {
-    if (reminder.kind === 'shot') takenDays.add(startOfDay(reminder.at));
+    if (holdsTheDay(reminder.kind)) takenDays.add(startOfDay(reminder.at));
   }
 
   const kept: PlannedReminder[] = [];
   for (const reminder of planned) {
-    if (reminder.kind === 'shot') {
+    if (holdsTheDay(reminder.kind)) {
       kept.push(reminder);
       continue;
     }
@@ -165,6 +172,60 @@ function oneNewLoopPerDay(planned: readonly PlannedReminder[]): PlannedReminder[
     kept.push(reminder);
   }
   return kept;
+}
+
+/** The two loops that keep their day rather than yielding it to an earlier one. */
+function holdsTheDay(kind: ReminderKind): boolean {
+  return kind === 'shot' || kind === 'cycle';
+}
+
+/**
+ * Two banners in a whole cycle: the last day of the plan, and the day the break
+ * ends. Both land at the shot-day reminder time.
+ *
+ * Neither one tells the user what to do. The first repeats the length they set
+ * and says the plan ends today, the second says the break they set ends today,
+ * and the decision on both days is theirs. Poke never proposes a next cycle,
+ * and there is no repeat and no nag: past the last planned day the app keeps
+ * counting on screen and sends nothing.
+ */
+async function planCycleReminders(now: number, prefs: PreferencesRow): Promise<PlannedReminder[]> {
+  if (!prefs.notif_cycle_enabled) return [];
+
+  const meds = await listMedications();
+  const time = parseReminderTime(prefs.reminder_time);
+  const planned: PlannedReminder[] = [];
+
+  for (const med of meds) {
+    const state = cycleStateOf(med, now);
+
+    if (state.kind === 'running') {
+      const at = atLocalTime(state.lastDayStart, time.hour, time.minute);
+      if (at <= now) continue;
+      // The frame of the last day and not of today, so the title reads
+      // "week 8 of 8" whenever this banner is the one that fires.
+      const frame = cycleFrame(state.totalDays, state.totalDays);
+      planned.push({
+        kind: 'cycle',
+        at,
+        title: `${med.name}: ${cycleProgressLabel(frame).toLocaleLowerCase()}`,
+        body: 'The plan you set ends today.',
+      });
+      continue;
+    }
+
+    if (state.kind === 'onBreak' && state.endsAt !== null && state.daysOff !== null) {
+      const at = atLocalTime(state.endsAt, time.hour, time.minute);
+      if (at <= now) continue;
+      planned.push({
+        kind: 'cycle',
+        at,
+        title: `${med.name}: break ends today`,
+        body: `You set ${cycleDurationLabel(state.daysOff)} off.`,
+      });
+    }
+  }
+  return planned;
 }
 
 /** The reminder time on each scheduled day, unless that day's shot is logged. */
@@ -179,6 +240,7 @@ async function planShotDayReminders(now: number, prefs: PreferencesRow): Promise
       frequencyKind: med.frequency_kind,
       frequencyValue: med.frequency_value,
       createdAt: med.created_at,
+      cycleStartedAt: med.cycle_started_at,
       reminderTime: prefs.reminder_time,
     });
     if (!schedule) continue;
@@ -200,8 +262,11 @@ async function planShotDayReminders(now: number, prefs: PreferencesRow): Promise
         // The reminder repeats the schedule the user set. It gives no
         // instruction, so the body names the user as the source of the number.
         // The route is not in it: no screen ever asked the user for one.
+        //
+        // The number is the one the plan carries on the day this banner fires,
+        // so a Monday reminder names the Monday dose.
         title: `Ready for your ${med.name} shot?`,
-        body: `You set ${med.default_dose} ${med.default_unit} for today. Log it to track your levels.`,
+        body: `You set ${doseOnDay(med.dose_by_day, med.default_dose, dose.scheduledDay)} ${med.default_unit} for today. Log it to track your levels.`,
       });
     }
   }
@@ -230,6 +295,7 @@ async function planMissedShotReminders(now: number, prefs: PreferencesRow): Prom
       frequencyKind: med.frequency_kind,
       frequencyValue: med.frequency_value,
       createdAt: med.created_at,
+      cycleStartedAt: med.cycle_started_at,
       reminderTime: prefs.reminder_time,
     });
     if (!schedule) continue;
@@ -257,13 +323,14 @@ async function planMissedShotReminders(now: number, prefs: PreferencesRow): Prom
  * The delay after each logged shot, landing inside 10:00 to 20:00.
  *
  * Two things silence it. An empty watch list means the user named nothing to
- * watch, and a check-in on nothing is a question with no answer. A side effect
+ * watch, and a check-in on nothing is a question with no answer. A record
  * already logged since the shot means the question is answered, so the banner
- * would arrive after the fact.
+ * would arrive after the fact — and an all-clear counts, because it lives in
+ * the same table as a symptom and is the same kind of answer.
  */
 async function planCheckinReminders(now: number, prefs: PreferencesRow): Promise<PlannedReminder[]> {
   if (!prefs.notif_checkin_enabled) return [];
-  if (!hasWatchList(prefs.side_effect_concerns)) return [];
+  if (!hasSideEffectWatchList(prefs.side_effect_concerns)) return [];
 
   const delayMs = checkinDelayHours(prefs.notif_checkin_delay_hours) * HOUR_MS;
   const shots = await listInjections({ fromMs: now - CHECKIN_LOOKBACK_MS });
@@ -281,9 +348,9 @@ async function planCheckinReminders(now: number, prefs: PreferencesRow): Promise
       kind: 'checkin',
       at,
       title: 'How do you feel today?',
-      // "Mark the day clear" waits for a designed all-clear record on the
-      // side-effect sheet. Until it exists, the copy must not offer it.
-      body: 'Yesterday was a shot day. Log how you feel while it is fresh.',
+      // Both offers are real: the side-effect sheet logs a symptom, and its
+      // all-clear band records a clear day. Either one answers this window.
+      body: 'Yesterday was a shot day. Log a symptom, or mark the day clear.',
     });
   }
   return planned;
@@ -295,8 +362,14 @@ async function loggedDaysFor(medicationId: string, fromMs: number): Promise<Set<
   return new Set(logged.map((injection) => startOfDay(injection.taken_at)));
 }
 
-/** `['none']`, `[]` and unreadable JSON all mean the user watches nothing. */
-function hasWatchList(stored: string | null): boolean {
+/**
+ * `['none']`, `[]` and unreadable JSON all mean the user watches nothing.
+ *
+ * Exported because the Profile check-in row has to explain itself with the
+ * same reading the scheduler uses: a toggle that reads on while this returns
+ * false is a loop that never fires, and the row must say why.
+ */
+export function hasSideEffectWatchList(stored: string | null): boolean {
   if (!stored) return false;
   try {
     const parsed: unknown = JSON.parse(stored);
@@ -330,8 +403,12 @@ function insideWakingHours(at: number): number {
 }
 
 function atLocalHour(at: number, hour: number): number {
+  return atLocalTime(at, hour, 0);
+}
+
+function atLocalTime(at: number, hour: number, minute: number): number {
   const date = new Date(at);
-  date.setHours(hour, 0, 0, 0);
+  date.setHours(hour, minute, 0, 0);
   return date.getTime();
 }
 

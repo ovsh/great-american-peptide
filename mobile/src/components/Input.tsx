@@ -1,17 +1,21 @@
 import { useState } from 'react';
+import type { Ref } from 'react';
 import { Platform, TextInput, View, StyleSheet } from 'react-native';
 import type { TextInputProps, TextStyle, ViewStyle } from 'react-native';
 import { colors, fonts } from '../theme';
 
 interface InputProps extends TextInputProps {
   size?: 'md' | 'lg';
+  /** Reaches the native field, for a caller that opens the keyboard itself. */
+  ref?: Ref<TextInput>;
 }
 
-export function Input({ size = 'md', style, onFocus, onBlur, ...rest }: InputProps) {
+export function Input({ size = 'md', style, onFocus, onBlur, ref, ...rest }: InputProps) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.field, focused && styles.fieldFocused]}>
       <TextInput
+        ref={ref}
         placeholderTextColor={colors.inkMuted}
         onFocus={(event) => {
           setFocused(true);

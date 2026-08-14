@@ -357,6 +357,23 @@ function Rail({ journey, layout }: { journey: Journey; layout: ChartLayout }) {
       ) : (
         journey.effects.map((effect) => {
           const x = xFor(layout, effect.day, span);
+          // A clear day is a hollow ring with no stem: the day was asked and
+          // answered, and there was nothing to hang above it. Next to the
+          // filled dots it reads as a deliberate empty, not a missing mark.
+          if (effect.kind === 'clear') {
+            return (
+              <Circle
+                key={`effect-${effect.takenAt}`}
+                cx={x}
+                cy={effY}
+                r={3.2}
+                fill={colors.surface}
+                stroke={colors.violet}
+                strokeOpacity={0.55}
+                strokeWidth={1.4}
+              />
+            );
+          }
           const r = 3.2 + effect.severity * 0.38;
           return (
             <G key={`effect-${effect.takenAt}`}>
@@ -735,7 +752,8 @@ function WeightOverlay({
           style={[styles.pill, styles.effectPill, { top: layout.effY - 34, right: layout.width - layout.plotR }]}
         >
           <Text variant="caption" color={colors.violet}>{lastEffect.label}</Text>
-          {pro ? (
+          {/* A clear day has no severity to show, so the pill is the label alone. */}
+          {lastEffect.kind === 'clear' ? null : pro ? (
             <Text variant="caption" color={colors.violet}>{lastEffect.severity}/10</Text>
           ) : (
             <View style={styles.severityTrack}>
@@ -986,6 +1004,23 @@ function EffectsBand({ journey, layout }: { journey: Journey; layout: ChartLayou
       ))}
       {journey.effects.map((effect) => {
         const x = xFor(layout, effect.day, journey.spanDays);
+        // A clear day sits on the axis itself: the baseline is zero severity,
+        // and the hollow ring says the zero was answered, not assumed. That is
+        // the honest floor the severity dots are measured against.
+        if (effect.kind === 'clear') {
+          return (
+            <Circle
+              key={effect.takenAt}
+              cx={x}
+              cy={base}
+              r={5}
+              fill={colors.surface}
+              stroke={colors.violet}
+              strokeOpacity={0.7}
+              strokeWidth={2}
+            />
+          );
+        }
         const y = base - effect.severity * unit;
         return (
           <G key={effect.takenAt}>
@@ -1034,6 +1069,10 @@ function placeEffectLabels(journey: Journey, layout: ChartLayout): PlacedLabel[]
   const placed: PlacedLabel[] = [];
 
   for (const effect of journey.effects) {
+    // Clear days are not labelled one by one: the mark on the axis baseline is
+    // the reading, and a quiet week would otherwise stack a column of
+    // identical pills. The legend names the ring once.
+    if (effect.kind === 'clear') continue;
     const label = `${effect.label} ${effect.severity}/10`;
     const width = textWidth(label, LABEL_SIZE) + 22;
     const x = xFor(layout, effect.day, journey.spanDays);

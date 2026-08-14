@@ -21,7 +21,48 @@
 
 export type Unit = 'mg' | 'mcg' | 'iu';
 export type Route = 'sc' | 'im';
-export type FrequencyKind = 'daily' | 'every_n_days' | 'weekly' | 'twice_weekly' | 'custom';
+
+/**
+ * How a route is written on screen, in plain words and in the clinical word.
+ *
+ * "SC" and "IM" are what the database and the CSV export hold, and they stay
+ * that way. They are not what a user reads: the abbreviation is the thing
+ * people said they could not follow, and a choice nobody understands is not a
+ * choice. So the plain line leads and the clinical word stays under it, because
+ * a user has to be able to tell a clinician what they did, and a record that
+ * drops the clinical word is a weaker record.
+ *
+ * Every screen that shows a route reads these two strings, so the wording
+ * cannot drift from one screen to the next.
+ */
+export const ROUTE_LABELS: Record<Route, { plain: string; clinical: string }> = {
+  sc: { plain: 'Under the skin', clinical: 'Subcutaneous' },
+  im: { plain: 'Into the muscle', clinical: 'Intramuscular' },
+};
+
+/**
+ * The plain wording as it reads inside a line, as in "0.25 mg under the skin".
+ *
+ * A list row carries the route after the dose, so the label cannot start with a
+ * capital there. It comes off the same two strings as the choice cards, so a
+ * screen that shows the route in a line cannot drift from a screen that shows
+ * it on a card.
+ */
+export function routeInLine(route: Route): string {
+  return ROUTE_LABELS[route].plain.toLowerCase();
+}
+
+/**
+ * `weekdays` carries its day set as a bitmask in `frequency_value`. See
+ * `weekdayMask` in `domain/scheduling` for the bit order.
+ */
+export type FrequencyKind =
+  | 'daily'
+  | 'every_n_days'
+  | 'weekly'
+  | 'twice_weekly'
+  | 'weekdays'
+  | 'custom';
 
 export type EvidenceTier = 'label' | 'trial' | 'estimate' | 'unsourced';
 
@@ -36,7 +77,7 @@ interface PeptidePresetBase {
   // names the medication it creates, because a user on Wegovy thinks
   // "Wegovy" and not "semaglutide". The picker searches these too.
   brandNames?: readonly string[];
-  category: 'glp1' | 'recovery' | 'longevity' | 'growth' | 'other';
+  category: 'glp1' | 'recovery' | 'longevity' | 'growth' | 'hormones' | 'blend' | 'other';
   // No default dose. A per-peptide number in the bundle is a proposal waiting
   // for a caller to read it, and `store.config.json` `review.notes` tells App
   // Review that Poke never proposes one. The unit below is not a dose.
@@ -62,7 +103,40 @@ export type UnsourcedPeptidePreset = PeptidePresetBase & {
   tmaxHours: null;
 };
 
-export type PeptidePreset = SourcedPeptidePreset | UnsourcedPeptidePreset;
+/**
+ * A vial that holds more than one molecule.
+ *
+ * A blend is an unsourced preset that also names its parts. Unsourced, because
+ * the parts clear at different rates and no single half-life describes the
+ * vial, so the blend itself carries no number and draws no curve of its own.
+ * The parts are preset ids, each naming a non-blend preset that does carry a
+ * sourced rate. When the user enters the vial composition, the curve is the
+ * sum of the parts, each falling at its own rate.
+ */
+export type BlendPeptidePreset = UnsourcedPeptidePreset & {
+  parts: readonly string[];
+};
+
+export type PeptidePreset = SourcedPeptidePreset | UnsourcedPeptidePreset | BlendPeptidePreset;
+
+/** True when the preset is a blend of other presets in this catalog. */
+export function isBlend(preset: PeptidePreset): preset is BlendPeptidePreset {
+  return 'parts' in preset;
+}
+
+/**
+ * The parts of a blend, resolved to their presets, in label order.
+ *
+ * A part id that no longer names a preset is dropped rather than thrown on,
+ * because the catalog is data and a picker must not crash on a typo here.
+ * `blends.test.ts` checks every part id resolves, so the drop cannot hide one.
+ */
+export function blendParts(preset: BlendPeptidePreset): PeptidePreset[] {
+  return preset.parts.flatMap((id) => {
+    const part = getPreset(id);
+    return part ? [part] : [];
+  });
+}
 
 export const peptidePresets: PeptidePreset[] = [
   // ---------------------------------------------------------------- GLP-1 --
@@ -406,6 +480,21 @@ export const peptidePresets: PeptidePreset[] = [
       'No study of any kind measures this. Estimated from tripeptides of the ' +
       'same size, which the blood breaks down in minutes.',
   },
+  {
+    id: 'kpv',
+    name: 'KPV',
+    aliases: ['lysine-proline-valine'],
+    category: 'recovery',
+    unit: 'mcg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'estimate',
+    halfLifeHours: 0.5,
+    tmaxHours: 0.25,
+    source:
+      'No study of any kind measures this. Estimated from tripeptides of the ' +
+      'same size, which the blood breaks down in minutes.',
+  },
 
   // ---------------------------------------------------------- Longevity ----
   {
@@ -437,6 +526,184 @@ export const peptidePresets: PeptidePreset[] = [
       'No study of any kind measures this. Estimated from tetrapeptides of ' +
       'the same size, which the blood breaks down in minutes.',
   },
+  {
+    id: 'elamipretide',
+    name: 'Elamipretide (SS-31)',
+    aliases: ['SS-31', 'SS31', 'MTP-131', 'Bendavia'],
+    brandNames: ['Forzinity'],
+    category: 'longevity',
+    unit: 'mg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'trial',
+    halfLifeHours: 3,
+    // The Forzinity label gives the peak and not the half-life. The FDA
+    // integrated review for the same approval gives the half-life: 3.16 h
+    // after one 40 mg dose in healthy adults, 2.8 h at steady state.
+    tmaxHours: 0.75,
+    source:
+      'FDA integrated review for Forzinity. Half-life about 3 hours in ' +
+      'healthy adults. Peak from the FDA label, 30 to 60 minutes after ' +
+      'injection under the skin.',
+  },
+  {
+    id: 'mots-c',
+    name: 'MOTS-c',
+    category: 'longevity',
+    unit: 'mg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'twice_weekly' },
+    evidence: 'estimate',
+    halfLifeHours: 1.5,
+    tmaxHours: null,
+    // Vendor pages print a half-life of days. Nothing supports that: the
+    // exercise studies show the level back at baseline within 4 hours.
+    source:
+      'No human half-life is published. Rodent data and the return to ' +
+      'baseline after exercise point to 1 to 2 hours.',
+  },
+
+  // ---------------------------------------------------------- Hormones ----
+  {
+    id: 'testosterone-cypionate',
+    name: 'Testosterone cypionate',
+    aliases: ['test c', 'test cyp', 'TRT'],
+    brandNames: ['Depo-Testosterone'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    defaultFrequency: { kind: 'weekly' },
+    evidence: 'label',
+    halfLifeHours: 192,
+    tmaxHours: null,
+    source:
+      'FDA label for Depo-Testosterone. Half-life about 8 days after ' +
+      'injection into the muscle.',
+  },
+  {
+    id: 'testosterone-enanthate',
+    name: 'Testosterone enanthate',
+    aliases: ['test e', 'TRT'],
+    brandNames: ['Xyosted', 'Delatestryl'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    defaultFrequency: { kind: 'weekly' },
+    // The Xyosted label gives the peak and not the half-life, so the two
+    // numbers here have two sources and the string names both.
+    evidence: 'trial',
+    halfLifeHours: 108,
+    tmaxHours: 11.9,
+    source:
+      'Human PK study, Fertility and Sterility 1980. Half-life about 4.5 ' +
+      'days. Peak from the FDA label for Xyosted, about 12 hours.',
+  },
+  {
+    id: 'testosterone-propionate',
+    name: 'Testosterone propionate',
+    aliases: ['test p', 'prop', 'TRT'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    defaultFrequency: { kind: 'every_n_days', value: 2 },
+    evidence: 'estimate',
+    halfLifeHours: 19,
+    tmaxHours: null,
+    source:
+      'No current FDA label. Reference works give about 0.8 days, and ' +
+      'published values disagree.',
+  },
+  {
+    id: 'testosterone-undecanoate',
+    name: 'Testosterone undecanoate',
+    aliases: ['test u', 'TRT'],
+    brandNames: ['Aveed', 'Nebido'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    // Dosed about every 10 weeks. `FrequencyKind` has no such member, so the
+    // user sets the schedule.
+    defaultFrequency: { kind: 'custom' },
+    evidence: 'trial',
+    halfLifeHours: 814,
+    tmaxHours: 168,
+    source:
+      'Human PK study, Eur J Endocrinol 1999, castor oil formulation. ' +
+      'Half-life about 34 days. Peak from the FDA label for Aveed, about 7 days.',
+  },
+  {
+    id: 'estradiol-valerate',
+    name: 'Estradiol valerate',
+    aliases: ['EV', 'E2V'],
+    brandNames: ['Delestrogen'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    defaultFrequency: { kind: 'every_n_days', value: 5 },
+    evidence: 'trial',
+    halfLifeHours: 84,
+    tmaxHours: 48,
+    source:
+      'Human PK study, Contraception 1980. Half-life about 3.5 days. ' +
+      'Peak about 2 days.',
+  },
+  {
+    id: 'estradiol-cypionate',
+    name: 'Estradiol cypionate',
+    aliases: ['EC'],
+    brandNames: ['Depo-Estradiol'],
+    category: 'hormones',
+    unit: 'mg',
+    defaultRoute: 'im',
+    defaultFrequency: { kind: 'weekly' },
+    evidence: 'trial',
+    halfLifeHours: 216,
+    tmaxHours: 96,
+    source:
+      'Human PK study, Contraception 1980. Half-life about 9 days. ' +
+      'Peak about 4 days.',
+  },
+  {
+    id: 'hcg',
+    name: 'HCG',
+    aliases: ['human chorionic gonadotropin'],
+    brandNames: ['Novarel', 'Ovidrel', 'Pregnyl'],
+    category: 'hormones',
+    unit: 'iu',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'twice_weekly' },
+    evidence: 'label',
+    halfLifeHours: 29,
+    tmaxHours: 24,
+    source: 'FDA label for Ovidrel. Half-life about 29 hours after injection under the skin.',
+  },
+  {
+    id: 'gonadorelin',
+    name: 'Gonadorelin',
+    aliases: ['GnRH', 'LHRH'],
+    brandNames: ['Factrel', 'Lutrepulse'],
+    category: 'hormones',
+    unit: 'mcg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'every_n_days', value: 2 },
+    evidence: 'trial',
+    halfLifeHours: 0.08,
+    tmaxHours: null,
+    source: 'Human PK review, Endocrine Reviews 1986. Half-life 2 to 8 minutes.',
+  },
+  {
+    id: 'kisspeptin-10',
+    name: 'Kisspeptin-10',
+    aliases: ['KP-10', 'kisspeptin', 'metastin 45-54'],
+    category: 'hormones',
+    unit: 'mcg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'custom' },
+    evidence: 'trial',
+    halfLifeHours: 0.07,
+    tmaxHours: null,
+    source: 'Human PK study, Imperial College group. IV dosing. Half-life about 4 minutes.',
+  },
 
   // -------------------------------------------------------------- Other ----
   {
@@ -452,20 +719,6 @@ export const peptidePresets: PeptidePreset[] = [
     halfLifeHours: 2.7,
     tmaxHours: 1,
     source: 'FDA label for Vyleesi. Half-life about 2.7 hours.',
-  },
-  {
-    id: 'hcg',
-    name: 'HCG',
-    aliases: ['human chorionic gonadotropin'],
-    brandNames: ['Novarel', 'Ovidrel', 'Pregnyl'],
-    category: 'other',
-    unit: 'iu',
-    defaultRoute: 'sc',
-    defaultFrequency: { kind: 'twice_weekly' },
-    evidence: 'label',
-    halfLifeHours: 29,
-    tmaxHours: 24,
-    source: 'FDA label for Ovidrel. Half-life about 29 hours after injection under the skin.',
   },
   {
     id: 'teriparatide',
@@ -507,32 +760,91 @@ export const peptidePresets: PeptidePreset[] = [
     tmaxHours: null,
     source: 'No half-life is published for this peptide. Melanotan I shows about 1 hour.',
   },
+
+  // ------------------------------------------------------------- Blends ----
+  // A blend names its parts twice: in `parts` as preset ids, which the curve
+  // reads, and in `aliases` as names, so a search for one part finds the
+  // blends that hold it. The part's own row always outranks the blend in the
+  // results, because a row's own name scores above an inherited name.
   {
-    id: 'gonadorelin',
-    name: 'Gonadorelin',
-    aliases: ['GnRH', 'LHRH'],
-    brandNames: ['Factrel', 'Lutrepulse'],
-    category: 'other',
-    unit: 'mcg',
+    id: 'glow',
+    name: 'GLOW',
+    aliases: ['GHK-Cu', 'BPC-157', 'TB-500'],
+    category: 'blend',
+    unit: 'mg',
     defaultRoute: 'sc',
-    defaultFrequency: { kind: 'every_n_days', value: 2 },
-    evidence: 'trial',
-    halfLifeHours: 0.08,
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'unsourced',
+    halfLifeHours: null,
     tmaxHours: null,
-    source: 'Human PK review, Endocrine Reviews 1986. Half-life 2 to 8 minutes.',
+    parts: ['ghk-cu', 'bpc-157', 'tb-500'],
+    source:
+      'A blend of GHK-Cu, BPC-157 and TB-500. Each part clears at its own ' +
+      'rate, so the blend has no single half-life.',
   },
   {
-    id: 'kisspeptin-10',
-    name: 'Kisspeptin-10',
-    aliases: ['KP-10', 'kisspeptin', 'metastin 45-54'],
-    category: 'other',
-    unit: 'mcg',
+    id: 'klow',
+    name: 'KLOW',
+    aliases: ['GHK-Cu', 'KPV', 'BPC-157', 'TB-500'],
+    category: 'blend',
+    unit: 'mg',
     defaultRoute: 'sc',
-    defaultFrequency: { kind: 'custom' },
-    evidence: 'trial',
-    halfLifeHours: 0.07,
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'unsourced',
+    halfLifeHours: null,
     tmaxHours: null,
-    source: 'Human PK study, Imperial College group. IV dosing. Half-life about 4 minutes.',
+    parts: ['ghk-cu', 'kpv', 'bpc-157', 'tb-500'],
+    source:
+      'A blend of GHK-Cu, KPV, BPC-157 and TB-500. Each part clears at its ' +
+      'own rate, so the blend has no single half-life.',
+  },
+  {
+    id: 'wolverine',
+    name: 'Wolverine',
+    aliases: ['BPC-157', 'TB-500', 'wolverine stack'],
+    category: 'blend',
+    unit: 'mg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'unsourced',
+    halfLifeHours: null,
+    tmaxHours: null,
+    parts: ['bpc-157', 'tb-500'],
+    source:
+      'A blend of BPC-157 and TB-500. Each part clears at its own rate, so ' +
+      'the blend has no single half-life.',
+  },
+  {
+    id: 'cjc-ipamorelin',
+    name: 'CJC-1295 + Ipamorelin',
+    aliases: ['CJC-1295', 'Ipamorelin', 'cjc ipa'],
+    category: 'blend',
+    unit: 'mg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'daily' },
+    evidence: 'unsourced',
+    halfLifeHours: null,
+    tmaxHours: null,
+    parts: ['cjc-1295', 'ipamorelin'],
+    source:
+      'A blend of CJC-1295 with DAC and Ipamorelin. The parts clear at rates ' +
+      'about 80 times apart, so the blend has no single half-life.',
+  },
+  {
+    id: 'cagrisema',
+    name: 'CagriSema',
+    aliases: ['cagrilintide', 'semaglutide', 'cagri sema'],
+    category: 'blend',
+    unit: 'mg',
+    defaultRoute: 'sc',
+    defaultFrequency: { kind: 'weekly' },
+    evidence: 'unsourced',
+    halfLifeHours: null,
+    tmaxHours: null,
+    parts: ['cagrilintide', 'semaglutide'],
+    source:
+      'A blend of cagrilintide and semaglutide, in trials at Novo Nordisk. ' +
+      'The blend itself has no single measured half-life.',
   },
 ];
 
@@ -601,6 +913,32 @@ export function getPreset(id: string): PeptidePreset | undefined {
 export function hasUsableHalfLife(preset: PeptidePreset): preset is SourcedPeptidePreset {
   return preset.evidence !== 'unsourced';
 }
+
+/**
+ * What a category is called on screen.
+ *
+ * The data names are identifiers and two of them read wrong on a pill:
+ * `glp1` has no hyphen and `recovery` is not the word the audience uses.
+ * Every screen that shows a category reads this map, so the wording cannot
+ * drift between the filter pills and the row badges.
+ */
+export const CATEGORY_LABELS: Record<PeptidePreset['category'], string> = {
+  glp1: 'GLP-1',
+  blend: 'Blends',
+  recovery: 'Healing',
+  growth: 'Growth',
+  longevity: 'Longevity',
+  hormones: 'Hormones',
+  other: 'Other',
+};
+
+/**
+ * The filter pill order: All first, then by audience size, with Blends third
+ * so the new category shows before the rail scrolls off a 375 pt screen.
+ */
+export const CATEGORY_ORDER: PeptidePreset['category'][] = [
+  'glp1', 'blend', 'recovery', 'growth', 'hormones', 'longevity', 'other',
+];
 
 export const EVIDENCE_LABELS: Record<EvidenceTier, string> = {
   label: 'Half-life from the drug label',

@@ -28,7 +28,10 @@ import { isProNow, paywallEnabledNow } from '@/stores/entitlement';
 import {
   CONCERN_OPTIONS,
   GOAL_OPTIONS,
+  formatPace,
+  formatPaceRate,
   getOnboardingDraft,
+  MAINTAIN_PACE_LABEL,
   paceBounds,
   useOnboardingStore,
 } from '@/stores/onboarding';
@@ -288,12 +291,18 @@ interface ProjectionCardProps {
  * remove the sentence, and do not let the slider go decorative.
  */
 function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProps) {
-  const { current, goal, unit, direction } = anchor;
-  const verb = direction === 'down' ? 'lose' : 'gain';
+  const { current, goal, unit } = anchor;
+  // The verb reads off the two weights and not off `anchor.direction`. The
+  // anchor is the sum as it stood at mount, a mount at a maintain pace carries
+  // no direction at all, and the weights themselves never move on this screen.
+  const verb = goal < current ? 'lose' : 'gain';
   const distance = Math.abs(current - goal);
   const bounds = paceBounds(unit);
   const step = unit === 'lb' ? 0.1 : 0.05;
-  const formatPace = (value: number) => `${value.toFixed(unit === 'lb' ? 1 : 2)} ${unit}`;
+  const paceLabel = (value: number) => formatPace(value, unit);
+  // The user set no rate of change. There is no date, so nothing on this card
+  // may name one, and the sentences below swap rather than fill a blank.
+  const maintaining = live !== null && live.kind === 'maintain';
 
   const reduced = useReducedMotion();
   const date = useSharedValue(0);
@@ -333,20 +342,34 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
   return (
     <Card padding="xl" style={styles.card}>
       <Animated.View style={[styles.headline, dateStyle]}>
-        <Text variant="smallStrong" color={colors.inkMuted}>Your goal, at the pace you chose</Text>
-        {live ? (
-          <Text variant="display">{longDate(live.reachesAt)}</Text>
-        ) : (
+        <Text variant="smallStrong" color={colors.inkMuted}>
+          {maintaining ? 'Your plan, at the pace you set' : 'Your goal, at the pace you chose'}
+        </Text>
+        {live === null ? (
           // Reachable from the slider alone: the low end of the range against a
           // long distance runs past `MAX_PROJECTION_WEEKS`. The card stays put so
           // the drag stays alive, and it says what happened rather than a date.
           <>
             <Text variant="display">Over five years</Text>
             <Text color={colors.inkMuted}>
-              {formatWeight(distance)} {unit} to {verb} at {formatPace(pace)} a week runs
+              {formatWeight(distance)} {unit} to {verb} at {paceLabel(pace)} a week runs
               past five years. Poke puts no date on that.
             </Text>
           </>
+        ) : live.kind === 'maintain' ? (
+          // The maintain branch states what the user set and nothing else. It
+          // names no verb, because the user chose neither direction, and it
+          // carries no line about stopping or holding a loss, because that
+          // would be Poke advising a rate of change.
+          <>
+            <Text variant="display">{MAINTAIN_PACE_LABEL}</Text>
+            <Text color={colors.inkMuted}>
+              You set your weekly pace to zero. Poke projects no date and records every
+              weight you log.
+            </Text>
+          </>
+        ) : (
+          <Text variant="display">{longDate(live.reachesAt)}</Text>
         )}
       </Animated.View>
 
@@ -371,7 +394,7 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
 
       <View style={styles.paceHead}>
         <Text variant="smallStrong" color={colors.inkMuted}>Weekly pace</Text>
-        <Text variant="smallStrong">{formatPace(pace)} a week</Text>
+        <Text variant="smallStrong">{formatPaceRate(pace, unit)}</Text>
       </View>
       <Slider
         value={pace}
@@ -380,15 +403,20 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
         step={step}
         onChange={onPaceChange}
         accessibilityLabel="Weekly pace"
-        format={formatPace}
+        format={paceLabel}
       />
 
       {/* The card has to name its own arithmetic. `store.config.json` review
           notes promise App Review that this screen says where the date comes
           from, and the slider above is what makes the claim checkable: move the
-          pace and the date moves with it. Two sentences, and no more. */}
+          pace and the date moves with it. Two sentences, and no more.
+          The first of the two is the claim App Review reads, so it stands in
+          both variants word for word. Only the second moves: at a pace of zero
+          there is no date to call a forecast. */}
       <Text variant="small" color={colors.inkMuted}>
-        The date is your distance divided by your pace. It is not a forecast.
+        {maintaining
+          ? 'The date is your distance divided by your pace. A pace of zero gives no date.'
+          : 'The date is your distance divided by your pace. It is not a forecast.'}
       </Text>
     </Card>
   );

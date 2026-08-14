@@ -8,10 +8,10 @@
 // here without an edit.
 
 import {
-  WEEKDAY_OPTIONS,
   isWeekday,
   medicationScheduleFromStored,
   scheduledDosesBetween,
+  weekdayListLabel,
   type Weekday,
 } from '../domain/scheduling';
 
@@ -40,15 +40,8 @@ export function twiceWeeklyWeekdays(firstWeekday: Weekday): Weekday[] {
  * the user saves. Null when Poke has nothing to name.
  */
 export function twiceWeeklyScheduleNote(firstWeekday: Weekday): string | null {
-  const days: string[] = [];
-  for (const weekday of twiceWeeklyWeekdays(firstWeekday)) {
-    const label = WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.label;
-    if (label !== undefined) days.push(label);
-  }
-  const last = days[days.length - 1];
-  if (last === undefined) return null;
-  const named = days.length === 1 ? last : `${days.slice(0, -1).join(', ')} and ${last}`;
-  return `Poke schedules ${named}.`;
+  const named = weekdayListLabel(twiceWeeklyWeekdays(firstWeekday));
+  return named === '' ? null : `Poke schedules ${named}.`;
 }
 
 function addLocalDays(timestamp: number, amount: number): number {

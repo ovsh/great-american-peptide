@@ -17,14 +17,16 @@ import { isSameDay } from 'date-fns';
 import { bodySites } from '../domain/bodySites';
 import { getPreset, hasUsableHalfLife, type Route, type Unit } from '../domain/peptides';
 import { levelTrajectory, type DoseEvent } from '../domain/pk';
-import { medicationScheduleFromStored, nextScheduledDoses } from '../domain/scheduling';
+import { medicationScheduleFromStored, nextScheduledDoses, weekdayListLabel } from '../domain/scheduling';
 import { recommendNextSite } from '../domain/rotation';
 import { bmi, bmiCategory } from '../domain/units';
 import { startOfDay } from '../utils/date';
 import {
-  CUSTOM_MEDICATION_ID,
+  isCustomMedicationId,
+  isMaintainPace,
   SHOT_DAY_OPTIONS,
   medicationDisplayName,
+  scheduleFrequencyValue,
   type MedicationScheduleDraft,
   type OnboardingDraft,
   type WeightDraft,
@@ -70,17 +72,36 @@ export interface PlanMedication {
   evidenceNote: string;
 }
 
-export interface PlanProjection {
+interface PlanProjectionWeights {
   current: number;
   goal: number;
   unit: 'lb' | 'kg';
-  /** Weight change per week, as the user set it. Always positive. */
+}
+
+/** The division ran, and it landed on a date. */
+export interface PlanDateProjection extends PlanProjectionWeights {
+  kind: 'date';
+  /** Weight change per week, as the user set it. Always above zero. */
   pace: number;
   weeks: number;
   /** The date the division lands on. Arithmetic, not a forecast. */
   reachesAt: number;
   direction: 'down' | 'up';
 }
+
+/**
+ * The user set the pace to zero, so there is no division and no date.
+ *
+ * This is a plan and not a missing answer, so it carries the weights the card
+ * draws. It carries no direction: a maintain pace moves toward neither weight,
+ * and a verb forced into that sentence would say something the user did not.
+ */
+export interface PlanMaintainProjection extends PlanProjectionWeights {
+  kind: 'maintain';
+  pace: 0;
+}
+
+export type PlanProjection = PlanDateProjection | PlanMaintainProjection;
 
 export interface PlanBody {
   value: number;
@@ -132,9 +153,15 @@ const MAX_PROJECTION_WEEKS = 260;
 /**
  * Distance over pace. That is the whole calculation.
  *
- * It needs both weights and a pace above zero, and it refuses to run when the
- * pace points away from the goal, because a slider set to lose weight against a
- * goal above the current weight is a contradiction and not a longer timeline.
+ * It needs both weights, and it refuses to run when the pace points away from
+ * the goal, because a slider set to lose weight against a goal above the current
+ * weight is a contradiction and not a longer timeline.
+ *
+ * A pace of zero is an answer and not a missing one. The user holds their
+ * weight, so the function returns the maintain plan and takes the division out
+ * of the path entirely. The guard sits above the division on purpose: zero over
+ * zero is `NaN`, a distance over zero is `Infinity`, and both of those reach the
+ * card as a printed date. Never move it below.
  *
  * It takes the weights and the pace rather than the whole draft because the plan
  * screen calls it again on every drag of its own pace slider, against a `now`
@@ -150,12 +177,16 @@ export function planProjection(
   const pace = Math.abs(weeklyPace);
   if (current === null || goal === null) return null;
   if (current <= 0 || goal <= 0 || current === goal) return null;
-  if (!Number.isFinite(pace) || pace <= 0) return null;
+  if (!Number.isFinite(pace)) return null;
+  if (isMaintainPace(pace)) {
+    return { kind: 'maintain', current, goal, unit: weight.unit, pace: 0 };
+  }
 
   const weeks = Math.abs(current - goal) / pace;
   if (weeks > MAX_PROJECTION_WEEKS) return null;
 
   return {
+    kind: 'date',
     current,
     goal,
     unit: weight.unit,
@@ -185,7 +216,7 @@ function planMedication(
   draft: OnboardingDraft,
   now: number,
 ): PlanMedication {
-  const preset = id === CUSTOM_MEDICATION_ID ? undefined : getPreset(id);
+  const preset = isCustomMedicationId(id) ? undefined : getPreset(id);
   const dose = Number.parseFloat(schedule.doseText);
   // The last-shot answer is worth asking only if it changes something. It does:
   // a dose already in the body puts the curve above zero at week one instead of
@@ -207,7 +238,7 @@ function planMedication(
 
   return {
     id,
-    name: medicationDisplayName(id, draft.customMedicationName),
+    name: medicationDisplayName(id, draft.customNames),
     doseLabel: `${schedule.doseText.trim()} ${schedule.unit}`,
     scheduleLabel: scheduleLabel(schedule),
     nextShotAt: doses[0]?.takenAt ?? null,
@@ -245,7 +276,7 @@ function upcomingDoses(
   const medicationSchedule = medicationScheduleFromStored({
     medicationId: id,
     frequencyKind: schedule.frequencyKind,
-    frequencyValue: schedule.frequencyKind === 'daily' ? null : schedule.shotDay,
+    frequencyValue: scheduleFrequencyValue(schedule),
     createdAt: now,
     reminderTime,
   });
@@ -304,6 +335,15 @@ function buildCurve(
 
 function scheduleLabel(schedule: MedicationScheduleDraft): string {
   if (schedule.frequencyKind === 'daily') return 'Every day';
+  if (schedule.frequencyKind === 'every_n_days') {
+    const days = scheduleFrequencyValue(schedule);
+    if (days === null) return 'No schedule yet';
+    return days === 1 ? 'Every day' : `Every ${days} days`;
+  }
+  if (schedule.frequencyKind === 'weekdays') {
+    const named = weekdayListLabel(schedule.weekdays);
+    return named === '' ? 'No schedule yet' : `Every ${named}`;
+  }
   const day = SHOT_DAY_OPTIONS.find((option) => option.value === schedule.shotDay)?.label ?? 'shot day';
   return schedule.frequencyKind === 'twice_weekly'
     ? `Twice a week, from ${day}`

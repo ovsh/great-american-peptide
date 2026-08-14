@@ -32,7 +32,7 @@ Poke is a private notebook for a routine that runs on injections.
 
 Log a shot in a few taps: medication, amount, site, date and time. Poke then tells you the one thing you actually want to know: when the next shot is due. Everything stays on your phone. There is no account and no sign-in.
 
-Poke includes a searchable list of 33 medications: semaglutide, tirzepatide, liraglutide, retatrutide, cagrilintide, ipamorelin, CJC-1295, tesamorelin, BPC-157, TB-500, GHK-Cu, NAD+ and more. If your medication is not on the list, add your own.
+Poke includes a searchable list of 47 medications: semaglutide, tirzepatide, liraglutide, retatrutide, cagrilintide, ipamorelin, CJC-1295, tesamorelin, BPC-157, TB-500, GHK-Cu, NAD+, testosterone, estradiol, the popular blends and more. If your medication is not on the list, add your own.
 
 YOUR NEXT SHOT, ON THE FIRST SCREEN
 Open Poke and the next shot day is the first thing you see. Poke keeps the full history of every shot you logged.
@@ -148,6 +148,10 @@ sourced half-life, it draws no curve.
 educational calculations only. It gives no dose instruction.
 - Setup and Profile show the full disclaimer and tell the user to speak to a
 clinician.
+- The medication list includes hormones that are legally prescribed, such as
+testosterone esters and estradiol. Poke records a shot of a prescribed hormone
+the same way it records any other entry. Poke does not sell, source or recommend
+any substance, and Poke links to no seller.
 - Brand names are their own rows in the medication picker. A picked brand is
 stored and shown under the name the user picked, so Wegovy stays Wegovy. Every
 brand row maps to one molecule, and the molecule carries the half-life and its
