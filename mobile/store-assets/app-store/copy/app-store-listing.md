@@ -30,91 +30,45 @@ Log a shot in seconds. Watch your estimated level fall day by day. Watch your we
 Description:
 Poke is a private notebook for a routine that runs on injections.
 
-Log a shot in a few taps: medication, amount, site, date and time. Poke then
-tells you the one thing you actually want to know: when the next shot is due.
-Everything stays on your phone. There is no account and no sign-in.
+Log a shot in a few taps: medication, amount, site, date and time. Poke then tells you the one thing you actually want to know: when the next shot is due. Everything stays on your phone. There is no account and no sign-in.
+
+Poke includes a searchable list of 33 medications: semaglutide, tirzepatide, liraglutide, retatrutide, cagrilintide, ipamorelin, CJC-1295, tesamorelin, BPC-157, TB-500, GHK-Cu, NAD+ and more. If your medication is not on the list, add your own.
+
+YOUR NEXT SHOT, ON THE FIRST SCREEN
+Open Poke and the next shot day is the first thing you see. Poke keeps the full history of every shot you logged.
+
+REMINDERS THAT ASK
+Ready for your shot? How do you feel today? Did you miss a day? Poke asks on shot day, checks in the day after, and catches a missed day the next morning. Each reminder has its own switch in Profile. Poke sends at most one a day for each medication, and nothing at night.
+
+YOUR ESTIMATED LEVEL, DAY BY DAY (POKE PRO)
+Poke draws the estimated curve between your shots. The curve uses the shots you logged and the half-life on file for the medication. Poke shows the source of every half-life.
+
+TRENDS THAT ADD UP (POKE PRO)
+Poke puts your weight, your doses and the side effects you record on one timeline. You see what moved with what.
+
+UNLIMITED MEDICATIONS (POKE PRO)
+The free app keeps two medications. Pro runs as many as you take, and each medication keeps its own schedule.
+
+TAKE IT TO YOUR DOCTOR (POKE PRO)
+Export everything you logged as one CSV file. A clean record for your next appointment.
 
 FREE, FOR AS LONG AS YOU USE IT
-- Log a shot in seconds
-- Your next shot day, on the first screen
-- The full history of what you logged
-- Two medications, picked from a searchable list of 33 or added by you
-- Reminders with their own switches: a question on shot day, a check-in the day
-  after, and a catch-up if a day slips
-
-POKE PRO
-- Your level, day by day. Poke draws the estimated curve between your shots.
-  Poke uses the shots you logged and the half-life on file for the medication.
-  Poke shows the source of every half-life.
-- Trends that add up. Poke puts your weight, your doses and the side effects you
-  record on one timeline. You see what moved with what.
-- Unlimited medications. Free keeps two. Pro runs as many as you take, and each
-  medication keeps its own schedule.
-- Take it to your doctor. Export everything you logged as a CSV file.
-
-WHAT POKE IS NOT
-Poke is a record of what you enter and nothing more. Poke gives no medical
-advice, no diagnosis, no treatment guidance and no dose recommendations. The
-level curve is an estimate that Poke calculates from the shots you log and the
-half-life on file. Poke shows the source of every half-life. The level curve is
-not a measurement. The level curve is not a basis for changing a
-dose. The reconstitution screen is a unit conversion for laboratory and
-educational use. The reconstitution screen turns a mass and a volume into a
-concentration. Speak to a licensed clinician about your treatment. Call your
-local emergency number if you have an emergency.
+Logging, the next shot day, the full history, all three reminders and two medications are free, with no time limit.
 
 PRIVACY
-Your log lives on your device. Poke has no user accounts, so there is nothing to
-sign in to and nothing to leak.
+Your log lives on your device. Poke has no user accounts, so there is nothing to sign in to and nothing to leak.
+
+WHAT POKE IS NOT
+Poke is a record of what you enter and nothing more. Poke gives no medical advice, no diagnosis, no treatment guidance and no dose recommendations. The level curve is an estimate that Poke calculates from the shots you log and the half-life on file. Poke shows the source of every half-life. The level curve is not a measurement. The level curve is not a basis for changing a dose. The reconstitution screen is a unit conversion for laboratory and educational use. The reconstitution screen turns a mass and a volume into a concentration. Speak to a licensed clinician about your treatment. Call your local emergency number if you have an emergency.
 
 SUBSCRIPTION
 Poke Pro is an auto-renewable subscription.
-- Poke Pro Yearly: 39.99 USD per year, after a 1-month free trial for new
-  subscribers.
+- Poke Pro Yearly: 39.99 USD per year, after a 1-month free trial for new subscribers.
 - Poke Pro Monthly: 9.99 USD per month, no trial.
-Prices are in US dollars and may differ in your region. The app always shows the
-price you will pay before you buy. Payment is charged to your Apple
-Account at confirmation of purchase. The subscription renews on its own unless
-you turn off auto-renew at least 24 hours before the period ends. Your Apple
-Account is charged for renewal within 24 hours before the current period ends.
-Manage or cancel a subscription in your Apple Account settings after purchase.
-Any unused part of a free trial is forfeited when you buy a subscription.
+Prices are in US dollars and may differ in your region. The app always shows the price you will pay before you buy. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews on its own unless you turn off auto-renew at least 24 hours before the period ends. Your Apple Account is charged for renewal within 24 hours before the current period ends. Manage or cancel a subscription in your Apple Account settings after purchase. Any unused part of a free trial is forfeited when you buy a subscription.
 
 Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://peptide.industries/privacy
-
-Keywords (90 chars):
-glp1,semaglutide,tirzepatide,injection,peptide,shot,reminder,dose,weight,tracker,log,level
-
-Support URL:
-https://peptide.industries/support/
-
-Marketing URL:
-https://peptide.industries/peptide-tracker/
-
-Privacy Policy URL:
-https://peptide.industries/privacy
-
-> Must match `PRIVACY_URL` in `src/config/legal.ts` exactly, because the paywall
-> links it. The old listing carried a trailing slash and the app does not.
-
-Copyright URL:
-https://peptide.industries/copyright/
-
-Primary category:
-Health & Fitness
-
-Secondary category:
-Medical
-
-> Keep Health & Fitness primary. Medical as the secondary category is honest
-> about the audience without asking to be read as a clinical tool.
-
-Content rights:
-Uses original app UI, generated decorative backgrounds, and project-owned assets.
-
-Encryption export:
-Standard/exempt encryption only. `ITSAppUsesNonExemptEncryption` is false.
 
 ## Screenshot captions
 
@@ -133,22 +87,13 @@ cards on a 13 inch screen leave the slide nearly empty.
 
 ## What is new in this version
 
-A SHORTER SETUP
-Every question now fits in one look. The dose is a wheel, not a keyboard. The
-schedule strip shows both shot days. Small drawn moments replace the paragraphs.
+Setup is shorter. Every question fits in one look, the dose is a wheel instead of a keyboard, and the schedule strip shows both shot days.
 
-REMINDERS THAT ASK
-Ready for your shot? How do you feel today? Did you miss a day? Poke asks on
-shot day, checks in the day after, and catches a missed day the next morning.
-Each reminder has its own switch in Profile, and Poke sends at most one a day for each medication.
+New reminders that ask. Ready for your shot? How do you feel today? Did you miss a day? Poke asks on shot day, checks in the day after, and catches a missed day the next morning. Each reminder has its own switch in Profile, and Poke sends at most one a day for each medication.
 
-A CALMER PLAN
-The plan builds on one clock and reads in three glances: the date, the distance
-and the curve.
+The plan builds on one clock and reads in three glances: the date, the distance and the curve.
 
-FIXES
-The reminder time you pick is the time Poke uses. The free level chart draws the
-true shape of your curve. Text no longer hides behind buttons.
+Fixes: the reminder time you pick is the time Poke uses, the free level chart draws the true shape of your curve, and text no longer hides behind buttons.
 
 ## App Review notes
 
@@ -183,7 +128,8 @@ after a logged shot, and a catch-up the morning after a scheduled day with no
 entry. All three are on by default and each has its own switch in Profile. The
 check-in fires only when the user picked side effects to watch during setup, and
 it asks the user to record how they feel. It gives no advice. Poke sends at most
-one notification a day and none at night. There is no push server.
+one notification a day for each medication and none at night. There is no push
+server.
 
 MEDICAL POSITIONING
 Poke is a personal record. It is not a medical device and makes no clinical
