@@ -65,7 +65,7 @@
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "Poke reads your weight from Health so that you do not type it by hand. Poke reads no other health data, and Poke sends your health data nowhere.",
-          "NSHealthUpdateUsageDescription": false,
+          "NSHealthUpdateUsageDescription": "Poke does not save data to Health and never asks for this permission. Apple requires this text because the Health library contains save functions.",
           "background": false
         }
       ]
