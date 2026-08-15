@@ -34,6 +34,7 @@ import {
   updatePreferences,
   type PreferencesPatch,
 } from '@/repositories/preferences';
+import { track } from '@/services/analytics';
 import { exportHistory } from '@/services/export';
 import {
   importHealthWeights,
@@ -158,24 +159,28 @@ export default function ProfileScreen() {
       }
     }
     await savePreferences({ notifications_enabled: next }, true);
+    track('reminder_toggled', { kind: 'shot_day', on: next === 1 });
   };
 
   const toggleCheckin = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_checkin_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_checkin_enabled: next }, true);
+    track('reminder_toggled', { kind: 'checkin', on: next === 1 });
   };
 
   const toggleMissed = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_missed_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_missed_enabled: next }, true);
+    track('reminder_toggled', { kind: 'missed', on: next === 1 });
   };
 
   const toggleCycle = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_cycle_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_cycle_enabled: next }, true);
+    track('reminder_toggled', { kind: 'cycle', on: next === 1 });
   };
 
   const setCheckinDelay = async (choice: string) => {
@@ -283,7 +288,7 @@ export default function ProfileScreen() {
 
   const runExport = async () => {
     if (!pro) {
-      openPaywall();
+      openPaywall('profile_export');
       return;
     }
     setExporting(true);
@@ -346,7 +351,7 @@ export default function ProfileScreen() {
         label: pro
           ? 'Poke could not reach the App Store. See Poke Pro'
           : 'See Poke Pro',
-        onPress: openPaywall,
+        onPress: () => openPaywall('profile_pro'),
       };
 
   const goalWeight = preferences?.goal_weight ?? null;
@@ -631,7 +636,8 @@ export default function ProfileScreen() {
                 reading a price must not be shown a way around it. */}
             <ProfileLink
               testID="profile-link-tester"
-              label="Tester access"
+              label="Tester code"
+              value={testerProAt === null ? undefined : 'Tester access is on'}
               onPress={() => router.push('/redeem')}
             />
             {version === null ? null : (

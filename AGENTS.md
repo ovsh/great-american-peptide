@@ -50,4 +50,6 @@ There is no test runner. Domain tests run one at a time with `npx tsx`.
 | `mobile/docs/market.md` | Pricing, competitors, or positioning. Dated Aug 2026 — re-check before you act. |
 | `mobile/docs/competitor-creative.md` | You are writing an ad, a store video, or social creative. |
 | `mobile/docs/ai-chat.md` | Any work on the AI chat, its prompts, or its evals. |
+| `mobile/docs/analytics.md` | You add, move, or read an analytics event. No health data in an event. |
+| `mobile/docs/tester-codes.md` | You mint, check, or change a tester code. |
 | `docs/agent-docs.md` | You are about to add, move, or prune documentation. |

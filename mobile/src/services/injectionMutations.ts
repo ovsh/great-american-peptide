@@ -20,11 +20,14 @@ import {
   type NewInjection,
   type UpdateInjection,
 } from '../repositories/injections';
+import { track } from './analytics';
 import { refreshScheduledReminders } from './notifications';
 
 export async function createInjectionAndRefresh(input: NewInjection): Promise<InjectionRow> {
   const injection = await createInjection(input);
   await refreshScheduledReminders().catch(() => {});
+  // A count of shots, with no medication, no dose and no site attached.
+  track('shot_logged', { edited: false });
   return injection;
 }
 
@@ -34,10 +37,12 @@ export async function updateInjectionAndRefresh(
 ): Promise<InjectionRow> {
   const injection = await updateInjection(id, patch);
   await refreshScheduledReminders().catch(() => {});
+  track('shot_logged', { edited: true });
   return injection;
 }
 
 export async function deleteInjectionAndRefresh(id: string): Promise<void> {
   await softDeleteInjection(id);
   await refreshScheduledReminders().catch(() => {});
+  track('shot_deleted');
 }

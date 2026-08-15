@@ -89,7 +89,7 @@ export default function MedicationsScreen() {
   // form that will not save. Only a running medication holds a slot, which is
   // the rule `countActiveMedications` applies at the write.
   const atFreeLimit = !pro && meds.filter((m) => m.status === 'active').length >= FREE_MEDICATION_LIMIT;
-  const addMedication = () => (atFreeLimit ? openPaywall() : router.push('/medications/new'));
+  const addMedication = () => (atFreeLimit ? openPaywall('medication_limit') : router.push('/medications/new'));
 
   const load = useCallback(async () => {
     const [rows, counts] = await Promise.all([listMedications(true), countInjectionsByMedication()]);
@@ -104,7 +104,7 @@ export default function MedicationsScreen() {
   // the same door as adding one when the free slots are full.
   const togglePause = async (m: MedicationRow) => {
     if (m.status === 'paused' && atFreeLimit) {
-      openPaywall();
+      openPaywall('medication_limit');
       return;
     }
     if (m.status !== 'paused') {
@@ -144,7 +144,7 @@ export default function MedicationsScreen() {
   // paywall as adding one, because a restore lands on the active list too.
   const restore = async (m: MedicationRow) => {
     if (atFreeLimit) {
-      openPaywall();
+      openPaywall('medication_limit');
       return;
     }
     await setMedicationStatusAndRefresh(m.id, 'active');

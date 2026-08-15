@@ -59,6 +59,7 @@ import {
   nextColorIndex,
   type NewMedication,
 } from '@/repositories/medications';
+import { track, type AnalyticsEvents } from '@/services/analytics';
 import { createMedicationAndRefresh, updateMedicationAndRefresh } from '@/services/medicationMutations';
 import { useAppStore } from '@/stores/app';
 import { isProNow, useIsPro } from '@/stores/entitlement';
@@ -117,6 +118,9 @@ export default function AddMedicationScreen() {
 
   const [step, setStep] = useState<'pick' | 'config'>('pick');
   const [presetId, setPresetId] = useState<string | null>(null);
+  // Which shape of row opened this form, for `medication_added`. The name it
+  // carries is never sent.
+  const [pickedKind, setPickedKind] = useState<AnalyticsEvents['medication_added']['kind']>('custom');
   const [name, setName] = useState('');
   const [dose, setDose] = useState('');
   // The dose of each shot day, held as typed and keyed by weekday. Off for a
@@ -226,6 +230,7 @@ export default function AddMedicationScreen() {
   const pickPreset = (entry: PresetEntry) => {
     const p = entry.preset;
     setPresetId(p.id);
+    setPickedKind(isBlend(p) ? 'blend' : entry.moleculeName ? 'brand' : 'preset');
     setName(entry.name);
     setDose('');
     resetDoseByDay();
@@ -251,6 +256,7 @@ export default function AddMedicationScreen() {
   // nobody types the same name twice.
   const pickCustom = (typedName?: string) => {
     setPresetId(null);
+    setPickedKind('custom');
     setName(typedName ?? '');
     setDose('');
     resetDoseByDay();
@@ -414,6 +420,7 @@ export default function AddMedicationScreen() {
         }
         const colorIndex = await nextColorIndex();
         await createMedicationAndRefresh({ ...input, colorIndex });
+        track('medication_added', { kind: pickedKind, source: 'app' });
       }
       bumpVersion();
       safeBack('/medications');
@@ -456,6 +463,7 @@ export default function AddMedicationScreen() {
       {atFreeLimit ? (
         <View style={{ paddingHorizontal: spacing.screen, paddingTop: spacing.lg }}>
           <ProLock
+            source="medication_limit"
             title="Track a third medication"
             body="The free version keeps two medications. Pro tracks as many as you take, each with its own schedule, level and history."
           />

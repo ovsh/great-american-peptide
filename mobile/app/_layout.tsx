@@ -18,6 +18,7 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
+import { initAnalytics } from '@/services/analytics';
 import { exportWithoutMigrating } from '@/services/export';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
@@ -66,6 +67,12 @@ export default function RootLayout() {
   // waits for the answer. The wait is capped inside the entitlement store. The
   // database error screen does not wait, because it has more to say than this.
   const entitlementPending = !entitlementSettled && gate.kind !== 'error';
+
+  // Analytics starts before the gate, so the launch itself is counted. The
+  // call is inert without EXPO_PUBLIC_POSTHOG_KEY.
+  useEffect(() => {
+    initAnalytics();
+  }, []);
 
   useEffect(() => {
     if (gate.kind !== 'checking') return;

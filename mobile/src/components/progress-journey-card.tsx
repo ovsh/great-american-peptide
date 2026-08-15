@@ -189,7 +189,7 @@ function UnlockPill() {
         testID="progress-unlock"
         accessibilityRole="button"
         accessibilityLabel="Unlock your numbers"
-        onPress={openPaywall}
+        onPress={() => openPaywall('progress_journey')}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         style={styles.unlock}

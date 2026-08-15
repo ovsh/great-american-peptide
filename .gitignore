@@ -3,6 +3,8 @@ node_modules/
 *.log
 .env
 .env.*
+# The template holds key names and no values, so it belongs in the repo.
+!.env.example
 
 # Competitor ad creative kept for internal analysis only. Third-party
 # copyright — never commit, never republish. See mobile/docs/competitor-creative.md

@@ -16,6 +16,7 @@ import {
 } from '../domain/scheduling';
 import { cycleStateOf } from '../utils/cycle';
 import { startOfDay } from '../utils/date';
+import { track } from './analytics';
 
 type ExpoNotifications = typeof import('expo-notifications');
 
@@ -78,7 +79,11 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   const req = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowBadge: true, allowSound: false },
   });
-  return req.status === 'granted';
+  const granted = req.status === 'granted';
+  // Only the real prompt is counted. A permission iOS granted earlier returns
+  // above, and counting that would inflate the answer.
+  track('notification_permission_result', { granted });
+  return granted;
 }
 
 /** A stored delay that is not one of the three offered reads as the default. */

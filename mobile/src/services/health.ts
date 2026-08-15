@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { importMeasurements } from '@/repositories/measurements';
 import { getPreferences, updatePreferences } from '@/repositories/preferences';
 
+import { track } from './analytics';
 import { newestRow, readWindowStart, toWeightRows } from './healthWeight';
 
 /**
@@ -81,7 +82,9 @@ export async function stopHealthSync(): Promise<void> {
  * nothing may be a refusal, and a Profile row reading "On" under a refused
  * permission would be a lie Poke told itself.
  */
-export async function importHealthWeights(): Promise<HealthImport> {
+export async function importHealthWeights(
+  source: 'onboarding' | 'profile' = 'profile',
+): Promise<HealthImport> {
   const healthKit = await loadModule();
   if (!healthKit) return { kind: 'unsupported' };
 
@@ -89,7 +92,7 @@ export async function importHealthWeights(): Promise<HealthImport> {
     if (!healthKit.isHealthDataAvailable()) return { kind: 'unsupported' };
     await healthKit.requestAuthorization({ toRead: [BODY_MASS] });
 
-    const { syncedAt } = await getHealthSync();
+    const { syncedAt, enabled: wasEnabled } = await getHealthSync();
     const now = Date.now();
     const from = readWindowStart(syncedAt, now);
 
@@ -107,6 +110,12 @@ export async function importHealthWeights(): Promise<HealthImport> {
 
     const added = await importMeasurements(rows);
     await updatePreferences({ health_sync_enabled: 1, health_synced_at: now });
+
+    // The connect event marks the switch going on, so a later background read
+    // does not report a second connection. The weight event says a weigh-in
+    // arrived, and carries no number.
+    if (!wasEnabled) track('health_connect_enabled', { source });
+    if (added > 0) track('weight_logged', { source: 'health' });
 
     return { kind: 'imported', added, latestKg: newest.value, latestAt: newest.takenAt };
   } catch (error) {

@@ -45,6 +45,8 @@ const PREFERENCE_COLUMNS = [
   'health_synced_at',
   // Schema version 13.
   'notif_cycle_enabled',
+  // Schema version 16.
+  'tester_id',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {
@@ -84,9 +86,19 @@ export async function getTesterProAt(): Promise<number | null> {
   return row.tester_pro_at;
 }
 
-/** Pass a timestamp to grant tester access and null to take it back. */
-export async function setTesterProAt(at: number | null): Promise<void> {
-  await updatePreferences({ tester_pro_at: at });
+/** The tester id the redeemed code carried, or null when no code is active. */
+export async function getTesterId(): Promise<number | null> {
+  const row = await getPreferences();
+  return row.tester_id;
+}
+
+/**
+ * Pass a timestamp and an id to grant tester access, and null for both to take
+ * it back. The two columns move together, so a device never holds a grant with
+ * nobody's name on it.
+ */
+export async function setTesterGrant(at: number | null, id: number | null): Promise<void> {
+  await updatePreferences({ tester_pro_at: at, tester_id: id });
 }
 
 /**

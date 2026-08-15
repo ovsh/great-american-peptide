@@ -51,7 +51,7 @@ const EXPECTED: Record<string, string[]> = {
     'sex', 'birth_year', 'activity_level', 'motivation', 'weekly_pace', 'last_shot_at',
     'tester_pro_at', 'focused_medication_id', 'notif_checkin_enabled',
     'notif_checkin_delay_hours', 'notif_missed_enabled', 'health_sync_enabled',
-    'health_synced_at', 'notif_cycle_enabled',
+    'health_synced_at', 'notif_cycle_enabled', 'tester_id',
   ],
 };
 
