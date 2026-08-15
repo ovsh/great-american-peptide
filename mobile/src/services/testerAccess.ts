@@ -1,78 +1,56 @@
-import Constants from 'expo-constants';
-
-import { getTesterProAt, setTesterProAt } from '../repositories/preferences';
+import { decodeTesterCode } from '../domain/testerCode';
+import { getTesterId, getTesterProAt, setTesterGrant } from '../repositories/preferences';
 
 /**
  * Poke Pro for an invited tester, granted by a code instead of a payment.
  *
- * READ THIS BEFORE YOU TRUST IT. A code that ships inside the app is a public
- * string. Anyone can unpack the IPA and run `strings` on the binary, and every
- * code below falls out of it. Poke has no server, so there is nothing to check a
- * code against and nothing that can revoke a leaked code on other devices. This
- * is a convenience for people Poke already invited, and it is not a lock.
+ * A code carries a tester id and nothing else, so Poke checks it on the device
+ * with no server and no list of codes in the binary. `src/domain/testerCode.ts`
+ * holds the math and `docs/tester-codes.md` is the spec. The owner mints codes
+ * with `node scripts/tester-codes.mjs <id>`.
  *
- * That is also why there is no hashing, no obfuscation, no attempt counter and
- * no rate limit here. Each of those would make the code look protected while an
- * attacker reads the compiled string and skips the whole check. Fake security is
- * worse than none, because it invites someone to put real value behind it.
+ * READ THIS BEFORE YOU TRUST IT. The constants that mint a code ship inside the
+ * app. Anyone can unpack the IPA, read them, and mint every code from 1 to
+ * 50000. Poke has no server, so there is nothing to check a code against and
+ * nothing that can revoke a leaked code on other devices. This is a convenience
+ * for people Poke already invited, and it is not a lock.
+ *
+ * That is also why there is no attempt counter and no rate limit here. Each
+ * would make the check look protected while an attacker reads the constants and
+ * skips it. Fake security is worse than none, because it invites someone to put
+ * real value behind it.
  *
  * The rules that follow from that:
- *   - Rotate `EXPO_PUBLIC_TESTER_CODES` for every tester round.
  *   - Never gate anything behind this that Poke could not give away for free.
  *   - Keep `app/redeem.tsx` off the paywall. It is a tester path, not a discount.
+ *   - Retiring a round of codes means changing the constants and shipping a
+ *     build, which retires every code at once.
  */
-
-/**
- * The compiled-in fallback, used when no environment value is set. Same shape as
- * `revenueCatApiKey()`: the environment wins, so a code changes without a code
- * change. Set `EXPO_PUBLIC_TESTER_CODES` in `mobile/.env.local` for a local run
- * and as an EAS secret for a store build. Several codes go in one comma
- * separated string.
- */
-const DEFAULT_TESTER_CODES = ['POKE-TESTER-2026'];
-
-/** Case and punctuation are noise on a phone keyboard, so Poke drops both. */
-export function normalizeCode(raw: string): string {
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-function parseCodes(raw: string): string[] {
-  return raw.split(',').map(normalizeCode).filter((code) => code.length > 0);
-}
-
-export function testerCodes(): string[] {
-  const fromEnv = process.env.EXPO_PUBLIC_TESTER_CODES;
-  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) return parseCodes(fromEnv);
-
-  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
-  const fromExtra = extra?.testerCodes;
-  if (typeof fromExtra === 'string' && fromExtra.trim().length > 0) return parseCodes(fromExtra);
-
-  return DEFAULT_TESTER_CODES.map(normalizeCode);
-}
-
-export function codeIsKnown(entered: string): boolean {
-  const candidate = normalizeCode(entered);
-  if (candidate.length === 0) return false;
-  return testerCodes().includes(candidate);
-}
 
 /** The stored grant, read back from the preferences row on every launch. */
 export function loadTesterPro(): Promise<number | null> {
   return getTesterProAt();
 }
 
+/** The stored tester id, which is null on a device holding no grant. */
+export function loadTesterId(): Promise<number | null> {
+  return getTesterId();
+}
+
 export type RedeemOutcome = 'granted' | 'rejected';
 
 /**
- * Writes the grant only when the code matches. A wrong code leaves the row
- * exactly as it was.
+ * Writes the grant only when the code carries a tester id. A code that does not
+ * leaves the row exactly as it was.
  */
-export async function grantTesterPro(entered: string): Promise<{ outcome: RedeemOutcome; at: number | null }> {
-  if (!codeIsKnown(entered)) return { outcome: 'rejected', at: null };
+export async function grantTesterPro(
+  entered: string,
+): Promise<{ outcome: RedeemOutcome; at: number | null; id: number | null }> {
+  const id = decodeTesterCode(entered);
+  if (id === null) return { outcome: 'rejected', at: null, id: null };
   const at = Date.now();
-  await setTesterProAt(at);
-  return { outcome: 'granted', at };
+  await setTesterGrant(at, id);
+  return { outcome: 'granted', at, id };
 }
 
 /**
@@ -80,5 +58,5 @@ export async function grantTesterPro(entered: string): Promise<{ outcome: Redeem
  * subscriber keeps Poke Pro through the subscription after this runs.
  */
 export async function revokeTesterPro(): Promise<void> {
-  await setTesterProAt(null);
+  await setTesterGrant(null, null);
 }

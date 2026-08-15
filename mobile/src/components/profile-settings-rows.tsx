@@ -213,13 +213,20 @@ export function ProfileProSlot({
   );
 }
 
-/** A plain link under the cards. No card, no icon, no chevron: it is a word. */
+/**
+ * A plain link under the cards. No card, no icon, no chevron: it is a word.
+ *
+ * `value` is the state the link leads to, set on the right of the row. Pass it
+ * only when the state is worth reading before the tap.
+ */
 export function ProfileLink({
   label,
+  value,
   onPress,
   testID,
 }: {
   label: string;
+  value?: string;
   onPress: () => void;
   testID?: string;
 }) {
@@ -227,11 +234,18 @@ export function ProfileLink({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={value === undefined ? label : `${label}. ${value}`}
       onPress={onPress}
       style={({ pressed }) => [styles.link, pressed && styles.linkPressed]}
     >
-      <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
+      {value === undefined ? (
+        <Text variant="smallStrong" color={colors.inkMuted}>{label}</Text>
+      ) : (
+        <View style={styles.linkRow}>
+          <Text variant="smallStrong" color={colors.inkMuted} style={styles.label}>{label}</Text>
+          <Text variant="small" color={colors.inkSubtle}>{value}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -353,6 +367,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: spacing.xs,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
   linkPressed: {
     opacity: 0.6,

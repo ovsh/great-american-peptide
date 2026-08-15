@@ -17,6 +17,7 @@ import {
   type SideEffectPresetId,
 } from '@/domain/sideEffects';
 import { createSideEffect, listSideEffects, markDayAllClear } from '@/repositories/sideEffects';
+import { track } from '@/services/analytics';
 import { refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
 import { colors, radius, spacing } from '@/theme';
@@ -97,6 +98,9 @@ export default function LogSideEffectScreen() {
       bumpVersion();
       // This answers the day-after check-in, so the queue drops it.
       await refreshScheduledReminders().catch(() => {});
+      // Which side effect and how bad it was stay on the phone. The event only
+      // says a day was reported.
+      track('side_effect_logged', { clear: false });
       setSaved(true);
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -118,6 +122,7 @@ export default function LogSideEffectScreen() {
       bumpVersion();
       // This answers the day-after check-in, so the queue drops it.
       await refreshScheduledReminders().catch(() => {});
+      track('side_effect_logged', { clear: true });
       setClearedAt(record.taken_at);
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

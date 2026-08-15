@@ -258,6 +258,7 @@ export default function LevelReportScreen() {
         {!pro ? (
           <View style={{ paddingHorizontal: spacing.screen }}>
             <ProLock
+              source="level_report"
               title="Your level day by day"
               body="See the estimated amount in your body between shots. Poke shows the peak, the trough and the average across each dose window."
             />

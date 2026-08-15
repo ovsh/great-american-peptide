@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CustomerInfo, PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
+import { setTesterId, track } from '../services/analytics';
 import {
   addCustomerInfoListener,
   fetchCustomerInfo,
@@ -14,6 +15,7 @@ import {
 } from '../services/purchases';
 import {
   grantTesterPro,
+  loadTesterId,
   loadTesterPro,
   revokeTesterPro,
   type RedeemOutcome,
@@ -57,6 +59,12 @@ interface EntitlementState {
    * preferences row at launch, so the grant survives a restart.
    */
   testerProAt: number | null;
+  /**
+   * The tester id the redeemed code carried, for the tester screen to show. It
+   * is never read as the grant: a device that redeemed a code before the column
+   * existed holds a grant and no id.
+   */
+  testerId: number | null;
 
   bootstrap: () => Promise<void>;
   /** Asks the store who this user is, and records whether it answered at all. */
@@ -144,6 +152,7 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
   error: null,
   devOverride: initialDevOverride(),
   testerProAt: null,
+  testerId: null,
 
   bootstrap: async () => {
     if (bootstrapped) return;
@@ -152,7 +161,8 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
     // First, because a tester must reach Pro even when the store answers late or
     // never answers at all.
     const testerProAt = await loadTesterPro().catch(() => null);
-    set({ testerProAt });
+    const testerId = await loadTesterId().catch(() => null);
+    set({ testerProAt, testerId });
 
     const ask = async () => {
       const availability = await initPurchases();
@@ -231,7 +241,12 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
       }
       const pro = isPro(info);
       set({ status: pro ? 'pro' : 'free', restoring: false });
-      if (pro) return 'restored';
+      if (pro) {
+        // Here rather than on the paywall, because the profile tab restores
+        // through this same door.
+        track('purchase_restored');
+        return 'restored';
+      }
       set({ error: 'Poke found no active subscription for this Apple Account.' });
       return 'none';
     } catch (caught: unknown) {
@@ -242,8 +257,12 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
   },
 
   redeemTesterCode: async (code) => {
-    const { outcome, at } = await grantTesterPro(code);
-    if (outcome === 'granted') set({ testerProAt: at });
+    const { outcome, at, id } = await grantTesterPro(code);
+    if (outcome === 'granted' && id !== null) {
+      set({ testerProAt: at, testerId: id });
+      setTesterId(id);
+      track('tester_code_redeemed', { tester_id: id });
+    }
     return outcome;
   },
 
@@ -251,7 +270,8 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
   // App Store said, so a real subscriber stays Pro through this.
   revokeTesterCode: async () => {
     await revokeTesterPro();
-    set({ testerProAt: null });
+    set({ testerProAt: null, testerId: null });
+    setTesterId(null);
   },
 
   setDevOverride: (value) => set({ devOverride: value }),
@@ -341,4 +361,9 @@ export function paywallEnabledNow(): boolean {
 /** When a tester code unlocked Pro on this device, or null when no code is active. */
 export function useTesterProAt(): number | null {
   return useEntitlementStore((state) => state.testerProAt);
+}
+
+/** The tester id on this device, or null when the grant carries no id. */
+export function useTesterId(): number | null {
+  return useEntitlementStore((state) => state.testerId);
 }

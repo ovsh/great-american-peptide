@@ -127,6 +127,12 @@ export interface PreferencesRow {
   /** When a tester code unlocked Poke Pro on this device. Null when no code is active. */
   tester_pro_at: number | null;
   /**
+   * The tester id the redeemed code carried, from `domain/testerCode.ts`. Null
+   * when no code is active, and null on a device that redeemed a code before
+   * this column existed. `tester_pro_at` is the grant; this is only who holds it.
+   */
+  tester_id: number | null;
+  /**
    * The medication Today opens its hero card on. Null until the user taps a
    * row, and stale ids are ignored rather than repaired.
    */

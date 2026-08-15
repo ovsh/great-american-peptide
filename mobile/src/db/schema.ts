@@ -358,6 +358,15 @@ export const MIGRATIONS: Migration[] = [
     version: 15,
     up: `ALTER TABLE medications ADD COLUMN dose_by_day TEXT;`,
   },
+  {
+    // The tester id a redeemed code carried, so the owner can tell which invited
+    // tester a device belongs to. `tester_pro_at` above stays the switch every
+    // Pro gate reads; this column is the name on it. Null on a device that
+    // redeemed no code, and null on one that redeemed a code before this column
+    // existed, which is why nothing reads it as the grant.
+    version: 16,
+    up: `ALTER TABLE preferences ADD COLUMN tester_id INTEGER;`,
+  },
 ];
 
 /**

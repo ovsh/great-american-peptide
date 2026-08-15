@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { Activity, Check, FileDown, Layers, X, type LucideIcon } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
@@ -9,6 +10,7 @@ import { PaywallHero } from '@/components/paywall-hero';
 import { Text } from '@/components/Text';
 import { PRIVACY_URL, TERMS_URL } from '@/config/legal';
 import { buildPlanOptions, type PlanId, type PlanOption } from '@/domain/plans';
+import { track } from '@/services/analytics';
 import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
@@ -38,6 +40,9 @@ interface Benefit {
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
+  // Which screen sent the user here. `openPaywall` writes it, and a screen that
+  // does not name itself lands as `unknown`.
+  const { source } = useLocalSearchParams<{ source?: string }>();
 
   const offering = useEntitlementStore((state) => state.offering);
   const offeringState = useEntitlementStore((state) => state.offeringState);
@@ -55,6 +60,10 @@ export default function PaywallScreen() {
   useEffect(() => {
     if (offeringState === 'idle') loadOffering().catch(() => {});
   }, [offeringState, loadOffering]);
+
+  useEffect(() => {
+    track('paywall_viewed', { source: typeof source === 'string' && source ? source : 'unknown' });
+  }, [source]);
 
   const plans = buildPlanOptions(offering);
   const plan = plans.find((option) => option.id === selected) ?? plans[0];
@@ -76,7 +85,10 @@ export default function PaywallScreen() {
     // The button reaches this only in the `buy` state, where the package exists.
     if (!plan.pkg) return;
     const outcome = await buy(plan.pkg);
-    if (outcome.kind === 'purchased') dismiss();
+    if (outcome.kind === 'purchased') {
+      track('purchase_completed', { plan: plan.id === 'annual' ? 'yearly' : 'monthly' });
+      dismiss();
+    }
   };
 
   const runAction = () => {

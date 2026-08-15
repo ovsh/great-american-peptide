@@ -129,7 +129,7 @@ export function TodayHeroCard({
             value={value}
             valueDecimals={levelDecimals(value, medication.default_unit)}
             unitLabel={unit}
-            onUnlock={pro ? null : () => router.push('/paywall')}
+            onUnlock={pro ? null : () => router.push('/paywall?source=today_level')}
             emptyHint="Log a shot to see your level"
             entered={entered}
             logToken={logToken}

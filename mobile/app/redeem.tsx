@@ -9,7 +9,7 @@ import { Card } from '@/components/Card';
 import { Header } from '@/components/Header';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
-import { useEntitlementStore, useTesterProAt } from '@/stores/entitlement';
+import { useEntitlementStore, useTesterId, useTesterProAt } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 
 /**
@@ -27,6 +27,7 @@ type Note =
 export default function RedeemScreen() {
   const insets = useSafeAreaInsets();
   const testerProAt = useTesterProAt();
+  const testerId = useTesterId();
   const redeemTesterCode = useEntitlementStore((state) => state.redeemTesterCode);
   const revokeTesterCode = useEntitlementStore((state) => state.revokeTesterCode);
   const subscribed = useEntitlementStore((state) => state.status === 'pro');
@@ -77,8 +78,11 @@ export default function RedeemScreen() {
               <Text variant="bodyStrong">Enter your code</Text>
               <Input
                 value={code}
+                // Uppercased on the way in, because a code is printed in
+                // uppercase and the keyboard shift key is one more thing to get
+                // wrong. `decodeTesterCode` accepts either.
                 onChangeText={(next) => {
-                  setCode(next);
+                  setCode(next.toUpperCase());
                   setNote({ kind: 'none' });
                 }}
                 placeholder="Your tester code"
@@ -96,9 +100,11 @@ export default function RedeemScreen() {
             </Card>
           ) : (
             <Card style={styles.card}>
-              <Text variant="bodyStrong">Poke Pro is on</Text>
+              <Text variant="bodyStrong">Tester access is on.</Text>
               <Text variant="small" color={colors.inkMuted}>
-                A tester code unlocked Poke Pro on {format(testerProAt, 'd MMMM yyyy')}. The code unlocks this device only.
+                {testerId === null
+                  ? `A tester code unlocked Poke Pro on ${format(testerProAt, 'd MMMM yyyy')}. The code unlocks this device only.`
+                  : `The code for tester ${testerId} unlocked Poke Pro on ${format(testerProAt, 'd MMMM yyyy')}. The code unlocks this device only.`}
               </Text>
               <Button variant="outline" disabled={busy} onPress={revoke}>
                 {busy ? 'Turning off tester access' : 'Turn off tester access'}
@@ -130,8 +136,12 @@ export default function RedeemScreen() {
 }
 
 function noteCopy(kind: Exclude<Note['kind'], 'none'>, subscribed: boolean): string {
-  if (kind === 'rejected') return 'Poke does not know that code. Nothing changed.';
-  if (kind === 'granted') return 'Poke turned Pro on. Every Pro screen is open now.';
+  // The reject says one thing for every reason. A message that named the reason
+  // would teach the shape of the code to someone guessing at it.
+  if (kind === 'rejected') return 'This code is not valid.';
+  // The card above already reads "Tester access is on.", so the note adds the
+  // part the card does not say.
+  if (kind === 'granted') return 'Every Pro screen is open now.';
   if (subscribed) return 'Poke turned tester access off. Your subscription keeps Poke Pro on.';
   return 'Poke turned tester access off. The free version is back.';
 }
