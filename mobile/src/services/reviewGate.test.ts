@@ -26,14 +26,14 @@ test('a calculation asks once one shot exists, so the first ask can land in week
   assert(canPrompt({ ...ready, shotCount: 1 }, 'calculation', NOW));
 });
 
-test('a logged shot needs two shots, because one shot is not a routine', () => {
-  assert(!canPrompt({ ...ready, shotCount: 1 }, 'shot-logged', NOW));
-  assert(canPrompt({ ...ready, shotCount: 2 }, 'shot-logged', NOW));
+test('a logged shot asks on the first shot, and never on none', () => {
+  assert(!canPrompt({ ...ready, shotCount: 0 }, 'shot-logged', NOW));
+  assert(canPrompt({ ...ready, shotCount: 1 }, 'shot-logged', NOW));
 });
 
-test('the level curve needs three doses, or it is not yet a curve', () => {
-  assert(!canPrompt({ ...ready, shotCount: 2 }, 'level-curve', NOW));
-  assert(canPrompt({ ...ready, shotCount: 3 }, 'level-curve', NOW));
+test('the level curve asks on the first dose, and never over an empty chart', () => {
+  assert(!canPrompt({ ...ready, shotCount: 0 }, 'level-curve', NOW));
+  assert(canPrompt({ ...ready, shotCount: 1 }, 'level-curve', NOW));
 });
 
 test('a trigger fires once, ever', () => {
@@ -65,9 +65,24 @@ test('the ceiling is a rolling year, so old asks stop counting', () => {
   assert(canPrompt(aged, 'shot-logged', NOW));
 });
 
+test('two wins on the same first shot cannot both ask, because of the cooldown', () => {
+  // Every floor is one shot, so a user who calculates a dose and then logs that shot
+  // trips two eligible triggers minutes apart. Only the first may ask.
+  const first = { ...ready, shotCount: 1 };
+  assert(canPrompt(first, 'calculation', NOW));
+  const after = {
+    ...first,
+    promptLog: appendStamp(first.promptLog, NOW),
+    triggersUsed: appendTrigger(first.triggersUsed, 'calculation'),
+  };
+  assert(!canPrompt(after, 'shot-logged', NOW + 60 * 1000), 'the same session cannot ask twice');
+  assert(canPrompt(after, 'shot-logged', NOW + (MIN_DAYS_BETWEEN_PROMPTS + 1) * DAY));
+});
+
 test('three different wins fit inside thirty days', () => {
   // The whole point of the redesign: spend the yearly budget while the app is new.
-  let state: ReviewGateState = { ...ready, shotCount: 3 };
+  // One shot now carries all three floors, so the cooldown alone sets the pace.
+  let state: ReviewGateState = { ...ready, shotCount: 1 };
   const days: number[] = [];
   const plan = [
     { day: 1, trigger: 'calculation' as const },
@@ -94,7 +109,7 @@ test('the stamp log drops entries older than a year', () => {
   assert(log.split(',').length === 2, `expected 2 entries, received ${log}`);
 });
 
-console.log('10 review-gate tests passed.');
+console.log('11 review-gate tests passed.');
 
 function assert(value: boolean, label = 'assertion') {
   if (!value) throw new Error(`FAIL: ${label}`);

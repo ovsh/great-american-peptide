@@ -237,16 +237,16 @@ export default function LevelReportScreen() {
   const preset = med?.preset_id ? getPreset(med.preset_id) : undefined;
   const footnote = [halfLifeBasis(preset, med), FOOTNOTE].filter(Boolean).join(' ');
 
-  // The curve is the paid hook, and it only becomes one at the third dose: below that
-  // it is a single rise and decay, which is a textbook diagram, not the user's routine.
-  // The dwell timer keeps this a read, not a screen the user passed through.
+  // The curve is the paid hook, so the ask belongs to the first read of it. The floor
+  // of one dose only keeps the ask off an empty chart. The dwell timer keeps this a
+  // read, not a screen the user passed through.
   const dosesInWindow = useMemo(
     () => (rows ? rows.filter((r) => r.taken_at >= rangeStart).length : 0),
     [rows, rangeStart],
   );
 
   useEffect(() => {
-    if (!pro || dosesInWindow < 3) return;
+    if (!pro || dosesInWindow < 1) return;
     const timer = setTimeout(() => { maybePromptForReview('level-curve').catch(() => {}); }, 3000);
     return () => clearTimeout(timer);
   }, [pro, dosesInWindow]);
