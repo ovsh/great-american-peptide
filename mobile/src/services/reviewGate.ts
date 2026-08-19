@@ -18,16 +18,25 @@ export const YEAR_MS = 365 * DAY_MS;
  */
 export type ReviewTrigger =
   | 'calculation' // a reconstitution answer — the reason grey-market users come
-  | 'shot-logged' // two shots is a routine, not a one-off
-  | 'level-curve' // the paid hook, once it holds enough doses to be a curve
+  | 'shot-logged' // the first shot, which is the job the whole app exists to do
+  | 'level-curve' // the paid hook, the first time a paying user reads the report
   | 'export' // their history, out, usually for a clinician
   | 'streak'; // four complete weeks on schedule
 
-/** Shots that must already exist before the trigger may fire. */
+/**
+ * Shots that must already exist before the trigger may fire.
+ *
+ * Every floor is one. The floor asks "has the user done this at all", not "has the
+ * user done it enough to be impressed". The earlier floors held the first two wins
+ * back to the second shot and the third dose, which on a weekly injector is week two
+ * and week three: an ask deferred that far is an ask spent on nobody, and StoreKit
+ * only allows three a year. What keeps this off nagging is the ten day cooldown and
+ * the once-ever rule on each trigger, not the shot count.
+ */
 export const MIN_SHOTS: Record<ReviewTrigger, number> = {
   calculation: 1,
-  'shot-logged': 2,
-  'level-curve': 3,
+  'shot-logged': 1,
+  'level-curve': 1,
   export: 1,
   streak: 1,
 };
