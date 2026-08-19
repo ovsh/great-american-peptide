@@ -1,7 +1,7 @@
 {
   "configVersion": 0,
   "apple": {
-    "version": "1.5.0",
+    "version": "1.5.2",
     "copyright": "Hypermark LLC",
     "release": {
       "automaticRelease": true
@@ -26,7 +26,7 @@
           "trt",
           "testosterone"
         ],
-        "releaseNotes": "Poke 1.5.0 is a big update, built from your requests.\n\n- Sync with Apple Health: Poke reads your weight, so you do not type it by hand. Poke reads weight only and sends nothing back.\n- Edit or delete a shot: change the medication, the dose, the site, the day, the time or the note. Remove a shot you logged by mistake.\n- Cycles: set your weeks on and your weeks off, and Poke shows the week you are in. A reminder tells you when the break ends.\n- A dose for each day: set a different dose for each shot day. Reminders, Today and History show the dose for that day.\n- New schedules: take a shot every few days, or on the same days each week.\n- A larger library: testosterone, estradiol and the popular blends, with search across all of it.\n- Blend curves: enter the mix on your vial label, and Poke draws the level curve.\n- A better body diagram: every site is open, both glutes included, and the dots are easier to tap. Routes read in plain words.\n- Clear days: mark a day clear when you have no side effects.\n- Safer updates: if the database cannot open after an update, Poke offers to export your records first.",
+        "releaseNotes": "Poke 1.5.2 is a big update, built from your requests.\n\n- Sync with Apple Health: Poke reads your weight, so you do not type it by hand. Poke reads weight only and sends nothing back.\n- Edit or delete a shot: change the medication, the dose, the site, the day, the time or the note. Remove a shot you logged by mistake.\n- Cycles: set your weeks on and your weeks off, and Poke shows the week you are in. A reminder tells you when the break ends.\n- A dose for each day: set a different dose for each shot day. Reminders, Today and History show the dose for that day.\n- New schedules: take a shot every few days, or on the same days each week.\n- A larger library: testosterone, estradiol and the popular blends, with search across all of it.\n- Blend curves: enter the mix on your vial label, and Poke draws the level curve.\n- A better body diagram: every site is open, both glutes included, and the dots are easier to tap. Routes read in plain words.\n- Clear days: mark a day clear when you have no side effects.\n- Safer updates: if the database cannot open after an update, Poke offers to export your records first.",
         "marketingUrl": "https://peptide.industries/peptide-tracker/",
         "supportUrl": "https://peptide.industries/support/",
         "privacyPolicyUrl": "https://peptide.industries/privacy"
