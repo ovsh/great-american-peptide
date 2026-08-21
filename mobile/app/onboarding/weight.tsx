@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { ChoicePill } from '@/components/OnboardingScreen';
 import { OnboardingStep } from '@/components/OnboardingStep';
@@ -15,7 +16,7 @@ import { colors, spacing } from '@/theme';
 
 const UNITS: readonly WeightUnit[] = ['lb', 'kg'];
 
-/** What the last press of the Health button did. Idle draws no message. */
+/** What the last read of Apple Health did. Idle draws no message. */
 type HealthAttempt = { kind: 'idle' } | { kind: 'reading' } | { kind: 'done'; message: string };
 
 export default function WeightScreen() {
@@ -23,6 +24,7 @@ export default function WeightScreen() {
   const setWeightUnit = useOnboardingStore((state) => state.setWeightUnit);
   const setWeightValue = useOnboardingStore((state) => state.setWeightValue);
   const [health, setHealth] = useState<HealthAttempt>({ kind: 'idle' });
+  const [healthOpen, setHealthOpen] = useState(false);
 
   // The row under the band is the answer, so the store agrees with the wheel
   // from the first frame and Continue is live on arrival. Mount only: the skip
@@ -74,7 +76,13 @@ export default function WeightScreen() {
         {/* A scale that writes to Apple Health already knows this number, so the
             wheel is the fallback and not the only way in. The offer sits under
             the wheel rather than on a screen of its own, because a permission
-            reads as reasonable next to the work it saves. */}
+            reads as reasonable next to the work it saves.
+
+            The offer is two presses and not one. Guideline 5.1.1(iv) says the
+            button that raises the HealthKit prompt has to say "Continue", and
+            the step already has a Continue of its own under the wheel, so the
+            explanation and that word live in a sheet. The button here opens the
+            sheet and reads nothing, which is what its label names. */}
         {isHealthSupported() ? (
           <View style={styles.health}>
             <Button
@@ -82,13 +90,36 @@ export default function WeightScreen() {
               size="sm"
               fullWidth={false}
               disabled={health.kind === 'reading'}
-              onPress={() => { void readHealth(); }}
+              onPress={() => setHealthOpen(true)}
             >
-              {health.kind === 'reading' ? 'Reading Apple Health' : 'Read my weight from Apple Health'}
+              {health.kind === 'reading' ? 'Reading Apple Health' : 'Use Apple Health'}
             </Button>
             {health.kind === 'done' ? (
               <Text variant="small" color={colors.inkMuted}>{health.message}</Text>
             ) : null}
+            <BottomSheet
+              visible={healthOpen}
+              title="Apple Health"
+              onClose={() => setHealthOpen(false)}
+            >
+              <View style={styles.sheet}>
+                {/* The same three sentences Profile shows, and each one is
+                    checkable in `services/health.ts`: the query names one type,
+                    the permission asks to read and never to write, and nothing
+                    on this path reaches the network. */}
+                <Text color={colors.inkMuted}>
+                  Poke reads your weight from Apple Health and adds it to your log. Poke reads nothing else. Poke writes nothing back and sends nothing anywhere.
+                </Text>
+                <Button
+                  onPress={() => {
+                    setHealthOpen(false);
+                    void readHealth();
+                  }}
+                >
+                  Continue
+                </Button>
+              </View>
+            </BottomSheet>
           </View>
         ) : null}
       </View>
@@ -135,5 +166,8 @@ const styles = StyleSheet.create({
   },
   health: {
     gap: spacing.sm,
+  },
+  sheet: {
+    gap: spacing.md,
   },
 });

@@ -749,8 +749,13 @@ export default function ProfileScreen() {
           {healthNote === null ? null : (
             <Text variant="small" color={colors.inkMuted}>{healthNote}</Text>
           )}
+          {/* The first press is the one that raises the HealthKit prompt, and
+              guideline 5.1.1(iv) reserves that button for a plain "Continue":
+              the sentence above is the explanation, and the button only moves
+              on to Apple's own sheet. Once the permission is granted no prompt
+              follows, so the connected label names the read instead. */}
           <Button disabled={healthBusy} onPress={() => { void readHealth(); }}>
-            {healthBusy ? 'Reading Apple Health' : healthOn ? 'Read Apple Health now' : 'Read my weight from Apple Health'}
+            {healthBusy ? 'Reading Apple Health' : healthOn ? 'Read Apple Health now' : 'Continue'}
           </Button>
           {healthOn ? (
             <>
