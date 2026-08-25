@@ -11,11 +11,22 @@
 - `AGENTS.md` is imported above, so it loads in full at launch. The two files share one
   200-line budget. Before you add a line to either, apply the keep-or-cut test in
   `docs/agent-docs.md`.
+- When you propose or discuss a new product feature, mock the UX end to end — the entry
+  point, every tap, and each surface where the result appears. Never show a single
+  isolated screen.
+
+## Notification voice
+
+- Title: two or three words plus one trailing emoji — "It's time 💪", "Almost time ⏰".
+- Body: one short sentence, second person, at most one comma, ends with a period —
+  "Your scheduled shot is ready to log."
+- No app name and no medication name on the lock screen. The dose the user set may appear.
+- State and invite. Never urge, guilt, or advise.
 
 ## iOS builds: local only
 
-- Build locally. NEVER queue an EAS cloud build (`eas build` without `--local`) unless
-  the user explicitly asks for one in the current conversation — the quota is paid.
+- The policy line ("build locally, never queue a cloud build") is in `AGENTS.md`, stated
+  once for every tool. This section holds only the Claude-side toolchain detail.
 - Toolchain state (Aug 2026): Xcode 26.6 works end to end. After any Xcode upgrade,
   three things must happen before builds work: the user accepts the license
   (`sudo xcodebuild -license accept`), the iOS platform downloads
