@@ -74,6 +74,12 @@ const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 interface TodayLevelChartProps {
   width: number;
+  /**
+   * How tall the curve is drawn. Today's own hero height by default. The paywall
+   * passes a shorter one, because the strip there sits above a benefit list and
+   * a pricing block rather than above a feed.
+   */
+  height?: number;
   color: string;
   series: LevelSeries;
   fromMs: number;
@@ -123,6 +129,7 @@ const EMPTY_SHAPE: CurveShape = {
 
 export function TodayLevelChart({
   width,
+  height = HERO_CHART_HEIGHT,
   color,
   series,
   fromMs,
@@ -138,7 +145,6 @@ export function TodayLevelChart({
   logToken,
 }: TodayLevelChartProps) {
   const reduced = useReducedMotion();
-  const height = HERO_CHART_HEIGHT;
   const baseY = height - BASELINE_INSET;
   const chipWidth = value !== null ? VALUE_CHIP_WIDTH : LOCK_CHIP_WIDTH;
 

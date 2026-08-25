@@ -29,6 +29,24 @@ const POSTHOG_HOST = 'https://us.i.posthog.com';
 export interface AnalyticsEvents {
   /** One per onboarding screen. `step` is the route name, never a user value. */
   onboarding_step_viewed: { step: string };
+  /**
+   * Where a new user says they found Poke. A channel id off the closed list
+   * below and nothing else, so nothing a person typed can reach the event. It
+   * is the one thing the App Store's own numbers cannot say, and it says
+   * nothing about anybody's treatment. `FOUND_OPTIONS` in
+   * `src/stores/onboarding.ts` draws its rows from these ids.
+   */
+  onboarding_channel_picked: {
+    channel:
+      | 'app_store'
+      | 'tiktok'
+      | 'instagram'
+      | 'youtube'
+      | 'reddit'
+      | 'creator'
+      | 'friend'
+      | 'other';
+  };
   /** Setup finished and the app opened. */
   onboarding_completed: undefined;
   /** Apple Health import turned on, from setup or from the profile tab. */

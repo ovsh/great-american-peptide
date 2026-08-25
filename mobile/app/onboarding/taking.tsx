@@ -3,13 +3,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { TextInput } from 'react-native';
 import { X } from 'lucide-react-native';
 
-import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { MarkChip } from '@/components/EstimateMark';
 import { Input } from '@/components/Input';
-import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
+import { SelectionCard } from '@/components/OnboardingScreen';
+import { OnboardingStep } from '@/components/OnboardingStep';
 import { Text } from '@/components/Text';
-import { useOnboardingTransition } from '@/components/onboardingTransition';
 import {
   AddActionCard,
   FilterRail,
@@ -31,7 +30,6 @@ import {
 import {
   isCustomMedicationId,
   medicationDisplayName,
-  onboardingTotalSteps,
   useOnboardingStore,
 } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
@@ -43,7 +41,6 @@ export default function TakingScreen() {
   const toggleMedication = useOnboardingStore((state) => state.toggleMedication);
   const addCustomMedication = useOnboardingStore((state) => state.addCustomMedication);
   const prepareSchedules = useOnboardingStore((state) => state.prepareSchedules);
-  const transition = useOnboardingTransition();
   const catalog = usePresetCatalog();
   const searchRef = useRef<TextInput>(null);
 
@@ -70,11 +67,8 @@ export default function TakingScreen() {
   };
 
   return (
-    <OnboardingScreen
-      step={2}
-      totalSteps={onboardingTotalSteps(journeyStage)}
-      backHref="/onboarding/journey"
-      transition={transition}
+    <OnboardingStep
+      step="taking"
       // The wording follows the answer on the previous screen, the way the
       // recording's does. Asking someone who has not started yet what they are
       // "taking" is the small wrong note that makes a flow feel generic.
@@ -83,17 +77,19 @@ export default function TakingScreen() {
       // footer, so the last row reads as sliced by the button. The inset gives
       // the list the height of that bar to scroll clear into.
       contentStyle={styles.content}
-      footer={(
-        <Button
-          disabled={!canContinue}
-          onPress={() => {
-            prepareSchedules();
-            transition.go({ pathname: '/onboarding/schedule/[index]', params: { index: '0' } });
-          }}
-        >
-          {medicationIds.length > 1 ? `Set ${medicationIds.length} schedules` : 'Set the schedule'}
-        </Button>
-      )}
+      canContinue={canContinue}
+      // The label counts the picks, because the button leads into one screen per
+      // medication and the user should know that before the first one opens.
+      continueLabel={
+        medicationIds.length > 1 ? `Set ${medicationIds.length} schedules` : 'Set the schedule'
+      }
+      // The draft schedules have to exist before the first schedule screen
+      // reads one. `onboardingNextHref` sends the run to schedule zero from
+      // here, so this screen no longer names that route itself.
+      onContinue={(advance) => {
+        prepareSchedules();
+        advance();
+      }}
     >
       <Input
         ref={searchRef}
@@ -183,7 +179,7 @@ export default function TakingScreen() {
       {catalog.filter === 'blend' && !catalog.hasQuery && !customSelected ? (
         <Text variant="small" color={colors.inkSubtle}>{NO_CURVE_NOTE}</Text>
       ) : null}
-    </OnboardingScreen>
+    </OnboardingStep>
   );
 }
 

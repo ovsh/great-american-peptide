@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { Activity, Check, FileDown, Layers, X, type LucideIcon } from 'lucide-react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Check, X } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -15,28 +15,32 @@ import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { safeBack } from '@/utils/nav';
 
-// The hero draws the level, so the list no longer names it. What is left is the
-// three things the drawing cannot show, one line each, in the order a user
-// meets them.
-const BENEFITS: readonly Benefit[] = [
-  {
-    icon: Activity,
-    title: 'Exact numbers and progress charts',
-  },
-  {
-    icon: Layers,
-    title: 'Unlimited medications',
-  },
-  {
-    icon: FileDown,
-    title: 'Export your whole log as a CSV file',
-  },
-];
+/**
+ * The screen setup ends on. `onboarding/plan.tsx` sends the user here before
+ * Today, so this source is the one that has nothing behind it to go back to.
+ */
+const FROM_ONBOARDING = 'onboarding_plan';
 
-interface Benefit {
-  icon: LucideIcon;
-  title: string;
-}
+/**
+ * What a subscription unlocks, one line per lock that exists in the code today.
+ *
+ * Every claim is checkable:
+ *   1. `today-level-chart.tsx` draws the shape and holds the estimate back, and
+ *      `app/reports/level.tsx` puts the same reading behind `ProLock`.
+ *   2. `progress-journey-card.tsx` reads `locked: !pro && hasChange` and shows
+ *      the "Unlock your numbers" pill in place of the total.
+ *   3. `FREE_MEDICATION_LIMIT` in `repositories/medications.ts` is 2, and Pro
+ *      has no ceiling at all.
+ *   4. `runExport` in `app/(tabs)/profile.tsx` opens this screen for a free user.
+ *
+ * Do not add a fifth line without a fifth lock behind it.
+ */
+const BENEFITS: readonly string[] = [
+  'See the exact number on every level curve',
+  'Read your total weight change on Progress',
+  'Track every medication you take',
+  'Export your whole log as a CSV file',
+];
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -76,9 +80,16 @@ export default function PaywallScreen() {
   const action = ctaAction(canSell, storeReady, offeringState, purchasing);
   const message = storeMessage(canSell, offeringState, plan.pkg !== null);
 
-  const dismiss = () => {
+  // Setup ends here, so there is no screen under this one: the onboarding stack
+  // was replaced by the offer. Every way out of it therefore names Today
+  // instead of going back to a route that is gone. Every other caller pushed
+  // this screen over its own, and that screen is where a close belongs.
+  const fromOnboarding = source === FROM_ONBOARDING;
+
+  const leave = () => {
     clearError();
-    safeBack('/');
+    if (fromOnboarding) router.replace('/');
+    else safeBack('/');
   };
 
   const confirm = async () => {
@@ -87,7 +98,7 @@ export default function PaywallScreen() {
     const outcome = await buy(plan.pkg);
     if (outcome.kind === 'purchased') {
       track('purchase_completed', { plan: plan.id === 'annual' ? 'yearly' : 'monthly' });
-      dismiss();
+      leave();
     }
   };
 
@@ -100,12 +111,12 @@ export default function PaywallScreen() {
       loadOffering().catch(() => {});
       return;
     }
-    if (action === 'close') dismiss();
+    if (action === 'close') leave();
   };
 
   const tryRestore = async () => {
     const outcome = await restore();
-    if (outcome === 'restored') dismiss();
+    if (outcome === 'restored') leave();
   };
 
   return (
@@ -113,8 +124,8 @@ export default function PaywallScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close"
-          onPress={dismiss}
+          accessibilityLabel={fromOnboarding ? 'Close and go to Today' : 'Close'}
+          onPress={leave}
           hitSlop={12}
           style={styles.closeButton}
         >
@@ -138,29 +149,22 @@ export default function PaywallScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <View style={styles.hero}>
-            <View style={styles.badge}>
-              <Text variant="caption" color={colors.accent}>POKE PRO</Text>
-            </View>
-            <Text variant="h1">Your estimated level, day by day</Text>
-            <Text color={colors.inkMuted}>
-              Poke draws the curve from the shots you log.
-            </Text>
-          </View>
+          <Text variant="h1">Unlock Poke Pro and see your whole plan</Text>
 
-          <PaywallHero />
+          {/* The proof, as a strip. It is the user's own curve, drawn free: the
+              shape without the number the list below sells. */}
+          <PaywallHero compact />
 
           <View style={styles.benefits}>
-            {BENEFITS.map(({ icon: Icon, title }) => (
-              <View key={title} style={styles.benefitRow}>
-                <View style={styles.benefitIcon}>
-                  <Icon size={20} color={colors.accent} strokeWidth={2} />
+            {BENEFITS.map((line) => (
+              <View key={line} style={styles.benefitRow}>
+                <View style={styles.benefitCheck}>
+                  <Check size={14} strokeWidth={3} color={colors.successDeep} />
                 </View>
-                <Text variant="bodyStrong" style={styles.benefitCopy}>{title}</Text>
+                <Text style={styles.benefitCopy}>{line}</Text>
               </View>
             ))}
           </View>
-
         </View>
       </ScrollView>
 
@@ -169,7 +173,7 @@ export default function PaywallScreen() {
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
         <View style={styles.plans}>
           {plans.map((option) => (
-            <PlanRow
+            <PlanCard
               key={option.id}
               option={option}
               selected={option.id === selected}
@@ -206,7 +210,7 @@ export default function PaywallScreen() {
   );
 }
 
-function PlanRow({
+function PlanCard({
   option,
   selected,
   onPress,
@@ -215,11 +219,17 @@ function PlanRow({
   selected: boolean;
   onPress: () => void;
 }) {
+  const note = planNote(option);
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${option.title}, ${option.priceLabel} ${option.cadenceLabel}`}
+      accessibilityLabel={[
+        option.title,
+        `${option.priceLabel} ${option.cadenceLabel}`,
+        note,
+        option.badge,
+      ].filter((part): part is string => Boolean(part)).join('. ')}
       onPress={onPress}
       style={({ pressed }) => [pressed && styles.pressed]}
     >
@@ -231,23 +241,22 @@ function PlanRow({
           {selected ? <Check size={13} strokeWidth={3} color={colors.inkInverse} /> : null}
         </View>
         <View style={styles.planCopy}>
-          <View style={styles.planTitleRow}>
-            <Text variant="bodyStrong">{option.title}</Text>
-            {option.badge ? (
-              <View style={styles.saveBadge}>
-                <Text variant="caption" color={colors.inkInverse}>{option.badge}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text variant="small" color={colors.inkMuted}>
-            {option.perMonthLabel ?? `${option.priceLabel} ${option.cadenceLabel}`}
-          </Text>
+          <Text variant="bodyStrong">{option.title}</Text>
+          <Text variant="small" color={colors.inkMuted}>{note}</Text>
         </View>
         <View style={styles.planPrice}>
           <Text variant="bodyStrong">{option.priceLabel}</Text>
           <Text variant="caption" color={colors.inkSubtle}>{option.cadenceLabel}</Text>
         </View>
       </Card>
+      {/* On the card's own edge, so the saving reads as a tag on the plan and
+          not as a fourth thing inside it. It takes no touch: the card under it
+          is the target, and its label already carries this badge. */}
+      {option.badge ? (
+        <View style={styles.saveBadge} pointerEvents="none">
+          <Text variant="caption" color={colors.inkInverse}>{option.badge}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -265,6 +274,30 @@ function LegalLink({ label, url }: { label: string; url: string }) {
       <Text variant="caption" color={colors.inkMuted}>{label}</Text>
     </Pressable>
   );
+}
+
+/**
+ * The line under a plan's name.
+ *
+ * Every number in it is computed. `perMonthLabel` is the yearly price divided by
+ * twelve, and it is only ever shown next to "billed yearly", because the charge
+ * is one payment a year and the exact terms sit under the button. `trialLabel`
+ * is the store's own introductory period, so a trial that App Store Connect
+ * removes disappears from here too.
+ *
+ * The monthly plan carries no introductory offer today, so it says so. A blank
+ * line beside a plan that names a trial reads as an oversight, and a buyer who
+ * picks monthly has to learn there is no trial before the button, not after it.
+ */
+function planNote(option: PlanOption): string {
+  if (option.perMonthLabel) {
+    return option.trialLabel
+      ? `${option.trialLabel}, then ${option.perMonthLabel} billed yearly.`
+      : `${option.perMonthLabel} billed yearly.`;
+  }
+  return option.trialLabel
+    ? `${option.trialLabel}, then ${option.priceLabel} ${option.cadenceLabel}.`
+    : 'No free trial.';
 }
 
 /**
@@ -330,6 +363,9 @@ function storeMessage(
   return null;
 }
 
+/** The savings pill, sat half on and half off the card it belongs to. */
+const BADGE_HEIGHT = 22;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -362,18 +398,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 560,
     gap: spacing.xl,
-  },
-  hero: {
-    gap: spacing.sm,
     paddingTop: spacing.sm,
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
-    marginBottom: spacing.xs,
   },
   benefits: {
     gap: spacing.md,
@@ -381,12 +406,12 @@ const styles = StyleSheet.create({
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
-  benefitIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+  benefitCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
     backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -428,26 +453,27 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  planTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  saveBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    backgroundColor: colors.ink,
-  },
   planPrice: {
     alignItems: 'flex-end',
+  },
+  saveBadge: {
+    position: 'absolute',
+    top: -BADGE_HEIGHT / 2,
+    right: spacing.lg,
+    height: BADGE_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.ink,
   },
   footer: {
     width: '100%',
     maxWidth: 560 + spacing.screen * 2,
     alignSelf: 'center',
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.lg,
+    // Half the savings pill sits above the yearly card, so the footer opens far
+    // enough for it to clear the divider.
+    paddingTop: spacing.xl,
     gap: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.divider,

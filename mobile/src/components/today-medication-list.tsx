@@ -14,7 +14,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { GripVertical, Plus } from 'lucide-react-native';
+import { GripVertical, Pencil, Plus } from 'lucide-react-native';
 
 import { Text } from '@/components/Text';
 import { medicationColor } from '@/components/today-hero-card';
@@ -54,6 +54,13 @@ interface MedicationListProps {
   rows: readonly TodayMedicationSummary[];
   /** Every running medication, the hero's one included. Decides the add shape. */
   activeCount: number;
+  /**
+   * The first medication still waiting on its dose, when there is one. Setup
+   * lets the user save a medication without a dose, and that row stays archived
+   * until the dose lands, so with nothing running the slot names it rather than
+   * asking the user to add a medication they already added.
+   */
+  unfinished?: { id: string; name: string } | null;
   onSelect: (medicationId: string) => void;
   onReorder: (medicationIds: readonly string[]) => void;
   onDragChange: (dragging: boolean) => void;
@@ -76,6 +83,9 @@ export function TodayMedicationList(props: MedicationListProps) {
   // The slot replaces the whole card, so the drag machinery below is not just
   // unused in that state — it has nothing to hold.
   if (props.rows.length === 0 && props.activeCount < FREE_MEDICATION_LIMIT) {
+    if (props.activeCount === 0 && props.unfinished) {
+      return <FinishSlot medication={props.unfinished} />;
+    }
     return <AddSlot first={props.activeCount === 0} />;
   }
   return <MedicationCard {...props} />;
@@ -266,6 +276,39 @@ function AddSlot({ first }: { first: boolean }) {
         >
           <View style={styles.slotDisc}>
             <Plus size={14} strokeWidth={2.4} color={colors.successDeep} />
+          </View>
+          <Text color={colors.successDeep} style={styles.slotLabel}>{label}</Text>
+        </Pressable>
+      )}
+    </PressScale>
+  );
+}
+
+/**
+ * The slot when the user's only medication still waits on its dose.
+ *
+ * That row is archived until the dose lands, so without this the screen would
+ * say "Add your first medication" over a medication the user just named, which
+ * reads as Poke losing it. The slot names the row and leads to the editor that
+ * finishes it, in the same shape as the add slot so the screen keeps one
+ * affordance in one place.
+ */
+function FinishSlot({ medication }: { medication: { id: string; name: string } }) {
+  const label = `Finish setting up ${medication.name}`;
+
+  return (
+    <PressScale>
+      {(handlers) => (
+        <Pressable
+          testID="today-finish-slot"
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={() => router.push({ pathname: '/medications/new', params: { medicationId: medication.id } })}
+          style={styles.slot}
+          {...handlers}
+        >
+          <View style={styles.slotDisc}>
+            <Pencil size={14} strokeWidth={2.4} color={colors.successDeep} />
           </View>
           <Text color={colors.successDeep} style={styles.slotLabel}>{label}</Text>
         </Pressable>
@@ -515,8 +558,12 @@ function rowChip(summary: TodayMedicationSummary): {
           spoken: `next shot ${format(dose.scheduledAt, 'EEEE, MMMM d')}`,
           tone: 'muted',
         };
+    // "No schedule" and never "Manual" or "Custom": a user who pressed the
+    // setup hatch chose neither word, and the chip reads back a state rather
+    // than a mode. The same row covers an as-needed preset, which also has no
+    // expected shot.
     case 'unscheduled':
-      return { label: 'Manual', spoken: 'no schedule', tone: 'muted' };
+      return { label: 'No schedule', spoken: 'no schedule', tone: 'muted' };
     default: {
       const exhaustive: never = dose;
       return exhaustive;

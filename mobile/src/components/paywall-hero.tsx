@@ -24,6 +24,17 @@ import { colors, elevation, radius, spacing } from '@/theme';
 const SHOT_LIMIT = 500;
 /** The paywall's content column, so the chart is drawn as wide as the card holding it. */
 const CONTENT_WIDTH = 560;
+/**
+ * The strip height, when the paywall asks for one.
+ *
+ * The offer now carries a headline, four benefit lines and a pricing block, so
+ * the proof has to be a strip rather than a hero. The curve keeps its whole
+ * window at this height: `TodayLevelChart` scales the level to the box it is
+ * given, so a shorter box is a shorter curve and never a cropped one.
+ */
+const STRIP_CHART_HEIGHT = 120;
+/** The gap the chart's own arrival curtain needs above it, inside the card. */
+const CHART_TOP_INSET = 6;
 
 /**
  * The paywall's hero: the user's own estimated level curve.
@@ -36,6 +47,11 @@ const CONTENT_WIDTH = 560;
  * A user who has logged nothing has no curve, and Poke never draws a curve out
  * of numbers nobody entered. That state gets the onboarding half-life drawing
  * instead, which is a picture of what a level is and states no reading.
+ *
+ * `compact` draws the same curve as a strip. The paywall asks for it, because
+ * the offer has to hold a headline, four benefit lines and a pricing block on
+ * one phone screen. The drawing has no compact form: it is a fixed scene, and
+ * the user who sees it is the one with no curve to shrink.
  */
 
 /** What the hero found to draw. `null` while the read is still running. */
@@ -43,9 +59,10 @@ type Hero =
   | { kind: 'curve'; medication: MedicationRow; level: LevelSeries; fromMs: number; toMs: number; nowMs: number }
   | { kind: 'none' };
 
-export function PaywallHero() {
+export function PaywallHero({ compact = false }: { compact?: boolean }) {
   const { width: windowWidth } = useWindowDimensions();
   const [hero, setHero] = useState<Hero | null>(null);
+  const chartHeight = compact ? STRIP_CHART_HEIGHT : HERO_CHART_HEIGHT;
 
   useEffect(() => {
     let live = true;
@@ -61,7 +78,7 @@ export function PaywallHero() {
     };
   }, []);
 
-  if (hero === null) return <View style={styles.placeholder} />;
+  if (hero === null) return <View style={{ height: chartHeight }} />;
 
   if (hero.kind === 'none') {
     return (
@@ -78,16 +95,25 @@ export function PaywallHero() {
   // surface colour, so it has to sit on a surface.
   const chartWidth = Math.max(0, Math.min(windowWidth - spacing.screen * 2, CONTENT_WIDTH));
 
+  const range = `${format(hero.fromMs, 'MMM d')} to today`;
+
   return (
     <View style={styles.shadow}>
-      <View style={styles.clip}>
-        <View style={styles.header}>
+      <View style={[styles.clip, compact && styles.clipCompact]}>
+        {/* Compact puts the name and the range on one row. The strip has to give
+            its height to the curve, and a range that costs a whole line of its
+            own is the first thing a strip cannot afford. */}
+        <View style={[styles.header, compact && styles.headerCompact]}>
           <View style={[styles.dot, { backgroundColor: color }]} />
           <Text variant="smallStrong" numberOfLines={1} style={styles.name}>{medication.name}</Text>
+          {compact ? (
+            <Text variant="caption" color={colors.inkSubtle}>{range}</Text>
+          ) : null}
         </View>
-        <View style={styles.chartBox}>
+        <View style={[styles.chartBox, { height: chartHeight + CHART_TOP_INSET }]}>
           <TodayLevelChart
             width={chartWidth}
+            height={chartHeight}
             color={color}
             series={hero.level}
             fromMs={hero.fromMs}
@@ -103,9 +129,9 @@ export function PaywallHero() {
             logToken={0}
           />
         </View>
-        <Text variant="caption" color={colors.inkSubtle} style={styles.axis}>
-          {`${format(hero.fromMs, 'MMM d')} to today`}
-        </Text>
+        {compact ? null : (
+          <Text variant="caption" color={colors.inkSubtle} style={styles.axis}>{range}</Text>
+        )}
       </View>
     </View>
   );
@@ -153,9 +179,6 @@ async function loadHero(): Promise<Hero> {
 }
 
 const styles = StyleSheet.create({
-  placeholder: {
-    height: HERO_CHART_HEIGHT,
-  },
   drawing: {
     alignItems: 'center',
   },
@@ -168,12 +191,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
   },
+  // The axis line is gone in compact, so the card closes on its own padding.
+  clipCompact: {
+    paddingBottom: spacing.sm,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+  },
+  headerCompact: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   dot: {
     width: 8,
@@ -184,8 +215,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chartBox: {
-    height: HERO_CHART_HEIGHT + 6,
-    paddingTop: 6,
+    paddingTop: CHART_TOP_INSET,
   },
   axis: {
     paddingHorizontal: spacing.xl,

@@ -6,9 +6,9 @@ import { track } from '@/services/analytics';
 import { colors } from '@/theme';
 
 export default function OnboardingLayout() {
-  // One place for all 25 steps. Segments are route patterns, so a dynamic step
-  // reads as `schedule/[index]` and no answer a person typed can reach the
-  // event.
+  // One place for every step, however many the answers leave in the run.
+  // Segments are route patterns, so a dynamic step reads as
+  // `setup/[index]/vial` and no answer a person typed can reach the event.
   const segments = useSegments() as readonly string[];
   const step = segments.slice(segments.indexOf('onboarding') + 1).join('/') || 'index';
 

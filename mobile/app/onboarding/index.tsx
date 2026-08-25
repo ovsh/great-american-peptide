@@ -1,20 +1,28 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated as RNAnimated, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
+import {
+  Animated as RNAnimated,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Info, ShieldCheck, Star } from 'lucide-react-native';
+import { Info } from 'lucide-react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
-import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
 import { WelcomeLevelCurve } from '@/components/welcome-level-curve';
+import { WelcomePlanArt } from '@/components/welcome-plan-art';
+import { WelcomeSyringeArt } from '@/components/welcome-syringe-art';
 import {
   colors,
   easing,
@@ -23,57 +31,66 @@ import {
   radius,
   rise,
   spacing,
+  text,
   timeTo,
   welcomeBeats,
 } from '@/theme';
-
-/**
- * Which card sits between the curve and the button.
- *
- * `trust` is what ships. It is the one claim Poke can make from its own
- * architecture and check by reading its own code: there is no account and there
- * is no network call.
- *
- * `tester` is the shape the card would take once real beta feedback exists. It
- * is inert until then — see `TESTER_QUOTE` — and switching this constant on its
- * own changes nothing on screen.
- *
- * Poke never renders an App Store rating, a rating count, or a review it did not
- * receive. There is no variant of this screen that does.
- */
-type WelcomeProof = 'trust' | 'tester';
-const WELCOME_PROOF: WelcomeProof = 'trust';
-
-/**
- * These two may only ever be filled with a real, attributable quote from a real
- * beta tester who agreed to be quoted, together with the handle that tester
- * chose. Not a paraphrase, not a composite, not something written to sound like
- * one. While either is empty the `tester` variant renders the `trust` card
- * instead, so an unfinished edit cannot ship a fabricated review by accident.
- *
- * The five stars belong to the quoted tester. They are not a store rating and
- * they must never be presented as an average.
- */
-const TESTER_QUOTE: string = '';
-const TESTER_HANDLE: string = '';
 
 /** The line Poke may never drop, wherever it puts it. */
 const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisions.';
 
 /**
- * The poster plays once per cold run of the app. The privacy screen's back
+ * Poke never renders an App Store rating, a rating count, or a review it did not
+ * receive. There is no variant of this screen that does. The only proof on a
+ * first run is the way the app is built, and that is the line under the button.
+ */
+const TRUST_LINE = 'No account. Nothing leaves this phone.';
+
+const SLIDE_COUNT = 3;
+
+/**
+ * How far down its own box the curve's tallest peak sits.
+ *
+ * The poster's own proportion is a little under half way, because there the
+ * headline lay on top of the canvas and the curve had to keep under the words.
+ * Here the words sit above the box and the whole of it belongs to the picture,
+ * so the curve climbs and leaves only the headroom its top pin needs.
+ */
+const CURVE_PEAK_TOP = 0.3;
+
+/**
+ * How long one slide holds before the pager moves on. Long enough to read a
+ * headline and a sentence, and short enough that all three land before a thumb
+ * reaches the button.
+ */
+const SLIDE_HOLD_MS = 4000;
+
+/**
+ * The poster plays once per cold run of the app. The first question's back
  * chevron replaces this route, so without this flag every step backwards would
  * redraw the curve from nothing and the entrance would become a loop.
  */
 let arrived = false;
 
 /**
- * Screen zero: what Poke is, in one image and two lines.
+ * Set by the first touch on the pager, and never cleared. "Stops for good" has
+ * to outlive the screen: a user who took the pager over, walked to the first
+ * question and stepped back would otherwise find it moving on its own again.
+ */
+let interacted = false;
+
+/**
+ * Screen zero: what Poke is, in three pictures and three sentences.
  *
- * The image is the estimated level curve, drawing itself. It is the one picture
- * only this category owns, and it says what the app gives back before a word is
- * read. The headline sits on top of the canvas rather than above it, in the
- * space the curve's own peaks leave clear.
+ * Each slide makes one claim and shows the thing that backs it. The order is the
+ * order the app earns them in: the level curve is what the user gets back, the
+ * syringe math is what Poke does for them on the way, and the plan is what keeps
+ * the run going.
+ *
+ * The button and the line under it do not belong to any slide. The primary
+ * action is a permanent slot, so it holds still while the pictures move, and the
+ * one claim Poke can make from its own architecture sits under it the whole
+ * time.
  *
  * The button is not `Log my first shot`, which copy.md would otherwise ask for,
  * because this button does not log a shot: the next screen is a promise about
@@ -85,9 +102,10 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const { width } = useWindowDimensions();
-  const [hero, setHero] = useState({ width: 0, height: 0 });
-  const [headFoot, setHeadFoot] = useState(0);
+  const [page, setPage] = useState({ width: 0, height: 0 });
+  const [slide, setSlide] = useState(0);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const pager = useRef<ScrollView>(null);
 
   const first = useRef<boolean | null>(null);
   if (first.current === null) {
@@ -96,16 +114,57 @@ export default function WelcomeScreen() {
   }
   const play = first.current && !reduced;
 
-  // The mock's 45 px is a comp on a fixed 393 pt canvas. Two lines of a headline
-  // this size have to fit the narrowest phone Poke supports without hyphenating,
-  // so the size is read off the width. "and peptide shots." is the longer line
-  // and it governs: about nine and a half ems of Inter at this weight.
-  const headlineSize = Math.round(clamp((width - spacing.screen * 2) / 9.4, 27, 38));
-  const headlineLine = Math.round(headlineSize * 1.12);
+  // Seeded from the module flag, so a screen the user has already taken over
+  // comes back still.
+  const [autoplay, setAutoplay] = useState(!interacted);
 
-  const proof = WELCOME_PROOF === 'tester' && TESTER_QUOTE !== '' && TESTER_HANDLE !== ''
-    ? 'tester'
-    : 'trust';
+  // A headline of this weight has to fit the narrowest phone Poke supports over
+  // two lines without hyphenating, so the size is read off the width rather than
+  // fixed. "Poke does the syringe math." is the longest of the three.
+  const headlineSize = Math.round(clamp((width - spacing.screen * 2) / 12.5, 24, 32));
+  const headlineLine = Math.round(headlineSize * 1.16);
+
+  // One timer per slide rather than one repeating interval: the hop resets the
+  // clock, so a slide the user swiped to gets its whole turn.
+  //
+  // The hop does not set the slide itself. The scroll it starts is what moves
+  // the dots, the same way a finger does, and a hop that lit the next dot before
+  // the scroll had crossed the half way mark would light it, drop it, and light
+  // it again.
+  useEffect(() => {
+    if (!autoplay || reduced || page.width <= 0) return;
+    if (slide >= SLIDE_COUNT - 1) return;
+    const timer = setTimeout(() => {
+      pager.current?.scrollTo({ x: (slide + 1) * page.width, animated: true });
+    }, SLIDE_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [autoplay, page.width, reduced, slide]);
+
+  const takeOver = () => {
+    if (interacted) return;
+    interacted = true;
+    setAutoplay(false);
+  };
+
+  // Read the offset on every scroll frame rather than on momentum end. iOS fires
+  // no momentum end when the finger drags a page across and lets go without a
+  // flick, and dots that miss that gesture point at the wrong slide.
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (page.width <= 0) return;
+    const raw = Math.round(event.nativeEvent.contentOffset.x / page.width);
+    const next = clamp(raw, 0, SLIDE_COUNT - 1);
+    setSlide((current) => (current === next ? current : next));
+  };
+
+  // A page is sized rather than stretched. A child of a horizontal scroll view
+  // sits on the main axis, so `flex: 1` there would fight the width instead of
+  // filling the height.
+  const onPagerLayout = (event: LayoutChangeEvent) => {
+    const { width: measured, height } = event.nativeEvent.layout;
+    setPage((current) => (current.width === measured && current.height === height
+      ? current
+      : { width: measured, height }));
+  };
 
   return (
     <View testID="welcome-screen" style={styles.root}>
@@ -115,90 +174,102 @@ export default function WelcomeScreen() {
           <View style={styles.wordmarkDot} />
         </View>
 
-        <View
-          style={styles.hero}
-          onLayout={(event) => {
-            const { width: w, height: h } = event.nativeEvent.layout;
-            setHero((current) => (current.width === w && current.height === h ? current : { width: w, height: h }));
-          }}
-        >
-          {/* The headline comes first so a screen reader reads the words before
-              the picture, and sits on top through `zIndex` rather than through
-              tree order, which is what the mock's own z-index does. */}
-          <View
-            testID="welcome-headline"
-            style={styles.head}
-            onLayout={(event) => {
-              const foot = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
-              setHeadFoot((current) => (current === foot ? current : foot));
-            }}
+        <View style={styles.pagerBox} onLayout={onPagerLayout} onTouchStart={takeOver}>
+          <ScrollView
+            testID="welcome-pager"
+            ref={pager}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={onScroll}
+            onScrollBeginDrag={takeOver}
           >
-            <HeadlineLine
-              delay={welcomeBeats.headline}
+            <Slide
+              testID="welcome-slide-level"
+              headline="See your level between shots."
+              body="Log a shot in two taps. Poke draws the rest."
+              page={page}
+              headlineSize={headlineSize}
+              headlineLine={headlineLine}
               play={play}
-              size={headlineSize}
-              lineHeight={headlineLine}
+              artLabel="An estimated level curve climbing over four weekly shots."
+              note={
+                <Pressable
+                  testID="welcome-estimate-info"
+                  accessibilityRole="button"
+                  accessibilityLabel="About this estimate"
+                  hitSlop={10}
+                  onPress={() => setAboutOpen(true)}
+                  style={({ pressed }) => [styles.noteRow, pressed && styles.pressed]}
+                >
+                  <View style={styles.infoDot}>
+                    <Info size={12} color={colors.inkMuted} />
+                  </View>
+                  <Text variant="caption" color={colors.inkMuted}>Estimated level</Text>
+                </Pressable>
+              }
             >
-              Track your GLP-1
-            </HeadlineLine>
-            <HeadlineLine
-              delay={welcomeBeats.headline + welcomeBeats.headlineStep}
-              play={play}
-              size={headlineSize}
-              lineHeight={headlineLine}
-              color={colors.successDeep}
-            >
-              and peptide shots.
-            </HeadlineLine>
-            <Enter delay={welcomeBeats.support} play={play} travel={rise.line}>
-              <Text color={colors.inkMuted} style={styles.support}>
-                Log each injection. Poke keeps the dose, the day, the site, and your estimated level.
-              </Text>
-            </Enter>
-          </View>
+              {(box) => (
+                <View testID="welcome-curve" style={styles.fill}>
+                  <WelcomeLevelCurve
+                    width={box.width}
+                    height={box.height}
+                    peakTop={box.height * CURVE_PEAK_TOP}
+                    play={play}
+                  />
+                </View>
+              )}
+            </Slide>
 
-          <View
-            testID="welcome-curve"
-            style={styles.canvas}
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel="An estimated level curve climbing over four weekly shots."
-          >
-            <WelcomeLevelCurve
-              width={hero.width}
-              height={hero.height}
-              peakTop={headFoot + spacing.md}
-              play={play}
-            />
-          </View>
+            <Slide
+              testID="welcome-slide-syringe"
+              headline="Poke does the syringe math."
+              body="Type your vial and your water. Poke shows the draw."
+              page={page}
+              headlineSize={headlineSize}
+              headlineLine={headlineLine}
+              artLabel="A syringe with the draw mark lit, beside the vial it came from."
+            >
+              {(box) => <WelcomeSyringeArt width={box.width} height={box.height} />}
+            </Slide>
+
+            <Slide
+              testID="welcome-slide-plan"
+              headline="A plan that reminds you."
+              body="Your next shot sits on the plan, and the reminder stays private."
+              page={page}
+              headlineSize={headlineSize}
+              headlineLine={headlineLine}
+              artLabel="A plan card with the next shot marked, under a reminder that carries no name."
+            >
+              {(box) => <WelcomePlanArt width={box.width} height={box.height} />}
+            </Slide>
+          </ScrollView>
         </View>
 
-        {/* Legal copy does not move, so this row takes no delay and no travel. */}
-        <Pressable
-          testID="welcome-estimate-info"
-          accessibilityRole="button"
-          accessibilityLabel="About this estimate"
-          hitSlop={10}
-          onPress={() => setAboutOpen(true)}
-          style={({ pressed }) => [styles.captionRow, pressed && styles.pressed]}
+        <View
+          testID="welcome-dots"
+          style={styles.dots}
+          accessibilityRole="tablist"
+          accessibilityLabel={`Slide ${slide + 1} of ${SLIDE_COUNT}`}
         >
-          <View style={styles.infoDot}>
-            <Info size={12} color={colors.inkMuted} />
-          </View>
-          <Text variant="caption" color={colors.inkMuted}>Estimated level between shots</Text>
-        </Pressable>
-
-        <Enter delay={welcomeBeats.proof} play={play} travel={rise.card} style={styles.proofSlot}>
-          {proof === 'tester' ? <TesterCard /> : <TrustCard />}
-        </Enter>
+          {Array.from({ length: SLIDE_COUNT }, (_, index) => (
+            <View key={index} style={[styles.dot, index === slide && styles.dotActive]} />
+          ))}
+        </View>
       </RNAnimated.View>
 
-      {/* Outside the fading body: the primary action holds still through every
-          transition, exactly as it does on every other onboarding screen. */}
+      {/* Outside the fading body, and outside the pager: the primary action and
+          the claim under it hold still through every transition and every
+          slide, exactly as the button does on every other onboarding screen. */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
         <View testID="welcome-cta">
-          <Button onPress={() => transition.go('/onboarding/privacy')}>Start my shot log</Button>
+          <Button onPress={() => transition.go('/onboarding/sex')}>Start my shot log</Button>
         </View>
+        <Text testID="welcome-trust" variant="caption" color={colors.inkMuted} align="center" style={styles.trust}>
+          {TRUST_LINE}
+        </Text>
       </View>
 
       <BottomSheet
@@ -220,96 +291,92 @@ export default function WelcomeScreen() {
 }
 
 /**
- * What ships. No stars and no numbers, because the only proof Poke has on a
- * first run is the way it is built, and that is a sentence it can keep.
+ * One page of the pitch: two lines of words at the top, one picture under them.
+ *
+ * The words sit in a box tall enough for the longest of the three, so the
+ * pictures start at the same height on every slide and nothing jumps as the
+ * pager moves. The box is a floor rather than a fixed height, so a reader who
+ * has turned the system type up gets the whole sentence.
  */
-function TrustCard() {
-  return (
-    <View testID="welcome-proof">
-      <Card padding="lg" style={styles.proofCard}>
-        <View style={styles.proofBadge}>
-          <ShieldCheck size={20} color={colors.accent} />
-        </View>
-        <Text variant="smallStrong" style={styles.proofLabel}>
-          No account. Nothing leaves this phone.
-        </Text>
-      </Card>
-    </View>
-  );
-}
-
-/**
- * Unreachable until a real tester quote exists. Before it is ever switched on it
- * has to be read against the reviewer's checklist again: three stacked text
- * lines is a redesign trigger, and this card has them.
- */
-function TesterCard() {
-  return (
-    <View testID="welcome-proof">
-      <Card padding="lg" style={styles.testerCard}>
-        <View style={styles.testerHead}>
-          <View style={styles.stars} accessibilityElementsHidden importantForAccessibility="no">
-            {[0, 1, 2, 3, 4].map((index) => (
-              <Star key={index} size={14} color={colors.accent} fill={colors.accent} />
-            ))}
-          </View>
-          <Text variant="smallStrong">Early tester reviews</Text>
-        </View>
-        <Text variant="small">{TESTER_QUOTE}</Text>
-        <Text variant="caption" color={colors.inkMuted}>{TESTER_HANDLE}</Text>
-      </Card>
-    </View>
-  );
-}
-
-/**
- * One headline line rising out of its own clip. The clip is a still box and only
- * the text inside it moves, so this stays transform-only.
- */
-function HeadlineLine({
+function Slide({
+  testID,
+  headline,
+  body,
+  page,
+  headlineSize,
+  headlineLine,
+  artLabel,
+  note,
   children,
-  delay,
-  play,
-  size,
-  lineHeight,
-  color = colors.ink,
+  play = false,
 }: {
-  children: string;
-  delay: number;
-  play: boolean;
-  size: number;
-  lineHeight: number;
-  color?: string;
+  testID: string;
+  headline: string;
+  body: string;
+  page: { width: number; height: number };
+  headlineSize: number;
+  headlineLine: number;
+  artLabel: string;
+  note?: ReactNode;
+  children: (box: { width: number; height: number }) => ReactNode;
+  play?: boolean;
 }) {
-  const shift = useSharedValue(play ? 1 : 0);
-
-  useEffect(() => {
-    shift.value = timeTo(0, {
-      duration: motion.slow,
-      easing: easing.out,
-      delay,
-      reduced: !play,
-    });
-  }, [delay, play, shift]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: shift.value * (lineHeight + HEADLINE_CLIP_SLACK) }],
-  }));
-
   return (
-    <View style={[styles.headlineClip, { height: lineHeight + HEADLINE_CLIP_SLACK }]}>
-      <Animated.View style={style}>
+    <View testID={testID} style={[styles.slide, { width: page.width, height: page.height }]}>
+      <Enter delay={welcomeBeats.headline} play={play} travel={rise.line}>
         <Text
-          numberOfLines={1}
-          color={color}
           style={[
             styles.headline,
-            { fontSize: size, lineHeight, letterSpacing: -size * 0.042 },
+            {
+              fontSize: headlineSize,
+              lineHeight: headlineLine,
+              letterSpacing: -headlineSize * 0.032,
+              minHeight: headlineLine * 2,
+            },
           ]}
         >
-          {children}
+          {headline}
         </Text>
-      </Animated.View>
+      </Enter>
+      <Enter delay={welcomeBeats.support} play={play} travel={rise.line}>
+        <Text color={colors.inkMuted} style={styles.support}>{body}</Text>
+      </Enter>
+
+      <ArtBox label={artLabel}>{children}</ArtBox>
+      {/* Every slide reserves the row, whether or not it fills it, so the three
+          pictures stand in exactly the same box and none of them steps as the
+          pager moves. */}
+      <View style={styles.noteSlot}>{note}</View>
+    </View>
+  );
+}
+
+/**
+ * The picture's own box, measured. The level curve draws itself into whatever
+ * box it is given, and the two flat illustrations scale their `viewBox` into the
+ * same one, so all three read at the same size on the same phone.
+ */
+function ArtBox({
+  label,
+  children,
+}: {
+  label: string;
+  children: (box: { width: number; height: number }) => ReactNode;
+}) {
+  const [box, setBox] = useState({ width: 0, height: 0 });
+
+  return (
+    <View
+      style={styles.art}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={label}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setBox((current) => (current.width === width && current.height === height ? current : { width, height }));
+      }}
+    >
+      {children(box)}
     </View>
   );
 }
@@ -347,12 +414,15 @@ function Enter({
   return <Animated.View style={[style, animated]}>{children}</Animated.View>;
 }
 
-/** Room for the descenders of "your" and "peptide" inside the clip. */
-const HEADLINE_CLIP_SLACK = 4;
-
 function clamp(value: number, low: number, high: number): number {
   return Math.min(Math.max(value, low), high);
 }
+
+/** The size the onboarding pager already uses for the same row of dots. */
+const DOT_SIZE = spacing.sm;
+
+/** The row under the picture, reserved on every slide. One tap target tall. */
+const NOTE_HEIGHT = 28;
 
 const styles = StyleSheet.create({
   root: {
@@ -360,6 +430,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   body: {
+    flex: 1,
+  },
+  fill: {
     flex: 1,
   },
   wordmarkRow: {
@@ -382,41 +455,36 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 2,
   },
-  // The canvas and the words share this box. The curve's peaks stay under the
-  // support line, so the overlap is composition rather than collision.
-  hero: {
+  pagerBox: {
     flex: 1,
-    position: 'relative',
   },
-  canvas: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  head: {
-    position: 'absolute',
-    left: spacing.screen,
-    right: spacing.screen,
-    top: spacing.lg,
-    zIndex: 1,
-  },
-  headlineClip: {
-    overflow: 'hidden',
-    justifyContent: 'flex-start',
+  slide: {
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
   },
   headline: {
     fontFamily: fonts.sansSemiBold,
+    color: colors.ink,
   },
   support: {
     marginTop: spacing.md,
-    maxWidth: 300,
+    minHeight: text.body.lineHeight * 2,
+    maxWidth: 320,
   },
-  captionRow: {
+  art: {
+    flex: 1,
+    marginTop: spacing.md,
+  },
+  noteSlot: {
+    minHeight: NOTE_HEIGHT,
+    justifyContent: 'center',
+  },
+  noteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-end',
     gap: spacing.sm,
     minHeight: 28,
-    paddingHorizontal: spacing.screen,
   },
   infoDot: {
     width: 18,
@@ -430,42 +498,28 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
-  proofSlot: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-  },
-  proofCard: {
+  dots: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    alignSelf: 'center',
+    paddingTop: spacing.lg,
   },
-  proofBadge: {
-    width: 36,
-    height: 36,
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
     borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.borderStrong,
   },
-  proofLabel: {
-    flex: 1,
-  },
-  testerCard: {
-    gap: spacing.sm,
-  },
-  testerHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  stars: {
-    flexDirection: 'row',
-    gap: 2,
+  dotActive: {
+    backgroundColor: colors.accent,
   },
   footer: {
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.md,
     backgroundColor: colors.background,
+  },
+  trust: {
+    marginTop: spacing.md,
   },
   aboutBody: {
     gap: spacing.md,

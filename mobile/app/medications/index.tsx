@@ -36,7 +36,10 @@ const FREQ_LABEL: Record<string, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   twice_weekly: 'Twice weekly',
-  custom: 'Custom',
+  // `custom` with no value is how the schema spells "no schedule", and the two
+  // ways a row gets it are a deferred setup question and an as-needed preset.
+  // Neither user picked anything called Custom, so the card does not say it.
+  custom: 'No schedule',
 };
 
 /**
@@ -73,6 +76,19 @@ function doseLine(medication: MedicationRow): string {
   return map === null
     ? formatDose(medication.default_dose, medication.default_unit)
     : doseByDayLabel(map, medication.default_unit);
+}
+
+/**
+ * Whether the user has still to give this medication a dose.
+ *
+ * Setup lets them pass on the dose question and saves the medication anyway,
+ * and `default_dose` is `NOT NULL`, so the row carries a zero until they come
+ * back to it. A zero is not a dose, so the card says so in words and the row
+ * stays archived, which is what keeps the zero off Today and out of the
+ * reminder queue.
+ */
+function needsDose(medication: MedicationRow): boolean {
+  return !(medication.default_dose > 0);
 }
 
 export default function MedicationsScreen() {
@@ -243,10 +259,18 @@ export default function MedicationsScreen() {
                           ? <Pill tone="neutral">On break</Pill>
                           : <Pill tone="warning">Paused</Pill>
                       )}
-                      {m.status === 'archived' && <Pill tone="neutral">Archived</Pill>}
+                      {/* A medication that waits for its dose is not archived in
+                          the ordinary sense, so the pill names the real state. */}
+                      {m.status === 'archived' && (
+                        needsDose(m)
+                          ? <Pill tone="warning">Setup unfinished</Pill>
+                          : <Pill tone="neutral">Archived</Pill>
+                      )}
                     </View>
                     <Text variant="small" color={colors.inkMuted}>
-                      {doseLine(m)} {routeInLine(m.default_route)}
+                      {needsDose(m)
+                        ? 'Dose not set yet'
+                        : `${doseLine(m)} ${routeInLine(m.default_route)}`}
                     </Text>
                     <Text variant="caption" color={colors.inkSubtle}>
                       {freqLine(m)}
@@ -262,9 +286,24 @@ export default function MedicationsScreen() {
                   </View>
                 </View>
                 {/* An archived medication keeps two actions: Restore, and
-                    Delete when no shot names it. */}
+                    Delete when no shot names it. A medication that still waits
+                    for its dose takes the editor instead, because Restore alone
+                    would put a medication with no dose back on Today. Restore
+                    returns to the row once the dose is there. */}
                 <View style={styles.actions}>
                   {m.status === 'archived' ? (
+                    needsDose(m) ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Finish setting up ${m.name}`}
+                        onPress={() => router.push({ pathname: '/medications/new', params: { medicationId: m.id } })}
+                        hitSlop={6}
+                        style={styles.action}
+                      >
+                        <Pencil size={16} color={colors.ink} />
+                        <Text variant="caption" color={colors.ink}>Finish setup</Text>
+                      </Pressable>
+                    ) : (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Restore ${m.name}`}
@@ -275,6 +314,7 @@ export default function MedicationsScreen() {
                       <ArchiveRestore size={16} color={colors.ink} />
                       <Text variant="caption" color={colors.ink}>Restore</Text>
                     </Pressable>
+                    )
                   ) : (
                     <>
                       <Pressable

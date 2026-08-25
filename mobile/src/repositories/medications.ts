@@ -1,5 +1,5 @@
 import { getDb } from '../db/client';
-import type { MedicationRow } from '../db/types';
+import type { MedicationRow, VialForm } from '../db/types';
 import type { FrequencyKind, Route, Unit } from '../domain/peptides';
 import { newId } from '../utils/id';
 
@@ -32,6 +32,19 @@ export interface NewMedication {
    * `domain/doseByDay.ts`. Undefined and null both mean one dose every day.
    */
   doseByDay?: string | null;
+  /**
+   * The whole vial in milligrams, off the label. A packaging fact and not a
+   * dose. Undefined and null both mean the user has not said, which is also
+   * what a pen carries.
+   */
+  vialMg?: number | null;
+  /** `vial` or `pen`. Undefined and null both mean unknown, never vial. */
+  vialForm?: VialForm | null;
+  /**
+   * The water mixed into the vial, in millilitres, and the record of a mix the
+   * user made. Undefined and null both mean the user has not said.
+   */
+  diluentMl?: number | null;
   colorIndex: number;
 }
 
@@ -108,9 +121,9 @@ export async function createMedication(input: NewMedication): Promise<Medication
   const id = newId('med');
   await db.runAsync(
     `INSERT INTO medications
-      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, sort_order, cycle_days_on, cycle_days_off, cycle_started_at, composition, dose_by_day, created_at, updated_at)
+      (id, name, preset_id, default_dose, default_unit, default_route, frequency_kind, frequency_value, half_life_hours, tmax_hours, color_index, status, sort_order, cycle_days_on, cycle_days_off, cycle_started_at, composition, dose_by_day, vial_mg, vial_form, diluent_ml, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active',
-        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM medications), ?, ?, ?, ?, ?, ?, ?)`,
+        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM medications), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
@@ -130,6 +143,9 @@ export async function createMedication(input: NewMedication): Promise<Medication
       input.cycleDaysOn == null ? null : (input.cycleStartedAt ?? now),
       input.composition ?? null,
       input.doseByDay ?? null,
+      input.vialMg ?? null,
+      input.vialForm ?? null,
+      input.diluentMl ?? null,
       now,
       now,
     ],
@@ -151,6 +167,9 @@ export async function updateMedicationDefaults(
       cycle_days_on = ?, cycle_days_off = ?, cycle_started_at = ?,
       composition = CASE WHEN ? = 1 THEN ? ELSE composition END,
       dose_by_day = CASE WHEN ? = 1 THEN ? ELSE dose_by_day END,
+      vial_mg = CASE WHEN ? = 1 THEN ? ELSE vial_mg END,
+      vial_form = CASE WHEN ? = 1 THEN ? ELSE vial_form END,
+      diluent_ml = CASE WHEN ? = 1 THEN ? ELSE diluent_ml END,
       updated_at = ?
      WHERE id = ?`,
     [
@@ -177,6 +196,19 @@ export async function updateMedicationDefaults(
       // so undefined only comes from callers that never touch doses.
       input.doseByDay === undefined ? 0 : 1,
       input.doseByDay ?? null,
+      // The same keep-or-write split again. A caller that never asked about the
+      // vial leaves both columns alone, so a second pass through setup with the
+      // vial question deferred does not wipe a size the user gave the first
+      // time. Null is the user clearing it, and that writes.
+      input.vialMg === undefined ? 0 : 1,
+      input.vialMg ?? null,
+      input.vialForm === undefined ? 0 : 1,
+      input.vialForm ?? null,
+      // The same keep-or-write split once more. A caller that never asked about
+      // the mix leaves the column alone, so an editor that draws no water field
+      // cannot wipe the mix the setup run saved. Null is the user clearing it.
+      input.diluentMl === undefined ? 0 : 1,
+      input.diluentMl ?? null,
       Date.now(),
       id,
     ],

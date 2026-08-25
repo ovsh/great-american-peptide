@@ -428,3 +428,13 @@ function atLocalHourNextDay(at: number, hour: number): number {
   date.setHours(hour, 0, 0, 0);
   return date.getTime();
 }
+
+/**
+ * The shot-day banner's two strings.
+ *
+ * Onboarding paints this banner on a mock lock screen, so the two strings live
+ * here rather than being typed a second time on that screen. A preview that
+ * carried its own copy would drift the first time either string changed.
+ */
+export const SHOT_REMINDER_TITLE = "It's time 💪";
+export const SHOT_REMINDER_BODY = 'Your scheduled shot is ready to log.';

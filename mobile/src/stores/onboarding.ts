@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 import { create } from 'zustand';
 
-import type { ActivityLevel, GoalKind, JourneyStage, Sex } from '../db/types';
+import type { ExperienceLevel, GoalKind, JourneyStage, Sex, VialForm } from '../db/types';
 import { compositionDraft } from '../domain/blends';
 import {
   blendParts,
@@ -14,6 +14,7 @@ import {
 } from '../domain/peptides';
 import { WEEKDAY_OPTIONS, weekdayMask, type Weekday } from '../domain/scheduling';
 import { cmToIn, inToCm, kgToLb, lbToKg, type HeightUnit, type WeightUnit } from '../domain/units';
+import type { AnalyticsEvents } from '../services/analytics';
 
 // The ids that are not catalog presets. Each custom medication the user names
 // gets its own id, `custom:1`, `custom:2` and so on, so setup can hold as many
@@ -42,8 +43,8 @@ export type LastShotChoice = 'today' | 'yesterday' | 'this_week' | 'longer' | 'n
 // and the ones written for this screen said nothing the label had not already
 // said.
 export const JOURNEY_OPTIONS: readonly { id: JourneyStage; label: string }[] = [
-  { id: 'taking', label: "I'm already taking something" },
-  { id: 'starting', label: "I'm about to start" },
+  { id: 'taking', label: 'I am already taking something' },
+  { id: 'starting', label: 'I am about to start' },
 ];
 
 export const SEX_OPTIONS: readonly { id: Sex; label: string }[] = [
@@ -52,25 +53,46 @@ export const SEX_OPTIONS: readonly { id: Sex; label: string }[] = [
   { id: 'other', label: 'Prefer not to say' },
 ];
 
-export const ACTIVITY_OPTIONS: readonly { id: ActivityLevel; label: string; description: string }[] = [
-  { id: 'low', label: 'Mostly seated', description: 'Desk work and not much walking.' },
-  { id: 'light', label: 'Lightly active', description: 'A walk most days.' },
-  { id: 'active', label: 'Active', description: 'You train two or three times a week.' },
-  { id: 'very_active', label: 'Very active', description: 'You move nearly every day.' },
+/**
+ * The routing question, and the only answer that changes which screens run.
+ *
+ * The two labels on each row split the work: the title is the user talking
+ * about themselves, and the description is Poke saying what it will do about
+ * it. A user picking a level should see the consequence before they pick, so
+ * the descriptions name the teach beats `postScheduleOrder` adds or drops.
+ */
+export const EXPERIENCE_OPTIONS: readonly {
+  id: ExperienceLevel;
+  label: string;
+  description: string;
+}[] = [
+  { id: 'new', label: 'Brand new', description: 'Poke explains each step on the way.' },
+  { id: 'basics', label: 'I know the basics', description: 'Poke keeps the notes short.' },
+  { id: 'experienced', label: 'I have done this before', description: 'Poke skips the explanations.' },
 ];
 
-// These five are the user talking, not Poke, so they keep their contractions the
-// way `LAST_SHOT_OPTIONS` does. "No contractions" governs Poke's own voice, and a
-// person picking the line closest to true does not say "I have started before".
-// Every one of them is a sentence the user could say out loud about themselves.
-// The health option used to be the exception, a fragment about a clinician, and
-// it broke the read halfway down the list.
-export const MOTIVATION_OPTIONS: readonly { id: string; label: string }[] = [
-  { id: 'energy', label: 'I want my energy back' },
-  { id: 'health', label: 'I want a better number at my next appointment' },
-  { id: 'clothes', label: 'I want to feel right in my own clothes' },
-  { id: 'longevity', label: "I'm playing the long game" },
-  { id: 'consistency', label: "I've started before, and I want it to stick this time" },
+/**
+ * Where a user says they found Poke.
+ *
+ * The ids come from the analytics schema rather than the other way round,
+ * because the event is the only place this answer lands. Nothing on any screen
+ * reads it back, and no column holds it: attribution tells the owner which
+ * channel to spend on, and it tells the user nothing about their own treatment.
+ * A channel added here fails to compile until the event knows about it too.
+ */
+export type FoundChannel = AnalyticsEvents['onboarding_channel_picked']['channel'];
+
+// One tap each and no description line. Every label is the whole answer, and a
+// gloss under "TikTok" would tell nobody anything.
+export const FOUND_OPTIONS: readonly { id: FoundChannel; label: string }[] = [
+  { id: 'app_store', label: 'App Store search' },
+  { id: 'tiktok', label: 'TikTok' },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'reddit', label: 'Reddit' },
+  { id: 'creator', label: 'A creator or influencer' },
+  { id: 'friend', label: 'A friend or family member' },
+  { id: 'other', label: 'Something else' },
 ];
 
 export const LAST_SHOT_OPTIONS: readonly { id: LastShotChoice; label: string }[] = [
@@ -78,17 +100,55 @@ export const LAST_SHOT_OPTIONS: readonly { id: LastShotChoice; label: string }[]
   { id: 'yesterday', label: 'Yesterday' },
   { id: 'this_week', label: 'Earlier this week' },
   { id: 'longer', label: 'Longer ago than that' },
-  { id: 'none', label: "I haven't had one yet" },
+  { id: 'none', label: 'I have not had one yet' },
 ];
+
+/**
+ * What every goal is called, including the two the screen no longer offers.
+ *
+ * A row saved by an older build can hold `performance` or `other`, and a label
+ * lookup that misses one of them draws an empty line where the user's own
+ * answer should be. Every reader goes through `goalLabel` for that reason.
+ */
+const GOAL_LABELS: Record<GoalKind, string> = {
+  weight_loss: 'Weight loss',
+  recovery: 'Muscle and recovery',
+  sleep: 'Better sleep',
+  focus: 'Focus',
+  healing: 'Healing',
+  longevity: 'Overall health',
+  performance: 'Performance',
+  other: 'Other',
+};
+
+/** What Poke calls a stored goal. Covers the ids the screen retired. */
+export function goalLabel(kind: GoalKind): string {
+  return GOAL_LABELS[kind];
+}
+
+/** The ids the goal screen offers, in the order it draws them. */
+const GOAL_IDS = [
+  'weight_loss',
+  'recovery',
+  'sleep',
+  'focus',
+  'healing',
+  'longevity',
+] as const satisfies readonly GoalKind[];
+
+/**
+ * A goal the screen still offers.
+ *
+ * Narrower than `GoalKind`, which also holds the two ids only old rows carry.
+ * The screen keys its icons on this, so a goal added to the list above fails to
+ * compile until it has a picture.
+ */
+export type GoalOptionId = (typeof GOAL_IDS)[number];
 
 // Labels only. Only the label is ever shown again, on the plan card, and a
 // four-word gloss under `Weight loss` tells nobody anything.
-export const GOAL_OPTIONS: readonly { id: GoalKind; label: string }[] = [
-  { id: 'weight_loss', label: 'Weight loss' },
-  { id: 'recovery', label: 'Recovery' },
-  { id: 'longevity', label: 'Longevity' },
-  { id: 'performance', label: 'Performance' },
-];
+export const GOAL_OPTIONS: readonly { id: GoalOptionId; label: string }[] =
+  GOAL_IDS.map((id) => ({ id, label: GOAL_LABELS[id] }));
 
 export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[] = [
   { id: 'nausea', label: 'Nausea' },
@@ -99,6 +159,30 @@ export const CONCERN_OPTIONS: readonly { id: SideEffectConcern; label: string }[
 ];
 
 export const SHOT_DAY_OPTIONS = WEEKDAY_OPTIONS;
+
+/**
+ * How the medication is packaged.
+ *
+ * `vial` carries a size in milligrams, printed on the label. `pen` carries
+ * none: a pen is filled at the factory and its label names a dose rather than a
+ * vial size. The peptide catalog holds neither a vial size nor a pen flag, so
+ * Poke cannot read this off a preset and the setup run asks for it.
+ *
+ * The draft and the `vial_form` column hold the same two words, so the answer
+ * travels from the screen to the row without a translation table between them.
+ */
+export type { VialForm };
+
+/**
+ * The vial sizes the chips offer, in milligrams.
+ *
+ * These are packaging facts and not doses. A vial is sold in a size, the size is
+ * printed on the label, and reading it back is not Poke proposing anything. The
+ * five here are the sizes lyophilized peptide vials ship in across the whole
+ * catalog, so one list covers every compound and no compound gets a number
+ * invented for it. Any other size is typed instead.
+ */
+export const VIAL_MG_OPTIONS: readonly number[] = [2, 5, 10, 15, 30];
 
 // The pace slider's ends, in lb per week. Copied from the shape of MeAgain's
 // slider, not its numbers: MeAgain runs 0.2 to 3.0 lb. Poke stops at 2.0 because
@@ -190,6 +274,89 @@ export interface MedicationScheduleDraft {
    * blend whose label the user skipped, which is allowed as a whole.
    */
   compositionMg: Record<string, string>;
+  /**
+   * The whole vial, in milligrams, held as typed. Empty until the user answers
+   * the vial question, empty for a pen, and empty for a blend, whose label is
+   * `compositionMg` above.
+   */
+  vialMgText: string;
+  /** Null until the vial question is answered. See `VialForm`. */
+  vialForm: VialForm | null;
+  /**
+   * The bacteriostatic water that goes into the vial, in millilitres, held as
+   * typed. Empty until the user saves a mix on the mix beat, and empty for every
+   * medication that beat never runs for, which is most of them.
+   *
+   * It is what `domain/reconstitution.ts` calls `diluentMl`. The number is a
+   * record of the mix the user made, and Poke proposes none of it: the beat
+   * offers common amounts as chips and writes only the one the user pressed.
+   */
+  diluentMlText: string;
+  /**
+   * The three hatches, one per question in the setup run.
+   *
+   * Every question in the run offers "Not sure yet. Set it up later." A hatch
+   * never blocks the run and it never writes a guess: it clears the answer it
+   * covers and it records that the user passed, exactly as a null does for the
+   * knowledge question. `services/onboarding.ts` reads these to decide what to
+   * leave out of the medication row, and no reader may fill one in.
+   */
+  deferredVial: boolean;
+  deferredDose: boolean;
+  deferredFrequency: boolean;
+}
+
+/** Whether the user gave a dose for this medication. */
+export function scheduleHasDose(schedule: MedicationScheduleDraft): boolean {
+  const dose = Number.parseFloat(schedule.doseText);
+  return Number.isFinite(dose) && dose > 0;
+}
+
+/**
+ * Whether the frequency question is finished.
+ *
+ * Deferred is not finished. Neither is a kind that carries a number the user has
+ * not given yet, so Continue waits rather than saving an interval or a week
+ * nobody chose.
+ */
+export function scheduleHasFrequency(schedule: MedicationScheduleDraft): boolean {
+  if (schedule.deferredFrequency) return false;
+  if (schedule.frequencyKind === 'daily') return true;
+  return scheduleFrequencyValue(schedule) !== null;
+}
+
+/**
+ * The vial size in milligrams, or null when there is none to read.
+ *
+ * Null covers all three ways that happens: the user deferred the question, the
+ * user said the medication comes in a pen, and the typed number does not parse.
+ * The mix math takes a whole vial in milligrams, which is what
+ * `domain/reconstitution.ts` calls `materialMassMg`.
+ */
+export function scheduleVialMg(schedule: MedicationScheduleDraft): number | null {
+  if (schedule.deferredVial || schedule.vialForm !== 'vial') return null;
+  const mg = Number.parseFloat(schedule.vialMgText);
+  return Number.isFinite(mg) && mg > 0 ? mg : null;
+}
+
+/**
+ * A typed water amount in millilitres, or null when there is none to read.
+ *
+ * The one parser for `diluentMlText`, because the mix beat runs the math on the
+ * amount the user is still choosing and `services/onboarding.ts` writes the
+ * amount they saved. The two read the same string through this, so a number the
+ * screen showed cannot land in the row as something else.
+ */
+export function parseDiluentMl(text: string): number | null {
+  const ml = Number.parseFloat(text);
+  return Number.isFinite(ml) && ml > 0 ? ml : null;
+}
+
+/** Whether the vial question is finished, by an answer of any kind. */
+export function scheduleHasVial(schedule: MedicationScheduleDraft): boolean {
+  if (schedule.deferredVial) return false;
+  if (schedule.vialForm === 'pen') return true;
+  return scheduleVialMg(schedule) !== null;
 }
 
 /**
@@ -217,22 +384,13 @@ export function scheduleFrequencyValue(schedule: MedicationScheduleDraft): numbe
   }
 }
 
-/** Whether the user has finished this schedule. The Continue button reads it. */
-export function scheduleIsComplete(schedule: MedicationScheduleDraft): boolean {
-  const dose = Number.parseFloat(schedule.doseText);
-  if (!Number.isFinite(dose) || dose <= 0) return false;
-  if (!compositionSettled(schedule)) return false;
-  if (schedule.frequencyKind === 'daily') return true;
-  return scheduleFrequencyValue(schedule) !== null;
-}
-
 /**
  * Whether the blend label boxes allow a save: every box filled or every box
  * empty. A label copied halfway hands the missing parts' milligrams to the
  * typed parts, so Continue waits rather than saving a vial nobody owns.
  * Anything that is not a blend has no boxes and always passes.
  */
-function compositionSettled(schedule: MedicationScheduleDraft): boolean {
+export function scheduleCompositionSettled(schedule: MedicationScheduleDraft): boolean {
   if (isCustomMedicationId(schedule.medicationId)) return true;
   const preset = getPreset(schedule.medicationId);
   if (!preset || !isBlend(preset)) return true;
@@ -281,10 +439,23 @@ export interface OnboardingDraft {
   weight: WeightDraft;
   // Weight change per week, in the weight draft's unit.
   pace: number;
-  activityLevel: ActivityLevel | null;
   concerns: SideEffectConcern[];
+  /**
+   * The first goal the user picked, and the one `goal_kind` stores. Null until
+   * they pick one; `toggleGoal` is the only writer and it keeps this in step
+   * with `goalTags`.
+   */
   goalKind: GoalKind | null;
-  motivation: string | null;
+  /** Every goal they picked, in the order they picked them. */
+  goalTags: GoalKind[];
+  /** Null until the knowledge question is answered, and null when it is skipped. */
+  experienceLevel: ExperienceLevel | null;
+  /**
+   * The channel the user picked on the found screen, and null when they skipped
+   * it. It rides one analytics event and no column, so `completeOnboarding`
+   * reads past it. See `FoundChannel`.
+   */
+  foundChannel: FoundChannel | null;
   reminder: ReminderDraft;
 }
 
@@ -294,7 +465,16 @@ export interface OnboardingState extends OnboardingDraft {
   setJourneyStage: (stage: JourneyStage) => void;
   toggleMedication: (id: OnboardingMedicationId) => void;
   addCustomMedication: (name: string) => OnboardingMedicationId;
+  /** Moves one medication to the front, which is the order the setup run takes. */
+  setFirstMedication: (id: OnboardingMedicationId) => void;
   prepareSchedules: () => void;
+  setVialMg: (id: OnboardingMedicationId, vialMgText: string) => void;
+  setVialForm: (id: OnboardingMedicationId, vialForm: VialForm) => void;
+  /** The water the user saved on the mix beat. See `diluentMlText`. */
+  setDiluentMl: (id: OnboardingMedicationId, diluentMlText: string) => void;
+  deferVial: (id: OnboardingMedicationId) => void;
+  deferDose: (id: OnboardingMedicationId) => void;
+  deferFrequency: (id: OnboardingMedicationId) => void;
   setScheduleDose: (id: OnboardingMedicationId, doseText: string) => void;
   setScheduleUnit: (id: OnboardingMedicationId, unit: Unit) => void;
   setScheduleRoute: (id: OnboardingMedicationId, route: Route) => void;
@@ -308,13 +488,13 @@ export interface OnboardingState extends OnboardingDraft {
   setBirthYearText: (value: string) => void;
   setHeightUnit: (unit: HeightUnit) => void;
   setHeightValue: (value: number | null) => void;
-  setGoalKind: (goalKind: GoalKind) => void;
+  toggleGoal: (goalKind: GoalKind) => void;
+  setExperienceLevel: (level: ExperienceLevel | null) => void;
+  setFoundChannel: (channel: FoundChannel | null) => void;
   setWeightUnit: (unit: WeightUnit) => void;
   setWeightValue: (field: 'current' | 'goal', value: number | null) => void;
   setPace: (pace: number) => void;
-  setActivityLevel: (level: ActivityLevel) => void;
   toggleConcern: (concern: SideEffectConcern) => void;
-  setMotivation: (motivation: string) => void;
   setReminderTime: (time: string) => void;
   setReminderEnabled: (enabled: boolean) => void;
   resetDraft: () => void;
@@ -331,10 +511,11 @@ const initialDraft: OnboardingDraft = {
   height: { unit: 'in', value: null },
   weight: { unit: 'lb', current: null, goal: null },
   pace: PACE_DEFAULT_LB,
-  activityLevel: null,
   concerns: [],
   goalKind: null,
-  motivation: null,
+  goalTags: [],
+  experienceLevel: null,
+  foundChannel: null,
   reminder: { kind: 'skipped', time: '09:00' },
 };
 
@@ -373,6 +554,14 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }));
     return id;
   },
+  // The order of `medicationIds` is the order of the setup run, of the plan
+  // screen and of `sort_order` in the database. Moving one to the front is
+  // therefore the whole of the which-first answer, and every reader downstream
+  // follows without being told.
+  setFirstMedication: (id) => set((state) => {
+    if (!state.medicationIds.includes(id)) return {};
+    return { medicationIds: [id, ...state.medicationIds.filter((item) => item !== id)] };
+  }),
   prepareSchedules: () => set((state) => {
     const schedules: Record<OnboardingMedicationId, MedicationScheduleDraft> = {};
     let changed = Object.keys(state.schedules).length !== state.medicationIds.length;
@@ -387,18 +576,72 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
     return changed ? { schedules } : {};
   }),
-  setScheduleDose: (id, doseText) => set((state) => patchSchedule(state, id, { doseText })),
+  // A typed size is a vial answer, so it says so and it lifts the hatch. The
+  // user who reaches for the keyboard after pressing Skip has changed their
+  // mind, and the flag has to follow the answer or the run would drop a number
+  // the user gave.
+  setVialMg: (id, vialMgText) => set((state) => patchSchedule(state, id, {
+    vialMgText,
+    vialForm: 'vial',
+    deferredVial: false,
+  })),
+  // A pen has no size to read and arrives already mixed, so picking one clears
+  // the box and the saved mix rather than keeping numbers that belong to a vial
+  // the user does not have.
+  setVialForm: (id, vialForm) => set((state) => patchSchedule(state, id, {
+    vialForm,
+    vialMgText: vialForm === 'pen' ? '' : (state.schedules[id]?.vialMgText ?? ''),
+    diluentMlText: vialForm === 'pen' ? '' : (state.schedules[id]?.diluentMlText ?? ''),
+    deferredVial: false,
+  })),
+  // The mix beat holds the amount on the screen until the user presses Save, so
+  // this writer runs once and only on that press. Skip calls nothing, which is
+  // how the beat records that the user passed.
+  setDiluentMl: (id, diluentMlText) => set((state) => patchSchedule(state, id, { diluentMlText })),
+  // The three hatches. Each one clears the answer it covers and records the
+  // pass, so nothing downstream can read a half-answer as a whole one.
+  deferVial: (id) => set((state) => patchSchedule(state, id, {
+    deferredVial: true,
+    vialMgText: '',
+    vialForm: null,
+    compositionMg: {},
+    diluentMlText: '',
+  })),
+  deferDose: (id) => set((state) => patchSchedule(state, id, {
+    deferredDose: true,
+    doseText: '',
+  })),
+  deferFrequency: (id) => set((state) => patchSchedule(state, id, {
+    deferredFrequency: true,
+    intervalText: '',
+    weekdays: [],
+  })),
+  setScheduleDose: (id, doseText) => set((state) => patchSchedule(state, id, {
+    doseText,
+    deferredDose: false,
+  })),
   setScheduleUnit: (id, unit) => set((state) => patchSchedule(state, id, { unit })),
   setScheduleRoute: (id, route) => set((state) => patchSchedule(state, id, { route })),
-  setScheduleFrequency: (id, frequencyKind) => set((state) => patchSchedule(state, id, { frequencyKind })),
-  setShotDay: (id, shotDay) => set((state) => patchSchedule(state, id, { shotDay })),
-  setScheduleInterval: (id, intervalText) => set((state) => patchSchedule(state, id, { intervalText })),
+  // Pressing any frequency chip is an answer, so it lifts that hatch too.
+  setScheduleFrequency: (id, frequencyKind) => set((state) => patchSchedule(state, id, {
+    frequencyKind,
+    deferredFrequency: false,
+  })),
+  setShotDay: (id, shotDay) => set((state) => patchSchedule(state, id, {
+    shotDay,
+    deferredFrequency: false,
+  })),
+  setScheduleInterval: (id, intervalText) => set((state) => patchSchedule(state, id, {
+    intervalText,
+    deferredFrequency: false,
+  })),
   toggleScheduleWeekday: (id, weekday) => set((state) => {
     const current = state.schedules[id]?.weekdays ?? [];
     return patchSchedule(state, id, {
       weekdays: current.includes(weekday)
         ? current.filter((item) => item !== weekday)
         : [...current, weekday],
+      deferredFrequency: false,
     });
   }),
   setScheduleCompositionMg: (id, partId, text) => set((state) => {
@@ -415,7 +658,20 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     height: { unit, value: convertHeight(state.height.value, state.height.unit, unit) },
   })),
   setHeightValue: (value) => set((state) => ({ height: { ...state.height, value } })),
-  setGoalKind: (goalKind) => set({ goalKind }),
+  // The goal screen takes as many answers as the user has, and `goal_kind` is
+  // one column. The first pick is the one that column holds, so it survives
+  // every later pick and only changes when the user clears it themselves.
+  toggleGoal: (goalKind) => set((state) => {
+    const goalTags = state.goalTags.includes(goalKind)
+      ? state.goalTags.filter((tag) => tag !== goalKind)
+      : [...state.goalTags, goalKind];
+    return { goalTags, goalKind: goalTags[0] ?? null };
+  }),
+  setExperienceLevel: (experienceLevel) => set({ experienceLevel }),
+  // Null is the record of a skip, exactly as it is for the knowledge question.
+  // The found screen sends its event on the way out and never on a tap, so this
+  // setter stays a plain write.
+  setFoundChannel: (foundChannel) => set({ foundChannel }),
   setWeightUnit: (unit) => set((state) => ({
     weight: {
       unit,
@@ -433,7 +689,6 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       : { ...state.weight, goal: value },
   })),
   setPace: (pace) => set({ pace }),
-  setActivityLevel: (activityLevel) => set({ activityLevel }),
   toggleConcern: (concern) => set((state) => {
     if (concern === 'none') return { concerns: ['none'] };
     const withoutNone = state.concerns.filter((item) => item !== 'none');
@@ -443,7 +698,6 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         : [...withoutNone, concern],
     };
   }),
-  setMotivation: (motivation) => set({ motivation }),
   setReminderTime: (time) => set((state) => ({ reminder: { ...state.reminder, time } })),
   setReminderEnabled: (enabled) => set((state) => ({
     reminder: enabled
@@ -555,6 +809,18 @@ export function defaultScheduleDraft(id: OnboardingMedicationId): MedicationSche
     weekdays: [],
     // Empty until the user copies their vial label. Poke proposes no split.
     compositionMg: {},
+    // Empty and unknown until the vial question is answered. The catalog names
+    // no vial size and no packaging form, so there is nothing here to read from
+    // a preset even if Poke wanted to.
+    vialMgText: '',
+    vialForm: null,
+    // Empty until the user saves a mix, and empty for every medication the mix
+    // beat never runs for. Poke names no volume of water for anybody.
+    diluentMlText: '',
+    // Nothing is deferred until the user presses the hatch.
+    deferredVial: false,
+    deferredDose: false,
+    deferredFrequency: false,
   };
 }
 
@@ -587,10 +853,11 @@ export function getOnboardingDraft(state: OnboardingState): OnboardingDraft {
     height: state.height,
     weight: state.weight,
     pace: state.pace,
-    activityLevel: state.activityLevel,
     concerns: state.concerns,
     goalKind: state.goalKind,
-    motivation: state.motivation,
+    goalTags: state.goalTags,
+    experienceLevel: state.experienceLevel,
+    foundChannel: state.foundChannel,
     reminder: state.reminder,
   };
 }
@@ -606,167 +873,454 @@ export function medicationDisplayName(
 
 // ---------------------------------------------------------------- Flow ----
 //
-// Twenty-three counted steps, fixed, matching the recording's own progress bar.
-// Four of them are interstitials, four ask for no data, and fifteen are questions.
+// The counted run has three parts, and every one of them reads its length off
+// an array in this file. No screen counts anything for itself, and no total is
+// typed by hand.
 //
-//   0                          privacy
-//   1                          journey
-//   2                          medication picker
-//   3                          the schedule run, whatever its length
-//   4 …                        the rest, in POST_SCHEDULE_ORDER
+//   PRE_SCHEDULE_ORDER            the questions Poke asks before the schedules
+//   the setup run                 one counted step, at any medication count
+//   postScheduleOrder(stage, …)   the rest, which two answers reshape
 //
-// The schedule run is one counted step and not n, even though it draws one
-// screen per medication per DECISIONS row 17. Counting the screens instead made
-// the total grow while the user was still choosing medications, and a bar whose
-// denominator grows under a fixed numerator runs backwards: selecting a second
-// medication on the picker moved the fill from 3/23 to 3/24, on screen, under
-// the user's thumb. So the run divides the one step between its screens
-// (`scheduleStepIndex`), which is monotonic at any medication count and is also
-// what the recording does.
+// The setup run is one counted step and not n, even though it draws an order
+// question and then three questions per medication per DECISIONS row 17.
+// Counting the screens instead made the total grow while the user was still
+// choosing medications, and a bar whose denominator grows under a fixed
+// numerator runs backwards: selecting a second medication on the picker moved
+// the fill on screen, under the user's thumb. So the run divides its one step
+// between its screens (`setupStepIndex`), which is monotonic at any count and
+// at any number of hatches, because every screen in the run is drawn whether or
+// not the user answers it.
 //
-// The carousel, the compute screen and the plan sit outside this count, exactly
-// as they do in the recording.
+// Two answers change the length of the run. The knowledge question adds or
+// drops the teach beats, and the journey question drops the last-shot question.
+// Both totals move on the screen that asks, so the user watches their own
+// answer shorten the run, which is the one place a moving total reads as an
+// answer landing rather than as a bar going wrong.
+//
+// The carousel, the mix beat, the compute screen and the plan sit outside this
+// count. See `MIX_ROUTE` for why the mix beat is one of them.
 
-export const SCHEDULE_STEP_OFFSET = 3;
-
-export type PostScheduleStep =
-  | 'last-shot'
-  | 'why'
+export type PreScheduleStep =
   | 'sex'
   | 'birthday'
+  | 'goal'
+  | 'knowledge'
+  | 'found'
+  | 'creator'
+  | 'journey'
+  | 'taking';
+
+/**
+ * The questions before the schedules.
+ *
+ * The order is the flow, and the length is the offset the setup run sits at.
+ * Adding a screen here is one line, and the progress bar, the back chevron and
+ * every Continue target follow it.
+ */
+export const PRE_SCHEDULE_ORDER: readonly PreScheduleStep[] = [
+  'sex',
+  'birthday',
+  'goal',
+  'knowledge',
+  // The two attribution questions sit here, after the last question about the
+  // user and before the first one about their treatment. They ask about how the
+  // user arrived rather than about their health, so they belong on the near side
+  // of the medical run, and the creator code has to land before the plan screen
+  // decides whether to open the paywall.
+  'found',
+  'creator',
+  'journey',
+  'taking',
+];
+
+export const PRE_SCHEDULE_ROUTES: Record<PreScheduleStep, Href> = {
+  sex: '/onboarding/sex',
+  birthday: '/onboarding/birthday',
+  goal: '/onboarding/goal',
+  knowledge: '/onboarding/knowledge',
+  found: '/onboarding/found',
+  creator: '/onboarding/creator',
+  journey: '/onboarding/journey',
+  taking: '/onboarding/taking',
+};
+
+/** Where the setup run sits in the count. Read off the array, never typed. */
+export const SCHEDULE_STEP_OFFSET = PRE_SCHEDULE_ORDER.length;
+
+export type PostScheduleStep =
+  | 'how-a-shot-works'
+  | 'last-shot'
+  | 'why'
   | 'height'
   | 'weight'
   | 'goal-weight'
   | 'pace'
   | 'consistency'
-  | 'activity'
   | 'rotation'
   | 'concerns'
   | 'evidence'
-  | 'goal'
-  | 'motivation'
-  | 'on-device'
   | 'reminder-time'
   | 'notifications'
   | 'thanks';
 
-// The order is the flow. Every screen reads its own index from here, so the
-// progress bar, the back chevron and the Continue target cannot drift apart.
+/**
+ * The longest run after the schedules: every question, and every teach beat in
+ * the place it belongs. Nothing is ever reordered out of this list. A shorter
+ * run is this list with rows filtered out of it, so a beat cannot land in one
+ * place for one user and another place for the next.
+ */
 export const POST_SCHEDULE_ORDER: readonly PostScheduleStep[] = [
+  'how-a-shot-works',
   'last-shot',
-  'why', // interstitial 1 — recording step 6
-  'sex',
-  'birthday',
+  'why',
   'height',
   'weight',
   'goal-weight',
   'pace',
-  'consistency', // interstitial 2 — recording step 13
-  'activity',
-  'rotation', // interstitial 3 — recording step 15
+  'consistency',
+  'rotation',
   'concerns',
-  'evidence', // interstitial 4 — recording step 17
-  'goal',
-  'motivation',
-  'on-device',
+  'evidence',
   'reminder-time',
   'notifications',
   'thanks',
 ];
 
 /**
- * The run, for one journey stage.
+ * The teach beats each experience level keeps.
  *
- * `starting` drops the last-shot question. The screen before it asked whether
- * the user had started, so asking a user who said no when their last shot was
- * reads as a flow that did not listen. `setJourneyStage` writes `none` instead,
- * which is what that user would have picked.
+ * They are the screens that explain rather than ask, and how many of them a
+ * user wants is exactly what the knowledge question asks. Somebody who has
+ * injected for a year does not need the tour, and holding them through five
+ * screens of it is the fastest way to lose them before the plan.
+ *
+ * `basics` keeps the two that are about Poke's own behaviour rather than about
+ * injecting: the rotation map and where a half-life comes from. Both are claims
+ * about the app, and both are new to a user however long they have injected.
  */
-export function postScheduleOrder(stage: JourneyStage | null): readonly PostScheduleStep[] {
-  return stage === 'starting' ? STARTING_ORDER : POST_SCHEDULE_ORDER;
+const TEACH_BEATS: Record<ExperienceLevel, readonly PostScheduleStep[]> = {
+  new: ['how-a-shot-works', 'why', 'consistency', 'rotation', 'evidence'],
+  basics: ['rotation', 'evidence'],
+  experienced: [],
+};
+
+/** Every screen that is a teach beat for somebody. The rest always run. */
+const TEACH_STEPS: ReadonlySet<PostScheduleStep> = new Set(TEACH_BEATS.new);
+
+/**
+ * The run after the schedules, for one journey stage and one experience level.
+ *
+ * `starting` drops the last-shot question. The journey screen asked whether the
+ * user had started, so asking a user who said no when their last shot was reads
+ * as a flow that did not listen. `setJourneyStage` writes `none` instead, which
+ * is what that user would have picked. The teach beat that follows it stays
+ * where it is: for a `new` user who has not started, `why` simply follows
+ * `how-a-shot-works`.
+ *
+ * A null experience level is a skipped question, and it runs as `basics`. The
+ * middle answer is the one that assumes least about somebody who told Poke
+ * nothing.
+ */
+export function postScheduleOrder(
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+): readonly PostScheduleStep[] {
+  const level: ExperienceLevel = experience ?? 'basics';
+  const key = `${stage ?? 'unknown'}:${level}`;
+  const cached = orderCache.get(key);
+  if (cached) return cached;
+  const kept = new Set(TEACH_BEATS[level]);
+  const order = POST_SCHEDULE_ORDER.filter((step) => {
+    if (step === 'last-shot') return stage !== 'starting';
+    return !TEACH_STEPS.has(step) || kept.has(step);
+  });
+  orderCache.set(key, order);
+  return order;
 }
 
-const STARTING_ORDER: readonly PostScheduleStep[] =
-  POST_SCHEDULE_ORDER.filter((step) => step !== 'last-shot');
+/**
+ * One array per stage and level, built once.
+ *
+ * Every screen in the run asks for its order three times per render, for the
+ * index, the total and the back target. A fresh array each time is a fresh
+ * identity each time, and anything that memoises on it would rebuild on every
+ * frame. There are nine possible orders and they never change at runtime.
+ */
+const orderCache = new Map<string, readonly PostScheduleStep[]>();
 
 export const POST_SCHEDULE_ROUTES: Record<PostScheduleStep, Href> = {
+  'how-a-shot-works': '/onboarding/how-a-shot-works',
   'last-shot': '/onboarding/last-shot',
   why: '/onboarding/why',
-  sex: '/onboarding/sex',
-  birthday: '/onboarding/birthday',
   height: '/onboarding/height',
   weight: '/onboarding/weight',
   'goal-weight': '/onboarding/goal-weight',
   pace: '/onboarding/pace',
   consistency: '/onboarding/consistency',
-  activity: '/onboarding/activity',
   rotation: '/onboarding/rotation',
   concerns: '/onboarding/concerns',
   evidence: '/onboarding/evidence',
-  goal: '/onboarding/goal',
-  motivation: '/onboarding/motivation',
-  'on-device': '/onboarding/on-device',
   'reminder-time': '/onboarding/reminder-time',
   notifications: '/onboarding/notifications',
   thanks: '/onboarding/thanks',
 };
 
+/** Every counted screen in the flow. The two runs share no step name. */
+export type OnboardingStepName = PreScheduleStep | PostScheduleStep;
+
+const PRE_SCHEDULE_STEPS: ReadonlySet<string> = new Set(PRE_SCHEDULE_ORDER);
+
+export function isPreScheduleStep(step: OnboardingStepName): step is PreScheduleStep {
+  return PRE_SCHEDULE_STEPS.has(step);
+}
+
 function medicationCount(count: number): number {
   return Math.max(1, count);
 }
 
-export function onboardingTotalSteps(stage: JourneyStage | null): number {
-  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage).length;
+/**
+ * The three questions Poke asks about one medication, in the order it asks them.
+ *
+ * The vial comes first because it is the fact printed on the box in the user's
+ * hand, so it is the easiest thing in the run to answer and it opens the run on
+ * a win. The dose comes next because it is the number the clinician gave. The
+ * frequency comes last because it is the only one of the three that the user may
+ * still be deciding.
+ */
+export type SetupQuestion = 'vial' | 'dose' | 'frequency';
+
+export const SETUP_QUESTIONS: readonly SetupQuestion[] = ['vial', 'dose', 'frequency'];
+
+const SETUP_ROUTES: Record<SetupQuestion, `/onboarding/setup/[index]/${SetupQuestion}`> = {
+  vial: '/onboarding/setup/[index]/vial',
+  dose: '/onboarding/setup/[index]/dose',
+  frequency: '/onboarding/setup/[index]/frequency',
+};
+
+/**
+ * Whether the run opens on the which-first question.
+ *
+ * One medication has no order to choose, so asking would be a screen that can
+ * only be answered one way. Two or more do, and the answer reorders
+ * `medicationIds`, which is the order of everything downstream.
+ */
+export function whichFirstRuns(count: number): boolean {
+  return count >= 2;
+}
+
+/** How many screens the setup run draws in total. Read, never typed. */
+function setupRunLength(count: number): number {
+  return (whichFirstRuns(count) ? 1 : 0)
+    + medicationCount(count) * SETUP_QUESTIONS.length;
+}
+
+/** Which screen of the setup run a given question is, counting from zero. */
+function setupPosition(index: number, question: SetupQuestion, count: number): number {
+  const opening = whichFirstRuns(count) ? 1 : 0;
+  const medication = Math.min(Math.max(0, index), medicationCount(count) - 1);
+  return opening + medication * SETUP_QUESTIONS.length + SETUP_QUESTIONS.indexOf(question);
+}
+
+/** The setup question for medication `index`, as a route. */
+export function setupHref(index: number, question: SetupQuestion): Href {
+  return {
+    pathname: SETUP_ROUTES[question],
+    params: { index: String(Math.max(0, index)) },
+  };
+}
+
+/** Where the setup run starts. Two medications open on the order question. */
+export function firstSetupHref(count: number): Href {
+  return whichFirstRuns(count) ? '/onboarding/which-first' : setupHref(0, 'vial');
+}
+
+/** Where the setup run ends, which is the last medication's last question. */
+export function lastSetupHref(count: number): Href {
+  return setupHref(medicationCount(count) - 1, 'frequency');
 }
 
 /**
- * Where schedule screen `index` of `count` sits, as a fraction of one step.
+ * The mix beat, which sits between the setup run and the post-schedule run.
  *
- * Two medications put the second schedule screen at 3.5, so the bar advances
- * half a step through the run and arrives at 4 alongside the screen that really
- * is step 4. The only reader is the progress bar, which takes a float.
+ * Uncounted, exactly as the compute beat is. It draws no progress bar, it is in
+ * neither order array, and `onboardingTotalSteps` never sees it. A beat that
+ * added a step would move the bar under a user who answered nothing, and a beat
+ * that only some users see would move it for some of them and not others.
  */
-export function scheduleStepIndex(index: number, count: number): number {
-  return SCHEDULE_STEP_OFFSET + index / medicationCount(count);
+const MIX_ROUTE: Href = '/onboarding/mix';
+
+/**
+ * Whether Poke can run the mixing math on what this draft holds.
+ *
+ * All three are needed and none of them can be filled in behind the user. The
+ * vial has to be a size in milligrams, which `scheduleVialMg` returns for a vial
+ * the user measured and null for a pen, a blend, a deferred question and a
+ * number that does not parse. The dose has to be a dose. The unit has to be a
+ * mass, because an international unit is a measure of activity rather than of
+ * weight, and no volume can be worked out from one.
+ */
+function scheduleMixes(schedule: MedicationScheduleDraft): boolean {
+  return scheduleVialMg(schedule) !== null
+    && scheduleHasDose(schedule)
+    && schedule.unit !== 'iu';
 }
 
-export function postScheduleStepIndex(stage: JourneyStage | null, step: PostScheduleStep): number {
-  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage).indexOf(step);
+/**
+ * The medication the mix beat runs for, or null when the beat does not run.
+ *
+ * The one source of truth for that decision. `setupNextHref` reads it to decide
+ * whether the run ends in the beat or in the post-schedule order, and the beat
+ * itself reads it to know whose numbers it is showing, so the screen the user
+ * lands on can never be about a different medication from the one that sent
+ * them there. The first qualifying medication in `medicationIds` order wins,
+ * which is the order the user set on the which-first screen.
+ *
+ * Shaped as a selector, so a component reads it with
+ * `useOnboardingStore(mixCandidateIndex)` and re-renders only when the answer
+ * itself changes.
+ */
+export function mixCandidateIndex(
+  draft: Pick<OnboardingDraft, 'medicationIds' | 'schedules'>,
+): number | null {
+  for (const [index, id] of draft.medicationIds.entries()) {
+    const schedule = draft.schedules[id];
+    if (schedule && scheduleMixes(schedule)) return index;
+  }
+  return null;
+}
+
+export function onboardingTotalSteps(
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+): number {
+  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage, experience).length;
+}
+
+/**
+ * Where a setup screen sits, as a fraction of the run's one step.
+ *
+ * Three medications draw ten screens and the run is still one counted step, so
+ * each screen is a tenth of it. The fraction walks 0, 0.1, 0.2 up to 0.9 and the
+ * next whole number belongs to the screen that really is that step, so the bar
+ * only ever moves forward. The only reader is the progress bar, which takes a
+ * float, and no screen does this sum for itself.
+ */
+export function setupStepIndex(index: number, question: SetupQuestion, count: number): number {
+  return SCHEDULE_STEP_OFFSET + setupPosition(index, question, count) / setupRunLength(count);
+}
+
+/** Where the which-first screen sits, which is the front of the same step. */
+export function whichFirstStepIndex(): number {
+  return SCHEDULE_STEP_OFFSET;
+}
+
+/**
+ * The screen after a setup question. It walks the three questions, then the
+ * medications, then leaves the run for the mix beat or the post-schedule order.
+ *
+ * `mixIndex` is `mixCandidateIndex` read off the store by the caller, and it is
+ * the whole of the decision: the last screen of the run leads into the beat
+ * when a medication qualifies for it and straight past it when none does. It is
+ * a parameter rather than a store read because every other target this file
+ * hands out is a pure function of what it is given, and one of them reaching
+ * into the store for an answer would hide the decision from the caller.
+ */
+export function setupNextHref(
+  index: number,
+  question: SetupQuestion,
+  count: number,
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+  mixIndex: number | null,
+): Href {
+  const nextQuestion = SETUP_QUESTIONS[SETUP_QUESTIONS.indexOf(question) + 1];
+  if (nextQuestion) return setupHref(index, nextQuestion);
+  const nextMedication = index + 1;
+  if (nextMedication < medicationCount(count)) return setupHref(nextMedication, 'vial');
+  if (mixIndex !== null) return MIX_ROUTE;
+  return firstPostScheduleHref(stage, experience);
+}
+
+/**
+ * The screen before a setup question. It walks the same path backwards, out
+ * through the which-first screen when there is one and onto the picker when
+ * there is not, so back works across the whole run.
+ */
+export function setupBackHref(index: number, question: SetupQuestion, count: number): Href {
+  const previousQuestion = SETUP_QUESTIONS[SETUP_QUESTIONS.indexOf(question) - 1];
+  if (previousQuestion) return setupHref(index, previousQuestion);
+  if (index > 0) return setupHref(index - 1, 'frequency');
+  return whichFirstRuns(count) ? '/onboarding/which-first' : PRE_SCHEDULE_ROUTES.taking;
+}
+
+/** Where a counted screen sits in the bar. Both runs read their own array. */
+export function onboardingStepIndex(
+  step: OnboardingStepName,
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+): number {
+  if (isPreScheduleStep(step)) return PRE_SCHEDULE_ORDER.indexOf(step);
+  return SCHEDULE_STEP_OFFSET + 1 + postScheduleOrder(stage, experience).indexOf(step);
 }
 
 /**
  * The screen before `step`. Back never guesses; it reads the same order the
- * forward path reads. The first post-schedule step falls back onto the last
+ * forward path reads. The first question falls back onto the carousel, and the
+ * first post-schedule step onto the mix beat when one ran, or onto the last
  * schedule screen, whose index depends on how many medications were chosen.
+ *
+ * `mixIndex` is `mixCandidateIndex` read off the store by the caller, exactly
+ * as `setupNextHref` takes it, so Back retraces the same path forward took.
  */
-export function previousHref(
+export function onboardingBackHref(
+  step: OnboardingStepName,
   stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
   count: number,
-  step: PostScheduleStep,
+  mixIndex: number | null,
 ): Href {
-  const order = postScheduleOrder(stage);
+  if (isPreScheduleStep(step)) {
+    const index = PRE_SCHEDULE_ORDER.indexOf(step);
+    const previous = index > 0 ? PRE_SCHEDULE_ORDER[index - 1] : undefined;
+    return previous ? PRE_SCHEDULE_ROUTES[previous] : '/onboarding';
+  }
+  const order = postScheduleOrder(stage, experience);
   const index = order.indexOf(step);
   const previous = index > 0 ? order[index - 1] : undefined;
   if (previous) return POST_SCHEDULE_ROUTES[previous];
-  return {
-    pathname: '/onboarding/schedule/[index]',
-    params: { index: String(Math.max(0, medicationCount(count) - 1)) },
-  };
+  if (mixIndex !== null) return MIX_ROUTE;
+  return lastSetupHref(count);
 }
 
 /**
- * The first screen of the post-schedule run. The schedule screens jump here,
- * and they read the order rather than a step name, because the first step is
- * not the same step for every journey stage.
+ * The screen after `step`. The last question before the schedules leads into
+ * the setup run, whose first screen depends on how many medications were
+ * chosen, and the last screen of all leads to the compute beat.
  */
-export function firstPostScheduleHref(stage: JourneyStage | null): Href {
-  return POST_SCHEDULE_ROUTES[postScheduleOrder(stage)[0]];
+export function onboardingNextHref(
+  step: OnboardingStepName,
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+  count: number,
+): Href {
+  if (isPreScheduleStep(step)) {
+    const index = PRE_SCHEDULE_ORDER.indexOf(step);
+    const next = PRE_SCHEDULE_ORDER[index + 1];
+    return next ? PRE_SCHEDULE_ROUTES[next] : firstSetupHref(count);
+  }
+  const order = postScheduleOrder(stage, experience);
+  const next = order[order.indexOf(step) + 1];
+  return next ? POST_SCHEDULE_ROUTES[next] : '/onboarding/compute';
 }
 
-/** The screen after `step`. The last one leads to the compute beat. */
-export function nextHref(stage: JourneyStage | null, step: PostScheduleStep): Href {
-  const order = postScheduleOrder(stage);
-  const index = order.indexOf(step);
-  const next = order[index + 1];
-  return next ? POST_SCHEDULE_ROUTES[next] : '/onboarding/compute';
+/**
+ * The first screen of the post-schedule run. The setup run jumps here,
+ * and they read the order rather than a step name, because the first step is
+ * not the same step for every stage and every experience level.
+ */
+export function firstPostScheduleHref(
+  stage: JourneyStage | null,
+  experience: ExperienceLevel | null,
+): Href {
+  return POST_SCHEDULE_ROUTES[postScheduleOrder(stage, experience)[0]];
 }

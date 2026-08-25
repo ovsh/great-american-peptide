@@ -27,6 +27,8 @@ import {
   SHOT_DAY_OPTIONS,
   medicationDisplayName,
   scheduleFrequencyValue,
+  scheduleHasDose,
+  scheduleHasFrequency,
   type MedicationScheduleDraft,
   type OnboardingDraft,
   type WeightDraft,
@@ -70,6 +72,16 @@ export interface PlanMedication {
   curve: PlanCurve | null;
   // Where the half-life comes from, or why there is no curve.
   evidenceNote: string;
+  /**
+   * Whether the user gave a dose and a schedule for this medication.
+   *
+   * Either can be deferred on its own screen, and a card that says nothing
+   * about it would leave the reader looking at a shot count of zero with no
+   * reason for it. Both labels above already read "not set yet" in that case,
+   * and these two let the card drop the lines that would only print a zero.
+   */
+  doseSet: boolean;
+  scheduleSet: boolean;
 }
 
 interface PlanProjectionWeights {
@@ -217,6 +229,11 @@ function planMedication(
   now: number,
 ): PlanMedication {
   const preset = isCustomMedicationId(id) ? undefined : getPreset(id);
+  // Both answers can be deferred on their own screen, and neither one is
+  // filled in here. A missing dose makes `priorDose` and `upcomingDoses` return
+  // nothing, so the curve is null and the count is zero, which is true.
+  const doseSet = scheduleHasDose(schedule);
+  const scheduleSet = scheduleHasFrequency(schedule);
   const dose = Number.parseFloat(schedule.doseText);
   // The last-shot answer is worth asking only if it changes something. It does:
   // a dose already in the body puts the curve above zero at week one instead of
@@ -239,8 +256,10 @@ function planMedication(
   return {
     id,
     name: medicationDisplayName(id, draft.customNames),
-    doseLabel: `${schedule.doseText.trim()} ${schedule.unit}`,
-    scheduleLabel: scheduleLabel(schedule),
+    doseLabel: doseSet ? `${schedule.doseText.trim()} ${schedule.unit}` : 'Dose not set yet',
+    scheduleLabel: scheduleSet ? scheduleLabel(schedule) : 'No schedule yet',
+    doseSet,
+    scheduleSet,
     nextShotAt: doses[0]?.takenAt ?? null,
     shotsInFourWeeks: curveDoses.filter((event) => event.takenAt >= windowStart).length,
     curve: preset && hasUsableHalfLife(preset) && curveDoses.length > 0
@@ -273,6 +292,10 @@ function upcomingDoses(
   dose: number,
 ): DoseEvent[] {
   if (!Number.isFinite(dose) || dose <= 0) return [];
+  // A deferred frequency leaves the draft's last-touched kind behind it, and
+  // expecting shots off an answer the user passed on would be Poke inventing a
+  // schedule. No answer means no dates.
+  if (!scheduleHasFrequency(schedule)) return [];
   const medicationSchedule = medicationScheduleFromStored({
     medicationId: id,
     frequencyKind: schedule.frequencyKind,

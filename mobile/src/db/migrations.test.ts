@@ -31,7 +31,8 @@ const EXPECTED: Record<string, string[]> = {
     'id', 'name', 'preset_id', 'default_dose', 'default_unit', 'default_route',
     'frequency_kind', 'frequency_value', 'half_life_hours', 'tmax_hours', 'color_index',
     'status', 'sort_order', 'cycle_days_on', 'cycle_days_off', 'cycle_started_at',
-    'paused_at', 'composition', 'dose_by_day', 'created_at', 'updated_at',
+    'paused_at', 'composition', 'dose_by_day', 'vial_mg', 'vial_form', 'diluent_ml',
+    'created_at', 'updated_at',
   ],
   injections: [
     'id', 'medication_id', 'dose', 'unit', 'route', 'site_id', 'taken_at',
@@ -51,7 +52,8 @@ const EXPECTED: Record<string, string[]> = {
     'sex', 'birth_year', 'activity_level', 'motivation', 'weekly_pace', 'last_shot_at',
     'tester_pro_at', 'focused_medication_id', 'notif_checkin_enabled',
     'notif_checkin_delay_hours', 'notif_missed_enabled', 'health_sync_enabled',
-    'health_synced_at', 'notif_cycle_enabled', 'tester_id',
+    'health_synced_at', 'notif_cycle_enabled', 'tester_id', 'experience_level',
+    'goal_tags',
   ],
 };
 

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import { StyleSheet } from 'react-native';
 
 import { OnboardingStep } from '@/components/OnboardingStep';
 import { Text } from '@/components/Text';
@@ -75,29 +74,6 @@ export function InterstitialScene({
   );
 }
 
-/**
- * One promise, with the same check the prototype draws: a soft green disc and a
- * tick, at the size `principles.md` §2 sets as the floor for a meaningful mark.
- */
-export function PromiseRow({ children }: { children: string }) {
-  return (
-    <View style={styles.row}>
-      <Svg width={18} height={18} viewBox="0 0 18 18">
-        <Circle cx={9} cy={9} r={9} fill={colors.successSoft} />
-        <Path
-          d="M5.3 9.2 7.7 11.7 12.7 6.3"
-          fill="none"
-          stroke={colors.successDeep}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
-      <Text variant="smallStrong" style={styles.rowLabel}>{children}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   claim: {
     flex: 1,
@@ -113,13 +89,5 @@ const styles = StyleSheet.create({
   },
   lineBox: {
     alignSelf: 'stretch',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  rowLabel: {
-    flex: 1,
   },
 });
