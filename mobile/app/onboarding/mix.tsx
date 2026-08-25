@@ -107,6 +107,10 @@ export default function MixScreen() {
 
   const name = medicationDisplayName(medicationId, customNames);
   const answer = mixAnswer(schedule, water);
+  // The accent says the draw is a mark the syringe carries. When the domain
+  // flags the draw, the card drops the colour rather than painting a number the
+  // user cannot measure as a good answer.
+  const warned = answer !== null && answer.warnings.length > 0;
 
   return (
     <OnboardingScreen
@@ -116,9 +120,10 @@ export default function MixScreen() {
       backHref={lastSetupHref(medicationIds.length)}
       transition={transition}
       title={`How much water goes into your ${name} vial?`}
-      // One medication needs no line: the title already names it. Several do,
-      // because the run set up all of them and only one of them is mixed here.
-      subtitle={medicationIds.length > 1 ? `Poke uses the numbers you gave for ${name}.` : undefined}
+      // The title names the vial, so a second line naming it again is text the
+      // screen does not need. The slot carries the one sentence that helps
+      // somebody who has never mixed a vial, and nothing for anybody else.
+      subtitle={experience === 'new' ? TEACH_LINE : undefined}
       footer={(
         <>
           <Button disabled={parseDiluentMl(water) === null} onPress={() => {
@@ -132,6 +137,11 @@ export default function MixScreen() {
       )}
     >
       <View style={styles.section}>
+        {/* The precise term, once, on the thing the user is choosing an amount
+            of. Somebody buying supplies needs the exact word, and one quiet
+            label carries it without a sentence of process talk. */}
+        <Text variant="smallStrong" color={colors.inkMuted}>Bacteriostatic water</Text>
+
         <View style={styles.wrapRow}>
           {WATER_ML_OPTIONS.map((ml) => (
             <ChoicePill
@@ -167,16 +177,21 @@ export default function MixScreen() {
                 accessibilityLabel={`Millilitres of bacteriostatic water for ${name}`}
               />
             </View>
-            <Text variant="small" color={colors.inkMuted}>mL of bacteriostatic water</Text>
+            <Text variant="bodyStrong" color={colors.inkMuted}>mL</Text>
           </View>
         ) : null}
-
-        <Text variant="small" color={colors.inkMuted}>{waterNote(water)}</Text>
       </View>
 
+      {/* The payoff. The number is the largest thing on the screen because it is
+          the thing the user came for: they press an amount and the mark on
+          their own syringe lands, before they have mixed anything. */}
       {answer ? (
-        <Card padding="lg" variant="muted" style={styles.answer}>
-          <Text variant="bodyStrong">{answer.draw}</Text>
+        <Card padding="xl" style={[styles.answer, warned ? styles.answerPlain : styles.answerLit]}>
+          <Text variant="smallStrong" color={colors.inkMuted}>{answer.label}</Text>
+          <View style={styles.answerRow}>
+            <Text variant="display" color={warned ? colors.ink : colors.accent}>{answer.units}</Text>
+            <Text variant="h3" color={colors.inkMuted}>{answer.unitWord}</Text>
+          </View>
           <Text variant="small" color={colors.inkMuted}>{answer.concentration}</Text>
           {answer.warnings.map((warning) => (
             <View key={warning} style={styles.warnRow}>
@@ -186,17 +201,20 @@ export default function MixScreen() {
           ))}
         </Card>
       ) : null}
-
-      {experience === 'new' ? (
-        <Text variant="small" color={colors.inkMuted}>{TEACH_LINE}</Text>
-      ) : null}
     </OnboardingScreen>
   );
 }
 
 interface MixAnswer {
-  /** The user's own dose, in syringe units. */
-  draw: string;
+  /**
+   * What the number below it counts. It names the user's own dose and the
+   * barrel it is measured on, because a mark means nothing without a syringe.
+   */
+  label: string;
+  /** The mark to draw to, which is the whole reason the screen exists. */
+  units: string;
+  /** `unit` for a draw that lands on one mark, `units` for every other draw. */
+  unitWord: string;
   /** What the vial holds once the water is in. */
   concentration: string;
   /**
@@ -242,8 +260,11 @@ function mixAnswer(schedule: MedicationScheduleDraft, water: string): MixAnswer 
     );
   }
 
+  const units = syringeUnits(result.aliquotVolumeMl);
   return {
-    draw: `Your ${dose} ${schedule.unit} dose is ${syringeUnits(result.aliquotVolumeMl)} units on a U-100 insulin syringe.`,
+    label: `Your ${dose} ${schedule.unit} dose on a U-100 insulin syringe`,
+    units,
+    unitWord: units === '1' ? 'unit' : 'units',
     concentration: `${formatMgPerMl(result.concentrationMgPerMl)} mg per mL after mixing.`,
     warnings,
   };
@@ -269,13 +290,6 @@ function formatMgPerMl(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
-/** The chosen amount read back, or the line that says nothing is chosen yet. */
-function waterNote(water: string): string {
-  const ml = parseDiluentMl(water);
-  if (ml === null) return 'Poke has no water amount yet.';
-  return `Poke records ${ml} mL of bacteriostatic water.`;
-}
-
 const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
@@ -297,6 +311,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   answer: {
+    gap: spacing.sm,
+  },
+  answerLit: {
+    backgroundColor: colors.accentSoft,
+  },
+  answerPlain: {
+    backgroundColor: colors.surface,
+  },
+  answerRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
     gap: spacing.sm,
   },
   warnRow: {

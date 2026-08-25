@@ -14,15 +14,16 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Info } from 'lucide-react-native';
+import { format } from 'date-fns';
+import { Info, Syringe } from 'lucide-react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { useOnboardingTransition } from '@/components/onboardingTransition';
 import { WelcomeLevelCurve } from '@/components/welcome-level-curve';
-import { WelcomePlanArt } from '@/components/welcome-plan-art';
 import { WelcomeSyringeArt } from '@/components/welcome-syringe-art';
+import { SHOT_REMINDER_BODY, SHOT_REMINDER_TITLE } from '@/services/notifications';
 import {
   colors,
   easing,
@@ -35,6 +36,7 @@ import {
   timeTo,
   welcomeBeats,
 } from '@/theme';
+import { fmtTime } from '@/utils/date';
 
 /** The line Poke may never drop, wherever it puts it. */
 const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisions.';
@@ -45,6 +47,28 @@ const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisio
  * first run is the way the app is built, and that is the line under the button.
  */
 const TRUST_LINE = 'No account. Nothing leaves this phone.';
+
+/**
+ * Slide three's headline, broken by hand.
+ *
+ * The line carries two promises and each one is a sentence, so each one gets a
+ * line. Left to wrap, `Track` lands at the end of the first line on a 6.1 inch
+ * phone and the two promises read as one long clause instead of two short ones.
+ * The break also holds the block at the two lines the headline box reserves, on
+ * every width Poke supports.
+ */
+const REMINDER_HEADLINE = 'Never miss a shot.\nTrack every symptom.';
+
+/**
+ * The one claim the banner earns, and the only half of it Poke can keep.
+ *
+ * iOS writes the app's own name into every banner header, so a preview that
+ * promised no name at all would promise something the platform overrides. The
+ * medication is the part Poke controls, and `SHOT_REMINDER_BODY` never carries
+ * it: the dose variant of that sentence names a number and a unit, never a
+ * drug. This is the same sentence the permission step makes later.
+ */
+const BANNER_PRIVACY = 'The banner never names your medication.';
 
 const SLIDE_COUNT = 3;
 
@@ -84,8 +108,8 @@ let interacted = false;
  *
  * Each slide makes one claim and shows the thing that backs it. The order is the
  * order the app earns them in: the level curve is what the user gets back, the
- * syringe math is what Poke does for them on the way, and the plan is what keeps
- * the run going.
+ * syringe math is what Poke does for them on the way, and the reminder is what
+ * keeps the run going.
  *
  * The button and the line under it do not belong to any slide. The primary
  * action is a permanent slot, so it holds still while the pictures move, and the
@@ -235,15 +259,18 @@ export default function WelcomeScreen() {
             </Slide>
 
             <Slide
-              testID="welcome-slide-plan"
-              headline="A plan that reminds you."
-              body="Your next shot sits on the plan, and the reminder stays private."
+              testID="welcome-slide-reminder"
+              headline={REMINDER_HEADLINE}
+              body="Poke reminds you on shot day and keeps your symptoms in one log."
               page={page}
               headlineSize={headlineSize}
               headlineLine={headlineLine}
-              artLabel="A plan card with the next shot marked, under a reminder that carries no name."
+              artLabel={`A lock screen carrying one Poke banner. ${SHOT_REMINDER_TITLE}. ${SHOT_REMINDER_BODY}`}
+              note={
+                <Text variant="caption" color={colors.inkMuted}>{BANNER_PRIVACY}</Text>
+              }
             >
-              {(box) => <WelcomePlanArt width={box.width} height={box.height} />}
+              {() => <ReminderLockScreen />}
             </Slide>
           </ScrollView>
         </View>
@@ -381,6 +408,49 @@ function ArtBox({
   );
 }
 
+/**
+ * Slide three's picture: the banner Poke really sends, on a drawn lock screen.
+ *
+ * Both strings arrive from `services/notifications.ts`, which exports them for
+ * exactly this, so the slide cannot show a sentence the phone does not send and
+ * neither line drifts the next time the banner is rewritten. The clock is this
+ * phone's own, read once on mount: a drawn 9:41 would be the placeholder a
+ * shipping screen may not carry.
+ *
+ * The plate is dark because the banner is white and the screen behind it is
+ * near white. The contrast is what makes the card read as a notification
+ * arriving rather than as one more card on the page. It is the same plate the
+ * permission step shows later, so the thing the user agrees to there is the
+ * thing this slide promised.
+ */
+function ReminderLockScreen() {
+  const [now] = useState(() => Date.now());
+
+  return (
+    <View style={styles.lockScreenBox}>
+      <View style={styles.lockScreen}>
+        <View style={styles.clock}>
+          <Text variant="small" color={colors.inkSubtle}>{format(now, 'EEEE, MMMM d')}</Text>
+          <Text variant="display" color={colors.inkInverse}>{fmtTime(now)}</Text>
+        </View>
+
+        <View style={styles.banner}>
+          <View style={styles.appIcon}>
+            <Syringe size={18} color={colors.inkInverse} />
+          </View>
+          <View style={styles.bannerCopy}>
+            <View style={styles.bannerHead}>
+              <Text variant="smallStrong" style={styles.bannerTitle}>{SHOT_REMINDER_TITLE}</Text>
+              <Text variant="small" color={colors.inkSubtle}>now</Text>
+            </View>
+            <Text variant="small" color={colors.inkMuted}>{SHOT_REMINDER_BODY}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /** The app's plain arrival: up by a card or a line, and in. */
 function Enter({
   children,
@@ -474,6 +544,55 @@ const styles = StyleSheet.create({
   art: {
     flex: 1,
     marginTop: spacing.md,
+  },
+  // The plate keeps the width the support line keeps, and centres in whatever
+  // box the picture is given, so it stands where the other two pictures stand.
+  lockScreenBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockScreen: {
+    width: '100%',
+    maxWidth: 320,
+    padding: spacing.lg,
+    gap: spacing.xl,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surfaceInverse,
+  },
+  clock: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+  },
+  appIcon: {
+    width: spacing.xxxl,
+    height: spacing.xxxl,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerCopy: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  bannerHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  bannerTitle: {
+    flexShrink: 1,
   },
   noteSlot: {
     minHeight: NOTE_HEIGHT,

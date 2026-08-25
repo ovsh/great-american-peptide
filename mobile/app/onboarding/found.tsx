@@ -1,10 +1,37 @@
 import { StyleSheet, View } from 'react-native';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 import { SelectionCard } from '@/components/OnboardingScreen';
 import { OnboardingStep } from '@/components/OnboardingStep';
 import { track } from '@/services/analytics';
 import { FOUND_OPTIONS, useOnboardingStore, type FoundChannel } from '@/stores/onboarding';
-import { spacing } from '@/theme';
+import { colors, spacing, text } from '@/theme';
+
+/**
+ * The mark in front of every answer, keyed on `FoundChannel`, so a channel added
+ * to the store without a mark does not compile.
+ *
+ * FontAwesome 6 rather than lucide, which draws the rest of the app: lucide
+ * carries no TikTok, no Reddit and no App Store mark, and a list where five rows
+ * show the real logo and three show a stand-in reads as a defect. One set for
+ * the whole list also keeps the eight marks at one weight.
+ *
+ * `brand` picks the Brands face and the rest come from Solid. The three answers
+ * that name no product get a plain glyph, because a friend has no logo.
+ */
+const CHANNEL_GLYPHS: Record<FoundChannel, { name: string; brand: boolean }> = {
+  app_store: { name: 'app-store-ios', brand: true },
+  tiktok: { name: 'tiktok', brand: true },
+  instagram: { name: 'instagram', brand: true },
+  youtube: { name: 'youtube', brand: true },
+  reddit: { name: 'reddit-alien', brand: true },
+  creator: { name: 'bullhorn', brand: false },
+  friend: { name: 'user-group', brand: false },
+  other: { name: 'ellipsis', brand: false },
+};
+
+/** One size for all eight, so a column of different logos reads as one column. */
+const GLYPH_SIZE = text.h2.fontSize;
 
 // The answer that is reported once, on the way out.
 //
@@ -52,16 +79,29 @@ export default function FoundScreen() {
       }}
     >
       <View style={styles.list}>
-        {FOUND_OPTIONS.map((option) => (
-          <SelectionCard
-            key={option.id}
-            role="radio"
-            compact
-            title={option.label}
-            selected={foundChannel === option.id}
-            onPress={() => setFoundChannel(option.id)}
-          />
-        ))}
+        {FOUND_OPTIONS.map((option) => {
+          const glyph = CHANNEL_GLYPHS[option.id];
+          const selected = foundChannel === option.id;
+          return (
+            <SelectionCard
+              key={option.id}
+              title={option.label}
+              compact
+              role="radio"
+              leading={(
+                <FontAwesome6
+                  name={glyph.name}
+                  brand={glyph.brand}
+                  solid={!glyph.brand}
+                  size={GLYPH_SIZE}
+                  color={selected ? colors.accent : colors.inkMuted}
+                />
+              )}
+              selected={selected}
+              onPress={() => setFoundChannel(option.id)}
+            />
+          );
+        })}
       </View>
     </OnboardingStep>
   );
