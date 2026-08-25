@@ -7,6 +7,9 @@ paths:
 
 # UI work
 
+- Simplicity first: great beautiful big UX, fewer details, fewer buttons. One large clear
+  element beats several small ones; a gesture beats new chrome; a control that explains
+  itself gets no subheader. Cut a detail before you add one.
 - Read `mobile/src/theme/` before any visual change. Colour, spacing and type are tokens.
   Never write a raw hex value or a magic number.
 - Design every screen for a phone first. The iPad build uses the same components.

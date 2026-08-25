@@ -18,6 +18,8 @@ few strings.
   Monday". "Logged 1:04 am · left thigh" becomes "Logged at 1:04 am in the left thigh".
 - Active voice. No contractions. Poke is the actor by name, never "we" and never a bare
   "it" that could point at two things.
+- Notification banners are the one exception to the contraction ban: they follow the
+  "Notification voice" section in `CLAUDE.md`, and a title such as "It's time 💪" stays.
 - A button label names what happens when you press it. Read the handler before you write
   the label.
 - Do not name a feature the code does not have. Before you strip a hedge, grep the thing

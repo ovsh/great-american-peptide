@@ -16,7 +16,7 @@ Run all of these from `mobile/`.
 | iOS simulator | `npm run ios` |
 | Lint | `npm run lint` |
 | Typecheck | `npx tsc --noEmit` |
-| Store build | `npx eas build --platform ios --profile production` |
+| Store build | `npx eas build --platform ios --profile production --local` |
 | Push the store listing | `npx eas metadata:push` |
 
 There is no test runner. Domain tests run one at a time with `npx tsx`.
@@ -33,7 +33,9 @@ There is no test runner. Domain tests run one at a time with `npx tsx`.
 - **Router paths are absolute.** A relative path such as `./taking` gives a 404 on web.
 - **Do not change `src/domain/` to fix a UI problem.** The math is correct and load-bearing.
   Fix the caller instead.
-- **Build on EAS, not locally.** The local Xcode does not archive this project cleanly.
+- **Build locally with `--local`. Never queue an EAS cloud build** unless the user
+  explicitly asks for one in the current conversation — the quota is paid. Toolchain
+  state and the post-Xcode-upgrade checklist are in `CLAUDE.md` §"iOS builds: local only".
 - **Do not soften the medical wording** in `store.config.json` or in on-screen copy. The app
   must not advise, diagnose, treat, or recommend a dose. See `mobile/docs/store-setup.md` §1A.
 - **The bundle id never changes.** The App Store record depends on it.
