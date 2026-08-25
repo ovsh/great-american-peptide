@@ -83,9 +83,7 @@ export function TodayHeroCard({
           <Animated.View style={[styles.dot, dotStyle]} />
           <Animated.View style={[styles.title, title.style]}>
             <Text variant="h2" numberOfLines={1} style={styles.name}>{title.shown.name}</Text>
-            <View style={styles.dosePill}>
-              <Text variant="caption" color={colors.inkMuted}>{title.shown.dose}</Text>
-            </View>
+            <Text variant="bodyStrong" numberOfLines={1} style={styles.dose}>{title.shown.dose}</Text>
           </Animated.View>
           <Pressable
             testID="today-estimate-info"
@@ -278,34 +276,31 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     paddingHorizontal: spacing.xl,
     paddingTop: 18,
   },
+  // The name and the dose are two lines now, so the dot holds its place against
+  // the name rather than floating to the middle of the pair.
   dot: {
     width: 10,
     height: 10,
+    marginTop: spacing.sm,
     borderRadius: radius.pill,
   },
   title: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    gap: 2,
   },
   name: {
-    flex: 1,
     letterSpacing: -0.2,
   },
-  dosePill: {
-    height: 26,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+  // The dose is the number the card is about, so it reads as a number and not as
+  // a badge beside the name. A long name now takes the whole line it needs.
+  dose: {
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'],
   },
   infoButton: {
     width: 30,
