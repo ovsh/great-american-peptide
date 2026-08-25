@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import {
@@ -20,7 +20,7 @@ import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
 import { initAnalytics } from '@/services/analytics';
 import { exportWithoutMigrating } from '@/services/export';
-import { refreshScheduledReminders } from '@/services/notifications';
+import { listenForReminderTaps, refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
 import { useEntitlementSettled, useEntitlementStore } from '@/stores/entitlement';
 import { useOnboardingStore } from '@/stores/onboarding';
@@ -34,6 +34,7 @@ export const unstable_settings = {
 
 let bootstrapPromise: Promise<boolean> | null = null;
 let remindersInitialized = false;
+let reminderTapsInitialized = false;
 let fontsInitialized = false;
 
 function bootstrapApp(): Promise<boolean> {
@@ -91,6 +92,17 @@ export default function RootLayout() {
     if (gate.kind !== 'complete' || remindersInitialized) return;
     remindersInitialized = true;
     refreshScheduledReminders().catch(() => {});
+  }, [gate.kind]);
+
+  // A banner that names a shot has to open the screen that logs one, or the tap
+  // ends on whatever tab the app was left on. Once per process, behind the same
+  // gate as the queue itself: a push into a protected screen before onboarding
+  // is finished has nowhere to land. The service holds the web guard, so this
+  // subscribes to nothing on web.
+  useEffect(() => {
+    if (gate.kind !== 'complete' || reminderTapsInitialized) return;
+    reminderTapsInitialized = true;
+    listenForReminderTaps((route) => router.push(route)).catch(() => {});
   }, [gate.kind]);
 
   // Independent of the database gate: the store must know whether we can sell
