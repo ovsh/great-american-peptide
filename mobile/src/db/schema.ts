@@ -367,6 +367,58 @@ export const MIGRATIONS: Migration[] = [
     version: 16,
     up: `ALTER TABLE preferences ADD COLUMN tester_id INTEGER;`,
   },
+  {
+    // The two answers the reordered setup flow adds.
+    //
+    // `experience_level` holds `new`, `basics` or `experienced`, and null when
+    // the user skipped the question. The flow routes its teach screens on it.
+    //
+    // `goal_tags` holds every goal the user picked, as a JSON array of
+    // `GoalKind` ids in the order they picked them. `goal_kind` keeps the first
+    // of them, so every reader written before this column still reads one goal
+    // and reads the right one. Null on a row saved before this column existed.
+    //
+    // `activity_level` and `motivation` are not dropped here. The flow stopped
+    // asking for both, and the columns stay so the rows that already carry an
+    // answer keep it.
+    version: 17,
+    up: `
+      ALTER TABLE preferences ADD COLUMN experience_level TEXT;
+      ALTER TABLE preferences ADD COLUMN goal_tags TEXT;
+    `,
+  },
+  {
+    // What the medication comes in, which the setup run now asks for.
+    //
+    // `vial_mg` is the whole vial in milligrams, exactly as the label prints it,
+    // and it is a packaging fact rather than a dose. It is the number the mixing
+    // math takes as `materialMassMg`, so it is stored in milligrams whatever
+    // unit the dose is written in. Null when the user has not said yet, null for
+    // a pen, and null on every row written before this column existed.
+    //
+    // `vial_form` holds `vial` or `pen`. The peptide catalog names no packaging
+    // form, so Poke cannot read this off a preset and it stays null until the
+    // user answers. Null therefore means unknown and never means vial.
+    version: 18,
+    up: `
+      ALTER TABLE medications ADD COLUMN vial_mg REAL;
+      ALTER TABLE medications ADD COLUMN vial_form TEXT;
+    `,
+  },
+  {
+    // The water the user mixed into the vial, in millilitres.
+    //
+    // It feeds `ReconstitutionInput.diluentMl`, so it sits beside `vial_mg`,
+    // which feeds `materialMassMg` in the same sum. Together they are what the
+    // vial holds, and the dose columns say how much of it comes out.
+    //
+    // A stored mix is a record of what the user did and never a recommendation.
+    // Poke offers common amounts to press and writes only the one that was
+    // pressed. Null when the user has not said, null when they skipped the
+    // question, and null on every row written before this column existed.
+    version: 19,
+    up: `ALTER TABLE medications ADD COLUMN diluent_ml REAL;`,
+  },
 ];
 
 /**

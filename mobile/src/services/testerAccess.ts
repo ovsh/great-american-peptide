@@ -22,7 +22,10 @@ import { getTesterId, getTesterProAt, setTesterGrant } from '../repositories/pre
  *
  * The rules that follow from that:
  *   - Never gate anything behind this that Poke could not give away for free.
- *   - Keep `app/redeem.tsx` off the paywall. It is a tester path, not a discount.
+ *   - Two screens take a code and no others: `app/redeem.tsx` in Profile, and
+ *     `app/onboarding/creator.tsx` in setup. Both come through here.
+ *   - Keep both of them off the paywall. It is a tester path, not a discount,
+ *     and a buyer reading a price is never shown a way around it.
  *   - Retiring a round of codes means changing the constants and shipping a
  *     build, which retires every code at once.
  */

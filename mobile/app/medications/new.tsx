@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, Alert, Switch, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -60,7 +60,7 @@ import {
   type NewMedication,
 } from '@/repositories/medications';
 import { track, type AnalyticsEvents } from '@/services/analytics';
-import { createMedicationAndRefresh, updateMedicationAndRefresh } from '@/services/medicationMutations';
+import { createMedicationAndRefresh, setMedicationStatusAndRefresh, updateMedicationAndRefresh } from '@/services/medicationMutations';
 import { useAppStore } from '@/stores/app';
 import { isProNow, useIsPro } from '@/stores/entitlement';
 import { safeBack } from '@/utils/nav';
@@ -168,6 +168,13 @@ export default function AddMedicationScreen() {
       .catch(() => {});
   }, [editingId, pro]);
 
+  /**
+   * True when the row under edit was saved by setup without a dose and archived
+   * as bookkeeping rather than by choice. Saving the dose is what finishes that
+   * setup, so the save path restores the row instead of leaving it hidden.
+   */
+  const wasDeferred = useRef(false);
+
   useEffect(() => {
     if (!editingId) return;
     getMedication(editingId)
@@ -177,9 +184,12 @@ export default function AddMedicationScreen() {
           safeBack('/medications');
           return;
         }
+        wasDeferred.current = medication.status === 'archived' && !(medication.default_dose > 0);
         setPresetId(medication.preset_id);
         setName(medication.name);
-        setDose(String(medication.default_dose));
+        // Zero is a deferred dose from setup and not a dose, so the box opens
+        // empty and asks rather than showing a number nobody gave.
+        setDose(medication.default_dose > 0 ? String(medication.default_dose) : '');
         // A stored dose plan opens the rows already on. A column that does not
         // parse reads as no plan, which is the single dose row it would be.
         const storedDoses = parseDoseByDay(medication.dose_by_day);
@@ -410,6 +420,14 @@ export default function AddMedicationScreen() {
       } satisfies Omit<NewMedication, 'colorIndex'>;
       if (editingId) {
         await updateMedicationAndRefresh(editingId, input);
+        // The save above passed the dose check, so a deferred row now has its
+        // dose and comes back on, under the same allowance rule setup applied.
+        // Over the limit it stays archived and Restore owns the paywall.
+        if (wasDeferred.current
+          && (isProNow() || (await countActiveMedications()) < FREE_MEDICATION_LIMIT)) {
+          await setMedicationStatusAndRefresh(editingId, 'active');
+          wasDeferred.current = false;
+        }
       } else {
         // Last check before the write: the entitlement can change while the
         // form is open.

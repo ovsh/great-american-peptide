@@ -37,6 +37,9 @@ const tirzepatide: MedicationRow = {
   paused_at: null,
   composition: null,
   dose_by_day: null,
+  vial_mg: null,
+  vial_form: null,
+  diluent_ml: null,
   created_at: NOW - 60 * DAY,
   updated_at: NOW,
 };

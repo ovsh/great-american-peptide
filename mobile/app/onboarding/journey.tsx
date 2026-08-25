@@ -1,39 +1,24 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/Button';
-import { OnboardingScreen, SelectionCard } from '@/components/OnboardingScreen';
-import { useOnboardingTransition } from '@/components/onboardingTransition';
-import {
-  JOURNEY_OPTIONS,
-  onboardingTotalSteps,
-  useOnboardingStore,
-} from '@/stores/onboarding';
+import { SelectionCard } from '@/components/OnboardingScreen';
+import { OnboardingStep } from '@/components/OnboardingStep';
+import { JOURNEY_OPTIONS, useOnboardingStore } from '@/stores/onboarding';
 import { spacing } from '@/theme';
 
-// Step 1, and the only branch in the flow. The answer changes the wording of the
-// medication question on the next screen, exactly as it does in the recording:
-// "taking" against "plan to use". It also takes the last-shot question out of
-// the run for a user who has not started. See `postScheduleOrder`.
+// One of the two answers that change the length of the run. It changes the
+// wording of the medication question on the next screen, exactly as it does in
+// the recording: "taking" against "plan to use". It also takes the last-shot
+// question out of the run for a user who has not started. See
+// `postScheduleOrder`.
 export default function JourneyScreen() {
   const journeyStage = useOnboardingStore((state) => state.journeyStage);
   const setJourneyStage = useOnboardingStore((state) => state.setJourneyStage);
-  const transition = useOnboardingTransition();
 
   return (
-    <OnboardingScreen
-      step={1}
-      totalSteps={onboardingTotalSteps(journeyStage)}
-      backHref="/onboarding/privacy"
-      transition={transition}
+    <OnboardingStep
+      step="journey"
       title="Have you started yet?"
-      footer={(
-        <Button
-          disabled={!journeyStage}
-          onPress={() => transition.go('/onboarding/taking')}
-        >
-          Continue
-        </Button>
-      )}
+      canContinue={!!journeyStage}
     >
       <View style={styles.list}>
         {JOURNEY_OPTIONS.map((option) => (
@@ -47,7 +32,7 @@ export default function JourneyScreen() {
           />
         ))}
       </View>
-    </OnboardingScreen>
+    </OnboardingStep>
   );
 }
 

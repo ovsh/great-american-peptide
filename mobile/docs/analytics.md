@@ -27,7 +27,8 @@ call it. The compiler is the second line of defence and this rule is the first.
 
 | Event | Properties | Fires where | Why |
 |---|---|---|---|
-| `onboarding_step_viewed` | `step` route name | `app/onboarding/_layout.tsx:16` | Where the 25 step flow loses people. `useSegments` returns route patterns, so a dynamic step reads as `schedule/[index]` and no typed answer can reach it. |
+| `onboarding_step_viewed` | `step` route name | `app/onboarding/_layout.tsx:16` | Where the flow loses people. The counted length moves with the knowledge and journey answers, so read the step name and not a position. `useSegments` returns route patterns, so a dynamic step reads as `setup/[index]/vial` and no typed answer can reach it. |
+| `onboarding_channel_picked` | `channel`, one of `app_store`, `tiktok`, `instagram`, `youtube`, `reddit`, `creator`, `friend`, `other` | `app/onboarding/found.tsx:40` | Which channel brings people in, which is the one thing the App Store's own numbers cannot say. The only content event in the flow, and the id comes off a closed list of eight, so nothing a person typed can reach it. It fires when the user leaves the screen with a pick, never on a tap and never on a skip. |
 | `onboarding_completed` | none | `src/services/onboarding.ts:249` | The denominator for every later funnel. |
 | `health_connect_enabled` | `source` `onboarding` or `profile` | `src/services/health.ts:117` | Whether the Apple Health offer works better during setup or later. Fires only when the switch goes on, so a background read does not report a second connection. |
 | `notification_permission_result` | `granted` | `src/services/notifications.ts:85` | The reminder loop is worth nothing without permission. Counted only at the real prompt, never at a permission iOS granted earlier. |
@@ -41,7 +42,7 @@ call it. The compiler is the second line of defence and this rule is the first.
 | `purchase_completed` | `plan` `yearly` or `monthly` | `app/paywall.tsx:89` | Conversion by plan. |
 | `purchase_restored` | none | `src/stores/entitlement.ts:247` | Lives in the store, so a restore from the profile tab counts too. |
 | `export_csv` | none | `src/services/export.ts:95` | Export is a Pro feature and a reason people pay. The file itself never leaves by this route. |
-| `tester_code_redeemed` | `tester_id` | Not wired yet | In the schema for the tester flow to call. A tester id is an invite number, not a person. |
+| `tester_code_redeemed` | `tester_id` | `src/stores/entitlement.ts:264` | Lives in the store, so both doors count: the tester screen in Profile and the creator screen in setup. A tester id is an invite number, not a person. |
 
 PostHog also sends its own lifecycle events, `Application Opened`, `Application Became
 Active` and `Application Backgrounded`, which is what retention is counted from.

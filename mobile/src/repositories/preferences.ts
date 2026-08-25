@@ -47,6 +47,9 @@ const PREFERENCE_COLUMNS = [
   'notif_cycle_enabled',
   // Schema version 16.
   'tester_id',
+  // Schema version 17.
+  'experience_level',
+  'goal_tags',
 ] as const satisfies readonly (keyof PreferencesPatch)[];
 
 export async function getPreferences(): Promise<PreferencesRow> {

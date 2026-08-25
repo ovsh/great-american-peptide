@@ -27,10 +27,10 @@ import { useAppStore } from '@/stores/app';
 import { isProNow, paywallEnabledNow } from '@/stores/entitlement';
 import {
   CONCERN_OPTIONS,
-  GOAL_OPTIONS,
   formatPace,
   formatPaceRate,
   getOnboardingDraft,
+  goalLabel as goalLabelFor,
   MAINTAIN_PACE_LABEL,
   paceBounds,
   useOnboardingStore,
@@ -87,7 +87,9 @@ export default function PlanScreen() {
   // pace moves the length of the count. Two moving inputs, one visible number.
   const now = useRef(Date.now()).current;
 
-  const goalLabel = GOAL_OPTIONS.find((goal) => goal.id === goalKind)?.label;
+  // `goalLabelFor` covers the legacy goal ids too, so a draft restored from an
+  // old install still names its goal instead of failing `validPlan`.
+  const goalLabel = goalKind ? goalLabelFor(goalKind) : undefined;
   const concernLabels = CONCERN_OPTIONS
     .filter((option) => option.id !== 'none' && concerns.includes(option.id))
     .map((option) => option.label.toLocaleLowerCase());
@@ -127,12 +129,21 @@ export default function PlanScreen() {
       setGate({ kind: 'complete' });
       bumpVersion();
       resetDraft();
-      // Land on Today first, then raise the paywall over it. Seeing the app you
-      // just set up behind the sheet beats a wall in front of an empty room, and
-      // dismissing leaves you already home.
-      router.replace('/');
+      // The offer is the last screen of setup, and it replaces this one rather
+      // than opening over Today. The plan is still on the screen the user came
+      // from, so the curve the paywall sells is the curve they just read.
+      //
+      // It replaces, so setup cannot be walked back into, and the paywall sends
+      // every exit on to Today. The `✕` is on it and it works, so this is the
+      // end of setup and not a wall: `docs/meagain-onboarding-adaptation.md`.
+      //
+      // A user who already holds Pro skips it. `isProNow` covers all three
+      // ways: a redeemed tester code, an active subscription, and a store Poke
+      // cannot sell through at all.
       if (paywallEnabledNow() && !isProNow()) {
-        router.push('/paywall?source=onboarding_plan');
+        router.replace('/paywall?source=onboarding_plan');
+      } else {
+        router.replace('/');
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Poke could not save your plan. Try again.');
@@ -235,18 +246,33 @@ export default function PlanScreen() {
           <View key={medication.id} style={styles.routineRow}>
             <Text variant="bodyStrong">{medication.name}</Text>
             {/* Two lines, because one sentence cannot hold a rate and a count
-                without a comma the schedule label may already have spent. */}
+                without a comma the schedule label may already have spent.
+                A deferred answer reads as the words "not set yet" rather than
+                as a blank, and the shot count is dropped rather than printed as
+                a zero, because zero is not what the run found out. */}
             <Text variant="small" color={colors.inkMuted}>
-              {medication.doseLabel} {lowerFirst(medication.scheduleLabel)}
+              {medication.doseSet && medication.scheduleSet
+                ? `${medication.doseLabel} ${lowerFirst(medication.scheduleLabel)}`
+                : unsetLine(medication.doseSet, medication.scheduleSet)}
             </Text>
-            <Text variant="small" color={colors.inkMuted}>
-              {medication.shotsInFourWeeks} shots in the first 4 weeks
-            </Text>
-            {medication.curve ? null : (
+            {medication.doseSet && medication.scheduleSet ? (
+              <Text variant="small" color={colors.inkMuted}>
+                {medication.shotsInFourWeeks} shots in the first 4 weeks
+              </Text>
+            ) : (
+              <Text variant="small" color={colors.inkMuted}>
+                Finish this one in Medications whenever you are ready.
+              </Text>
+            )}
+            {/* Why there is no curve. A medication that is still waiting for an
+                answer has no curve either, and the line above already gives the
+                reason, so naming the half-life here would state a second reason
+                that is not true. */}
+            {medication.curve === null && medication.doseSet && medication.scheduleSet ? (
               <Text variant="small" color={colors.inkMuted}>
                 No published half-life, so no level curve.
               </Text>
-            )}
+            ) : null}
           </View>
         ))}
 
@@ -427,8 +453,11 @@ function NextShotCard({ plan }: { plan: OnboardingPlan }) {
     return (
       <Card padding="xl" style={styles.card}>
         <Text variant="smallStrong" color={colors.inkMuted}>Next shot</Text>
+        {/* Reached when every medication is still waiting for a dose or for a
+            schedule. Medications is where those rows are, so it names that
+            screen rather than Today. */}
         <Text color={colors.inkMuted}>
-          You have no shot day set yet. Add one from Today when you are ready.
+          You have no shot day set yet. Set one in Medications whenever you are ready.
         </Text>
       </Card>
     );
@@ -556,6 +585,17 @@ function countdownLabel(at: number): string {
 // its capital: "0.5 mg every week on Monday".
 function lowerFirst(value: string): string {
   return value.charAt(0).toLocaleLowerCase() + value.slice(1);
+}
+
+/**
+ * What the routine line says when the user passed on one of the two answers.
+ *
+ * It names what is missing rather than showing a blank or a zero, and it never
+ * fills the gap in. Both flags true never reaches here.
+ */
+function unsetLine(doseSet: boolean, scheduleSet: boolean): string {
+  if (!doseSet && !scheduleSet) return 'Dose and schedule not set yet.';
+  return doseSet ? 'Schedule not set yet.' : 'Dose not set yet.';
 }
 
 // A watch list is a list, so it reads as one. Commas up to the last name, and

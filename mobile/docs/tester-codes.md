@@ -10,6 +10,25 @@ The app implements it in `mobile/src/domain/testerCode.ts`, the owner mints code
 `mobile/src/domain/testerCode.test.ts` is the proof. Change one of the four and change all
 four.
 
+## Where a code is entered
+
+Two screens, and one path behind them.
+
+| Screen | Reached from | Label |
+|---|---|---|
+| `mobile/app/redeem.tsx` | The tester row in Profile, and nowhere else | Turn on Poke Pro |
+| `mobile/app/onboarding/creator.tsx` | Setup, one counted step before the journey question | Apply the code |
+
+Both call `redeemTesterCode` in `mobile/src/stores/entitlement.ts`, both reject in the same
+five words, and a grant from either one is the same grant: Poke Pro on this device, held in
+the `tester_pro_at` and `tester_id` columns of the preferences row.
+
+The setup door needs no branch anywhere else. `accessFromState` reads a tester grant as Pro,
+and `onboarding/plan.tsx` opens the paywall only when `paywallEnabledNow() && !isProNow()`,
+so a code applied during setup sends the user to Today instead of the offer. The paywall
+itself still carries no door, and it must not grow one: a buyer reading a price is never
+shown a way around it.
+
 ## The alphabet
 
 Crockford base32, in this exact order. Index 0 is `0`, index 31 is `Z`.
@@ -155,6 +174,10 @@ def decode(text):
 
 Read these before you put anything behind a code.
 
+- **Every new user is now asked for one.** Setup shows the code field to everybody, so a
+  code that leaks reaches people who never met a tester. That is the price of the second
+  door, and it is affordable only because a code gives away nothing Poke could not give
+  away for free. Weigh it again before anything else goes behind a code.
 - **A code is not single use.** There is no server and no ledger, so nothing counts
   redemptions. One tester can pass their code to a hundred people and every one of them
   unlocks. The id tells the owner who the code went to, and that is all it tells anyone.

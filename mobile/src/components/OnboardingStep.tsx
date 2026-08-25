@@ -7,18 +7,24 @@ import { OnboardingScreen } from './OnboardingScreen';
 import { Text } from './Text';
 import { useOnboardingTransition } from './onboardingTransition';
 import {
-  nextHref,
+  mixCandidateIndex,
+  onboardingBackHref,
+  onboardingNextHref,
+  onboardingStepIndex,
   onboardingTotalSteps,
-  postScheduleStepIndex,
-  previousHref,
   useOnboardingStore,
+  type OnboardingStepName,
   type PostScheduleStep,
 } from '../stores/onboarding';
 import { colors, radius, spacing } from '../theme';
 
 interface OnboardingStepProps {
-  /** The step's name in `POST_SCHEDULE_ORDER`. Index, back and next come from it. */
-  step: PostScheduleStep;
+  /**
+   * The step's name in `PRE_SCHEDULE_ORDER` or in `POST_SCHEDULE_ORDER`. The
+   * index, the back target and the Continue target all come from it, and no
+   * screen has to know which of the two runs it is in.
+   */
+  step: OnboardingStepName;
   title: string;
   subtitle?: string;
   children?: ReactNode;
@@ -37,10 +43,10 @@ interface OnboardingStepProps {
 }
 
 /**
- * One counted question in the run after the schedule screens.
+ * One counted step of the setup flow, before the schedules or after them.
  *
- * Every screen in that run is the same shape, so the shape lives here once: read
- * the step index off `POST_SCHEDULE_ORDER`, own the measured fade, put the
+ * Every counted screen is the same shape, so the shape lives here once: read the
+ * step index off the order arrays in the store, own the measured fade, put the
  * primary button in the same place, and never let a screen invent its own
  * forward or back target.
  */
@@ -58,18 +64,23 @@ export function OnboardingStep({
   contentStyle,
 }: OnboardingStepProps) {
   const medicationIds = useOnboardingStore((state) => state.medicationIds);
-  // The run is shorter for a user who has not started, so the index, the total
-  // and both targets read the order for that stage rather than the flat one.
+  // The run is shorter for a user who has not started and shorter again for one
+  // who has done this before, so the index, the total and both targets read the
+  // order for these two answers rather than one flat list.
   const stage = useOnboardingStore((state) => state.journeyStage);
+  const experience = useOnboardingStore((state) => state.experienceLevel);
+  // Whether the setup run ended in the mix beat, so Back from the first
+  // post-schedule step retraces it rather than jumping over it.
+  const mixIndex = useOnboardingStore(mixCandidateIndex);
   const transition = useOnboardingTransition();
   const count = medicationIds.length;
-  const advance = () => transition.go(nextHref(stage, step));
+  const advance = () => transition.go(onboardingNextHref(step, stage, experience, count));
 
   return (
     <OnboardingScreen
-      step={postScheduleStepIndex(stage, step)}
-      totalSteps={onboardingTotalSteps(stage)}
-      backHref={previousHref(stage, count, step)}
+      step={onboardingStepIndex(step, stage, experience)}
+      totalSteps={onboardingTotalSteps(stage, experience)}
+      backHref={onboardingBackHref(step, stage, experience, count, mixIndex)}
       transition={transition}
       title={title}
       subtitle={subtitle}

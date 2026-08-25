@@ -81,6 +81,13 @@ interface TodayData {
   medications: MedicationRow[];
   /** Paused medications with a cycle on them. Today shows them as a break strip. */
   onBreak: MedicationRow[];
+  /**
+   * The first medication saved without a dose, when one exists. Setup lets the
+   * user pass on the dose question, and that row stays archived until the dose
+   * lands, so with nothing active the list's slot names it instead of asking
+   * for a first medication the user already added.
+   */
+  unfinished: MedicationRow | null;
   injections: Record<string, InjectionRow[]>;
   weights: MeasurementRow[];
   preferences: PreferencesRow | null;
@@ -105,6 +112,7 @@ export default function TodayScreen() {
 
   const [medications, setMedications] = useState<MedicationRow[]>([]);
   const [onBreak, setOnBreak] = useState<MedicationRow[]>([]);
+  const [unfinished, setUnfinished] = useState<MedicationRow | null>(null);
   const [injections, setInjections] = useState<Record<string, InjectionRow[]>>({});
   const [weights, setWeights] = useState<MeasurementRow[]>([]);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
@@ -131,6 +139,7 @@ export default function TodayScreen() {
   const apply = useCallback((data: TodayData, logged: boolean) => {
     setMedications(data.medications);
     setOnBreak(data.onBreak);
+    setUnfinished(data.unfinished);
     setInjections(data.injections);
     setWeights(data.weights);
     setPreferences(data.preferences);
@@ -145,7 +154,9 @@ export default function TodayScreen() {
     setLoadError(false);
     try {
       const [medicationRows, weightRows, preferenceRow, effectRows] = await Promise.all([
-        listMedications(),
+        // Archived rows included, because a medication saved without a dose
+        // sits archived and Today has to know it exists to name it.
+        listMedications(true),
         listMeasurements('weight', { limit: 1 }),
         getPreferences(),
         listSideEffects({ limit: 1 }),
@@ -168,6 +179,11 @@ export default function TodayScreen() {
         // A paused medication leaves Today, and one on a planned break leaves a
         // line behind so the day it ends does not have to be remembered.
         onBreak: medicationRows.filter((medication) => medication.status === 'paused'),
+        // Zero is a deferred dose and not a dose; a row archived with one still
+        // on it was archived for another reason and stays out of this.
+        unfinished: medicationRows.find(
+          (medication) => medication.status === 'archived' && !(medication.default_dose > 0),
+        ) ?? null,
         injections: byMedication,
         weights: weightRows,
         preferences: preferenceRow,
@@ -371,6 +387,7 @@ export default function TodayScreen() {
               <TodayMedicationList
                 rows={rest}
                 activeCount={dashboard.medications.length}
+                unfinished={unfinished ? { id: unfinished.id, name: unfinished.name } : null}
                 onSelect={selectMedication}
                 onReorder={reorder}
                 onDragChange={setDragging}

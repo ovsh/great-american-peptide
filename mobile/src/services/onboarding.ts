@@ -3,7 +3,11 @@ import type { PreferencesPatch } from '../repositories/preferences';
 import type { NewMedication } from '../repositories/medications';
 import {
   isCustomMedicationId,
+  parseDiluentMl,
   scheduleFrequencyValue,
+  scheduleHasDose,
+  scheduleHasFrequency,
+  scheduleVialMg,
   type OnboardingDraft,
   type OnboardingMedicationId,
 } from '../stores/onboarding';
@@ -31,48 +35,82 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 interface MedicationSeed {
   selectionId: OnboardingMedicationId;
   medication: Omit<NewMedication, 'colorIndex'>;
+  /**
+   * Whether the user gave a dose for this medication.
+   *
+   * False when they pressed the hatch on the dose screen. `default_dose` is
+   * `NOT NULL`, so a deferred dose is stored as zero, and a zero on a running
+   * medication would read as "0 mg" on the Today card, which is fake data. So a
+   * medication with no dose is saved archived instead: the row keeps everything
+   * the user did give, no card draws it, no reminder fires for it, and
+   * `medications/index.tsx` says in words that the dose is not set yet.
+   */
+  hasDose: boolean;
 }
 
-function parsePositive(value: string, label: string): number {
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`Enter a ${label} above zero.`);
-  return parsed;
-}
-
+/**
+ * One medication, as far as the user filled it in.
+ *
+ * A deferred answer is stored as absence and never as a number Poke chose. A
+ * deferred dose is a zero on an archived row, a deferred frequency is the
+ * `custom` kind with a null value, which `medicationScheduleFromStored` already
+ * reads as no schedule, and a deferred vial is two null columns.
+ */
 function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
+  // The one thing setup still refuses to finish without. Everything else on
+  // these screens can wait; a medication list with nothing in it cannot,
+  // because the app that follows is entirely about medications.
   if (draft.medicationIds.length === 0) throw new Error('Choose at least one medication.');
 
-  // Every selected medication has its own schedule screen, so every one of them
-  // must have its own draft here. Nothing is filled in behind the user.
+  // Every selected medication has its own setup run, so every one of them must
+  // have its own draft here. Nothing is filled in behind the user.
   return draft.medicationIds.map((selectionId) => {
     const schedule = draft.schedules[selectionId];
     if (!schedule) throw new Error('Add a dose and a schedule for every medication.');
-    const dose = parsePositive(schedule.doseText, 'dose');
-    const frequencyValue = scheduleFrequencyValue(schedule);
-    // Every kind but daily needs its number. The schedule screen holds Continue
-    // until it has one, so this only catches a draft that arrived another way.
-    if (schedule.frequencyKind === 'every_n_days' && frequencyValue === null) {
-      throw new Error('Enter how many days pass between shots.');
-    }
-    if (schedule.frequencyKind === 'weekdays' && frequencyValue === null) {
-      throw new Error('Pick at least one shot day.');
-    }
+    const hasDose = scheduleHasDose(schedule);
+    const dose = hasDose ? Number.parseFloat(schedule.doseText) : 0;
+    // `custom` with no value is how the schema already spells "no schedule".
+    // Every reader goes through `medicationScheduleFromStored`, which returns
+    // null for it, so no shot is expected and no reminder is scheduled.
+    const settled = scheduleHasFrequency(schedule);
+    const frequencyKind = settled ? schedule.frequencyKind : 'custom';
+    const frequencyValue = settled ? scheduleFrequencyValue(schedule) : null;
+    // Undefined keeps what an earlier pass through setup wrote, which is the
+    // keep-or-write contract `updateMedicationDefaults` documents. The vial
+    // question is answered only when a form was picked: the hatch clears the
+    // form with the size, because a pass is not an erase. A pen writes its
+    // nulls, clearing a size that belongs to a vial the user no longer has.
+    const vialAnswered = schedule.vialForm !== null;
+    const vialMg = vialAnswered ? scheduleVialMg(schedule) : undefined;
+    const vialForm = vialAnswered ? schedule.vialForm : undefined;
+    // The mix beat runs for at most one medication and only when its numbers
+    // allow the sum, so this is a number on that one row at most.
+    // `diluentMlText` is empty until the user presses Save, and a skip leaves
+    // it empty, so a skipped mix keeps an earlier saved one rather than wiping
+    // it. A pen clears the mix with the size, because a pen arrives mixed.
+    const diluentMl = vialForm === 'pen'
+      ? null
+      : (parseDiluentMl(schedule.diluentMlText) ?? undefined);
 
     if (isCustomMedicationId(selectionId)) {
       const name = (draft.customNames[selectionId] ?? '').trim();
       if (!name) throw new Error('Enter a name for your custom medication.');
       return {
         selectionId,
+        hasDose,
         medication: {
           name,
           presetId: null,
           defaultDose: dose,
           defaultUnit: schedule.unit,
           defaultRoute: schedule.route,
-          frequencyKind: schedule.frequencyKind,
+          frequencyKind,
           frequencyValue,
           halfLifeHours: null,
           tmaxHours: null,
+          vialMg,
+          vialForm,
+          diluentMl,
         },
       };
     }
@@ -84,19 +122,23 @@ function medicationSeeds(draft: OnboardingDraft): MedicationSeed[] {
     const preset = entry.preset;
     return {
       selectionId,
+      hasDose,
       medication: {
         name: entry.name,
         presetId: preset.id,
         defaultDose: dose,
         defaultUnit: schedule.unit,
         defaultRoute: schedule.route,
-        frequencyKind: schedule.frequencyKind,
+        frequencyKind,
         frequencyValue,
         // Null for a peptide with no published half-life. The level card says
         // so rather than drawing a curve nobody can cite.
         halfLifeHours: preset.halfLifeHours,
         tmaxHours: preset.tmaxHours,
         composition: seedComposition(preset, schedule.compositionMg),
+        vialMg,
+        vialForm,
+        diluentMl,
       },
     };
   });
@@ -156,8 +198,9 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
    * are saved archived: an archived medication keeps its name, its dose, its
    * schedule and its half-life, it draws no card, it sends no reminder, and
    * `countActiveMedications` does not count it, which is the same rule the
-   * other door applies. Setup itself stays clear of the paywall.
-   * `onboarding/plan.tsx` raises one after the user lands on Today.
+   * other door applies. Setup raises no medication-limit paywall. The one
+   * offer the flow makes is the subscription screen `onboarding/plan.tsx`
+   * replaces itself with on the way to Today, and closing it costs nothing.
    *
    * Medications the user already had and did not name here hold their own
    * places, so a second pass through setup cannot lift the limit.
@@ -173,7 +216,16 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
   let activeCount = 0;
   const saved: { id: string; seed: MedicationSeed }[] = [];
   for (const { seed, existing } of matched) {
-    const status: MedicationRow['status'] = activeCount < activeAllowance ? 'active' : 'archived';
+    // Two reasons to save a medication archived, and they are the same
+    // mechanism. The first is the free limit above. The second is a dose the
+    // user deferred: `default_dose` is `NOT NULL`, so the row carries a zero,
+    // and a running medication with a zero dose would print "0 mg" on the Today
+    // card. Archived, it prints nothing anywhere and the medication list says
+    // the dose is not set yet. Finishing the dose in the editor is what turns
+    // it back on. A medication with no dose also claims no free slot, because
+    // it is not running.
+    const withinAllowance = activeCount < activeAllowance;
+    const status: MedicationRow['status'] = seed.hasDose && withinAllowance ? 'active' : 'archived';
     if (status === 'active') activeCount += 1;
     if (existing) {
       await updateMedicationDefaults(existing.id, seed.medication);
@@ -194,9 +246,13 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
 
   // Every question the flow asks lands somewhere. A question whose answer goes
   // nowhere is a question Poke should not be asking. The medication and schedule
-  // answers went to the medications table above. The other thirteen land here.
+  // answers went to the medications table above. The rest land here.
   const preferences: PreferencesPatch = {
+    // The first goal the user picked, and then every one of them. `goal_kind`
+    // is what a reader written before the multiple pick still reads, and it is
+    // still one id, so nothing downstream changed.
     goal_kind: draft.goalKind,
+    goal_tags: draft.goalTags.length > 0 ? JSON.stringify(draft.goalTags) : null,
     side_effect_concerns: JSON.stringify(draft.concerns),
     reminder_time: reminderTime,
     notifications_enabled: draft.reminder.kind === 'enabled' ? 1 : 0,
@@ -209,8 +265,13 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
     journey_stage: draft.journeyStage,
     sex: draft.sex,
     birth_year: parseOptionalInt(draft.birthYearText),
-    activity_level: draft.activityLevel,
-    motivation: draft.motivation,
+    // Null when the user skipped the question. `postScheduleOrder` runs a null
+    // as `basics`, and the column keeps the null rather than the guess.
+    //
+    // The `activity_level` and `motivation` writes stood here. The flow stopped
+    // asking for either one, so nothing writes them any more. The columns stay
+    // in the table, holding the answers older builds saved.
+    experience_level: draft.experienceLevel,
     weight_unit: draft.weight.unit,
     height_unit: draft.height.unit,
     last_shot_at: lastShotAt(draft.lastShot, now),

@@ -47,9 +47,31 @@ export interface MedicationRow {
    * `parseDoseByDay` in `domain/doseByDay.ts`, never with a bare JSON.parse.
    */
   dose_by_day: string | null;
+  /**
+   * The whole vial in milligrams, copied off the label, and a packaging fact
+   * rather than a dose. It is what the mixing math takes as `materialMassMg`,
+   * so it is milligrams whatever unit the dose is written in. Null means the
+   * user has not said, and null is also what a pen carries.
+   */
+  vial_mg: number | null;
+  /**
+   * `vial` or `pen`. Null means unknown and never means vial: the peptide
+   * catalog names no packaging form, so nothing but the user can fill this in.
+   */
+  vial_form: VialForm | null;
+  /**
+   * The water mixed into the vial, in millilitres, and what the mixing math
+   * takes as `diluentMl`. It records the mix the user made rather than one Poke
+   * proposed. Null means the user never said, which covers a pen, a medication
+   * that arrives ready to inject, and a skipped question.
+   */
+  diluent_ml: number | null;
   created_at: number;
   updated_at: number;
 }
+
+/** What a medication comes in. See `vial_form` on `MedicationRow`. */
+export type VialForm = 'vial' | 'pen';
 
 export interface InjectionRow {
   id: string;
@@ -67,7 +89,23 @@ export interface InjectionRow {
 
 export type MeasurementKind = 'weight' | 'bmi' | 'height';
 
-export type GoalKind = 'weight_loss' | 'recovery' | 'longevity' | 'performance' | 'other';
+/**
+ * What the user came for.
+ *
+ * `performance` and `other` are no longer offered on the goal screen. They stay
+ * in the union because rows written by older builds still hold them, and a
+ * stored answer that no longer type-checks is a stored answer nothing can read.
+ * `goalLabel` in `stores/onboarding.ts` names every one of them.
+ */
+export type GoalKind =
+  | 'weight_loss'
+  | 'recovery'
+  | 'sleep'
+  | 'focus'
+  | 'healing'
+  | 'longevity'
+  | 'performance'
+  | 'other';
 
 export interface MeasurementRow {
   id: string;
@@ -119,8 +157,20 @@ export interface PreferencesRow {
   journey_stage: JourneyStage | null;
   sex: Sex | null;
   birth_year: number | null;
+  /**
+   * Two answers the flow no longer asks for. The columns stay because rows
+   * written by older builds hold them; nothing writes them any more.
+   */
   activity_level: ActivityLevel | null;
   motivation: string | null;
+  /** How well the user says they know injections. Null when they skipped it. */
+  experience_level: ExperienceLevel | null;
+  /**
+   * Every goal the user picked, as a JSON array of `GoalKind` ids in the order
+   * they picked them. `goal_kind` above holds the first of them, so a reader
+   * that wants one goal keeps reading one column.
+   */
+  goal_tags: string | null;
   /** Weight change per week the user chose on the pace screen, in `weight_unit`. */
   weekly_pace: number | null;
   last_shot_at: number | null;
@@ -165,3 +215,12 @@ export interface PreferencesRow {
 export type JourneyStage = 'taking' | 'starting';
 export type Sex = 'female' | 'male' | 'other';
 export type ActivityLevel = 'low' | 'light' | 'active' | 'very_active';
+
+/**
+ * How much the user already knows about injections.
+ *
+ * The setup flow asks this once and routes on it: the teach beats between the
+ * questions are shown to `new` in full, cut to two for `basics`, and dropped
+ * for `experienced`. Null is a skipped answer and routes as `basics`.
+ */
+export type ExperienceLevel = 'new' | 'basics' | 'experienced';

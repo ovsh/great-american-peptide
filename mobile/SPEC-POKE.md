@@ -78,42 +78,58 @@ Routes:
 MeAgain's school: one question per screen, then a compute beat, then a "plan ready"
 payoff that reads the user's own answers back. Poke copies the structure and the
 rhythm. Poke does not copy the wall in front of the app. MeAgain's top complaint is
-"no free trial", "can't track ANYTHING without membership". Poke finishes onboarding
-onto Today and raises the paywall over it (`plan.tsx`), so the app sits behind a sheet
-and not behind a purchase. Poke does not copy the in-onboarding rating ask either.
+"no free trial", "can't track ANYTHING without membership". Poke puts the offer last,
+after the reveal: `plan.tsx` replaces itself with `/paywall?source=onboarding_plan`,
+and every exit from that screen lands on Today. The `✕` is visible and it works, the
+yearly plan carries a free trial, and a user who closes the offer keeps shot logging,
+the next shot, the full history and two medications. So the offer ends setup and does
+not gate the app. Poke does not copy the in-onboarding rating ask either.
 `src/services/reviewGate.ts` asks for a rating only after real logged use.
 
-**This section describes the flow as built.** The source of truth is
-`POST_SCHEDULE_ORDER` in `src/stores/onboarding.ts`. Read it before you trust the list
+**This section describes the flow as built.** The source of truth is the flow block
+in `src/stores/onboarding.ts`: `PRE_SCHEDULE_ORDER`, the setup-run helpers around
+`SCHEDULE_STEP_OFFSET`, and `postScheduleOrder`. Read it before you trust the list
 below. `docs/meagain-onboarding-map.md` holds the frame-by-frame map against the
 recording, and `docs/meagain-onboarding-adaptation.md` names the constraint behind
 every place Poke departs from it.
 
-23 counted steps, one question each, a progress bar on top, Back always works:
+Up to 23 counted steps, one question each, a progress bar on top, Back always works.
+Two answers shorten the run: the knowledge answer drops teach beats and the journey
+answer drops last-shot, so an experienced user about to start sees 17.
 
-- **0 Welcome** (`index`) — the wordmark over a four-slide carousel that opens on
-  "One app for your whole routine", and one button, "Get started". **0 Privacy**
-  (`privacy`). Neither screen is counted.
-- **1 Journey** — starting, taking, or returning. Changes the wording downstream.
-- **2 What are you taking?** (`taking`) — multi-select over `src/domain/peptides`
-  presets, plus one custom name.
-- **3 Schedule** (`schedule/[index]`) — one screen per medication, all sharing step 3.
-  A run of n screens divides one step, so the bar never runs backwards when the user
-  adds a medication. See `scheduleStepIndex`.
-- **4 to 22** — `POST_SCHEDULE_ORDER`: last-shot, why*, sex, birthday, height, weight,
-  goal-weight, pace, consistency*, activity, rotation*, concerns, evidence*, goal,
-  motivation, on-device, reminder-time, notifications, thanks. The four marked \*
-  are interstitials, not questions: they carry the argument between question runs.
-  The array is flat and has no conditionals, so every screen runs whatever the user
-  skips.
+- **Welcome** (`index`) — three auto-advancing slides ("See your level between
+  shots.", "Poke does the syringe math.", "A plan that reminds you."), dots, one
+  button, "Start my shot log", and the trust line "No account. Nothing leaves this
+  phone." where MeAgain puts Sign In. Uncounted.
+- **1 to 8** — `PRE_SCHEDULE_ORDER`: sex, birthday, goal (six goals, multi-select),
+  knowledge, found, creator, journey, taking. Sex and birthday are skippable, and an
+  untouched birthday wheel records nothing. A valid creator code grants Pro through
+  the tester-code system. Taking is the multi-select picker over `src/domain/peptides`
+  presets plus any number of custom names.
+- **9 The setup run** (`setup/[index]/{vial,dose,frequency}`) — three questions per
+  medication, all sharing one counted step, with a which-first ordering screen when
+  the user picked more than one. Every question offers "Not sure yet. Set it up
+  later.", and a deferred answer saves honestly and never blocks the finish. The run
+  divides the step between its screens (`setupStepIndex`), so the bar never runs
+  backwards at any medication count.
+- **Mix beat** (`mix`) — uncounted, at most once, for the first medication whose vial
+  size and mass dose allow the reconstitution sum. Water chips, the live U-100 draw,
+  Save writes `medications.diluent_ml`, Skip writes nothing.
+- **10 to 23** — `postScheduleOrder`: how-a-shot-works*, last-shot, why*, height,
+  weight, goal-weight, pace, consistency*, rotation*, concerns, evidence*,
+  reminder-time, notifications, thanks. The five marked \* are teach beats, not
+  questions: `TEACH_BEATS` keeps all five for `new`, two for `basics`, none for
+  `experienced`, and a skipped knowledge answer routes as `basics`. Last-shot drops
+  when the journey answer is `starting`.
 - **Compute** (`compute`) — a 13.8s beat over the answers already in the store. It
-  claims no analysis it does not do.
+  claims no analysis it does not do. Uncounted.
 - **Plan** (`plan`) — the payoff. Cards read back the schedule, the goal, the concerns,
   and the half-life with its citation. The projection card appears only when
   `planProjection` has a current weight, a goal weight and a pace, and it moves live
   with the pace slider. The disclaimer sits on this screen because the final button is
   the acceptance: `completeOnboarding` writes `disclaimer_accepted_at` alongside
-  `onboarding_completed_at`.
+  `onboarding_completed_at`. Then the button replaces the screen with the paywall
+  (see above), and every exit from the paywall lands on Today.
 
 Gate: root layout redirects to /onboarding when `onboarding_completed_at` is null.
 

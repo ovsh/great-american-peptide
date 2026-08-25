@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { ChevronLeft, Check } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import type { Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,8 +22,8 @@ import { colors, radius, spacing } from '../theme';
 
 interface OnboardingScreenProps {
   /**
-   * Zero-based position in the flow. The schedule run divides one step between
-   * its screens, so this can be fractional. See `scheduleStepIndex`.
+   * Zero-based position in the flow. The setup run divides one step between
+   * its screens, so this can be fractional. See `setupStepIndex`.
    */
   step: number;
   totalSteps: number;
@@ -63,9 +64,9 @@ export function OnboardingScreen({
   // The bar reads the step the user is on, out of the total, so it is a true
   // fraction. Twenty-three, fixed, as it is in the recording.
   const progress = Math.min(1, Math.max(0, (step + 1) / total));
-  // Floor rather than round: both schedule screens of a two-medication run read
-  // as step 4, which is what they are. Rounding would push the second one onto
-  // the number the next screen announces.
+  // Floor rather than round: every screen of the setup run reads as step 9,
+  // which is what they all are. Rounding would push the later ones onto the
+  // number the next screen announces.
   const spoken = Math.floor(step) + 1;
 
   return (
@@ -171,6 +172,56 @@ export function SelectionCard({
         <View style={[styles.check, selected && styles.checkSelected]}>
           {selected ? <Check size={14} strokeWidth={3} color={colors.inkInverse} /> : null}
         </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+interface IconChoiceCardProps {
+  /** The lucide component itself. The card colours it with the selection. */
+  icon: LucideIcon;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  role?: 'checkbox' | 'radio';
+}
+
+/**
+ * A card that carries a picture rather than a check.
+ *
+ * `SelectionCard` is a row and it stacks, which is right for five sentences and
+ * wrong for six one-word answers: six stacked rows are a scroll, and the words
+ * are short enough that the eye is looking for the shape before it reads. This
+ * card is square, it sits in a row of two, and the icon is the thing that is
+ * scanned. The check would only repeat what the fill already says, so the fill
+ * is the whole selected state.
+ *
+ * It carries `flex: 1`, so a row of them divides the width evenly and one on a
+ * row of its own runs the full width. The caller owns the rows.
+ */
+export function IconChoiceCard({
+  icon: Icon,
+  label,
+  selected,
+  onPress,
+  role = 'radio',
+}: IconChoiceCardProps) {
+  return (
+    <Pressable
+      accessibilityRole={role}
+      accessibilityState={role === 'checkbox' ? { checked: selected } : { selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.iconChoice, pressed && styles.pressed]}
+    >
+      <Card
+        padding="lg"
+        style={[
+          styles.iconCard,
+          { backgroundColor: selected ? colors.accentSoft : colors.surface },
+        ]}
+      >
+        <Icon size={26} strokeWidth={1.75} color={selected ? colors.accent : colors.inkMuted} />
+        <Text variant="smallStrong" align="center">{label}</Text>
       </Card>
     </Pressable>
   );
@@ -297,6 +348,15 @@ const styles = StyleSheet.create({
   },
   choiceName: {
     flexShrink: 1,
+  },
+  iconChoice: {
+    flex: 1,
+  },
+  iconCard: {
+    minHeight: 116,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   check: {
     width: 22,
