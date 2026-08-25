@@ -27,6 +27,31 @@ export function fmtClock(value: string): string {
   return `${hour24 % 12 || 12}:${String(minute).padStart(2, '0')} ${hour24 >= 12 ? 'PM' : 'AM'}`;
 }
 
+/**
+ * One hour, named the way a person would say it while dragging along a curve:
+ * "Today 2 PM", "Tomorrow 8 AM", "Yesterday 9 PM", else "Thu 8 AM". No minutes,
+ * because the scrubber snaps to the hour and a ":00" would only repeat that.
+ *
+ * The clock itself comes from the device, so a 24-hour phone reads "Today 14".
+ * `format` cannot ask that question, and the formatter is built once because the
+ * label is rebuilt on every hour the finger crosses.
+ */
+export function fmtHourLabel(ms: number): string {
+  const d = new Date(ms);
+  const hour = hourFormat().format(d);
+  if (isToday(d)) return `Today ${hour}`;
+  if (isTomorrow(d)) return `Tomorrow ${hour}`;
+  if (isYesterday(d)) return `Yesterday ${hour}`;
+  return `${format(d, 'EEE')} ${hour}`;
+}
+
+let hourFormatter: Intl.DateTimeFormat | null = null;
+
+function hourFormat(): Intl.DateTimeFormat {
+  hourFormatter ??= new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
+  return hourFormatter;
+}
+
 export function fmtDayLabel(ms: number): string {
   const d = new Date(ms);
   if (isToday(d)) return 'Today';
