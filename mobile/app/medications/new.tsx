@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, Alert, Switch, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Check, X } from 'lucide-react-native';
 
 import { BlendCompositionFields } from '@/components/BlendCompositionFields';
@@ -110,6 +111,25 @@ type WeeksOffChoice = (typeof WEEKS_OFF_OPTIONS)[number] | 'none';
  */
 const CYCLING_CATEGORIES = new Set(['recovery', 'growth', 'longevity']);
 
+/**
+ * The ramp read aloud, in the order of `colors.med`. A dot on a calendar cell
+ * carries no name, so a screen reader has to say the colour out loud. The type
+ * follows the ramp, so a seventh hue will not compile without a name.
+ */
+type NameEach<T extends readonly unknown[]> = { [K in keyof T]: string };
+const COLOR_NAMES: NameEach<typeof colors.med> =
+  ['Green', 'Blue', 'Pink', 'Olive', 'Indigo', 'Teal'];
+
+/**
+ * The dot, the ring the picked one wears, and the touch target that holds both.
+ * The targets sit edge to edge, so the dots still stand 12 pt apart.
+ */
+const SWATCH_DOT = 32;
+const SWATCH_RING_WIDTH = 2;
+const SWATCH_TARGET = SWATCH_DOT + 2 * (SWATCH_RING_WIDTH + spacing.xs);
+/** The picked dot grows into its ring by a hair. */
+const SWATCH_GROWTH = 1.08;
+
 export default function AddMedicationScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ medicationId?: string }>();
@@ -136,6 +156,11 @@ export default function AddMedicationScreen() {
   // The fixed weekday set. Empty on arrival, and it stays empty until the user
   // presses a day: Poke picks no shot day for anybody.
   const [weekdays, setWeekdays] = useState<Weekday[]>([]);
+  // The hue this medication draws with on Today, on the calendar and on the
+  // vial. A new medication opens on the one `nextColorIndex` hands out, and the
+  // catalogue tints its vials with the same number, so the colour on the row
+  // the user presses is the colour they get.
+  const [colorIndex, setColorIndex] = useState(0);
   const [halfLife, setHalfLife] = useState('');
   const [tmax, setTmax] = useState('');
   // The vial label of a blend, held as typed: milligrams per part, keyed by
@@ -167,6 +192,13 @@ export default function AddMedicationScreen() {
       .then((count) => setAtFreeLimit(count >= FREE_MEDICATION_LIMIT))
       .catch(() => {});
   }, [editingId, pro]);
+
+  useEffect(() => {
+    if (editingId) return;
+    nextColorIndex()
+      .then(setColorIndex)
+      .catch(() => {});
+  }, [editingId]);
 
   /**
    * True when the row under edit was saved by setup without a dose and archived
@@ -207,6 +239,7 @@ export default function AddMedicationScreen() {
         setWeekdays(medication.frequency_kind === 'weekdays'
           ? weekdaysFromMask(medication.frequency_value)
           : []);
+        setColorIndex(medication.color_index);
         setHalfLife(medication.half_life_hours === null ? '' : String(medication.half_life_hours));
         setTmax(medication.tmax_hours === null ? '' : String(medication.tmax_hours));
         setCompositionMg(compositionTexts(medication.composition));
@@ -417,7 +450,8 @@ export default function AddMedicationScreen() {
         cycleDaysOn,
         cycleDaysOff,
         cycleStartedAt,
-      } satisfies Omit<NewMedication, 'colorIndex'>;
+        colorIndex,
+      } satisfies NewMedication;
       if (editingId) {
         await updateMedicationAndRefresh(editingId, input);
         // The save above passed the dose check, so a deferred row now has its
@@ -436,8 +470,7 @@ export default function AddMedicationScreen() {
           setStep('pick');
           return;
         }
-        const colorIndex = await nextColorIndex();
-        await createMedicationAndRefresh({ ...input, colorIndex });
+        await createMedicationAndRefresh(input);
         track('medication_added', { kind: pickedKind, source: 'app' });
       }
       bumpVersion();
@@ -513,11 +546,15 @@ export default function AddMedicationScreen() {
                 count={catalog.entries.length}
               />
               <View style={styles.pickList}>
-                {catalog.entries.map((entry, idx) => (
+                {/* Every vial in the catalogue wears the one hue this
+                    medication will get. The row's place in the list is not a
+                    colour, and tinting by it promised six colours the user
+                    could not have. */}
+                {catalog.entries.map((entry) => (
                   <PresetRow
                     key={entry.id}
                     entry={entry}
-                    colorIndex={idx}
+                    colorIndex={colorIndex}
                     onPress={() => pickPreset(entry)}
                   />
                 ))}
@@ -553,6 +590,23 @@ export default function AddMedicationScreen() {
         >
           <Field label="Name">
             <Input value={name} onChangeText={setName} placeholder="Type the name" size="lg" />
+          </Field>
+
+          <Field label="Color">
+            <View style={styles.colorRow}>
+              {colors.med.map((hue, index) => (
+                <ColorSwatch
+                  key={hue}
+                  hue={hue}
+                  name={COLOR_NAMES[index]}
+                  active={colorIndex === index}
+                  onPress={() => {
+                    setColorIndex(index);
+                    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+                  }}
+                />
+              ))}
+            </View>
           </Field>
 
           <Field label="Default dose">
@@ -970,6 +1024,44 @@ function categoryPillLabel(category: PeptidePreset['category']): string {
 }
 
 /**
+ * One hue of the medication ramp.
+ *
+ * The picked one wears a ring of its own colour, set off from the dot, and
+ * grows into it. A tick would cover the one thing the dot is there to show, and
+ * a ring reads across a row of six without one.
+ *
+ * A hue another medication already uses stays on offer. Two medications in the
+ * same colour is the user's call, and a warning here would be Poke arguing with
+ * a choice it cannot make better.
+ */
+function ColorSwatch({
+  hue,
+  name,
+  active,
+  onPress,
+}: {
+  hue: string;
+  name: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      // The state is for a phone, the ARIA prop is for the web build.
+      // react-native-web drops `accessibilityState` and reads `aria-*`.
+      accessibilityState={{ selected: active }}
+      aria-checked={active}
+      accessibilityLabel={name}
+      onPress={onPress}
+      style={[styles.swatchTarget, active && { borderColor: hue }]}
+    >
+      <View style={[styles.swatchDot, { backgroundColor: hue }, active && styles.swatchDotActive]} />
+    </Pressable>
+  );
+}
+
+/**
  * One cycle chip. The same size as a weekday chip, five to a row, so the group
  * fits one line on the narrowest phone Poke supports.
  */
@@ -1153,6 +1245,32 @@ const styles = StyleSheet.create({
   doseRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  colorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // The touch target is wider than the dot, so the row pulls back by the
+    // slack and the first dot lines up with the label above it.
+    marginLeft: -(SWATCH_TARGET - SWATCH_DOT) / 2,
+  },
+  swatchTarget: {
+    width: SWATCH_TARGET,
+    height: SWATCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: SWATCH_RING_WIDTH,
+    // The ring is there on every swatch and coloured on the picked one, so the
+    // row does not shift by two points when the user presses another hue.
+    borderColor: 'transparent',
+  },
+  swatchDot: {
+    width: SWATCH_DOT,
+    height: SWATCH_DOT,
+    borderRadius: radius.pill,
+  },
+  swatchDotActive: {
+    transform: [{ scale: SWATCH_GROWTH }],
   },
   doseInput: {
     flex: 1,
