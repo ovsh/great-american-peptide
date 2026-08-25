@@ -4,6 +4,7 @@ import {
   resumeMedication,
   setMedicationStatus,
   updateMedicationDefaults,
+  type MedicationDefaults,
   type NewMedication,
 } from '../repositories/medications';
 import { refreshScheduledReminders } from './notifications';
@@ -16,7 +17,7 @@ export async function createMedicationAndRefresh(input: NewMedication): Promise<
 
 export async function updateMedicationAndRefresh(
   id: string,
-  input: Omit<NewMedication, 'colorIndex'>,
+  input: MedicationDefaults,
 ): Promise<void> {
   await updateMedicationDefaults(id, input);
   await refreshScheduledReminders().catch(() => {});

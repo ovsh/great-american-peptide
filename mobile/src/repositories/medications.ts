@@ -155,9 +155,20 @@ export async function createMedication(input: NewMedication): Promise<Medication
   return row;
 }
 
+/**
+ * Everything an edit can rewrite.
+ *
+ * `colorIndex` is optional here and required on `NewMedication`, because a new
+ * medication always gets a hue and an edit does not always carry one. Onboarding
+ * rewrites the defaults of a medication the user already had, and the hue that
+ * medication draws with everywhere else is not part of what onboarding asked, so
+ * an absent `colorIndex` keeps the stored one.
+ */
+export type MedicationDefaults = Omit<NewMedication, 'colorIndex'> & { colorIndex?: number };
+
 export async function updateMedicationDefaults(
   id: string,
-  input: Omit<NewMedication, 'colorIndex'>,
+  input: MedicationDefaults,
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
@@ -165,6 +176,7 @@ export async function updateMedicationDefaults(
       name = ?, preset_id = ?, default_dose = ?, default_unit = ?, default_route = ?,
       frequency_kind = ?, frequency_value = ?, half_life_hours = ?, tmax_hours = ?,
       cycle_days_on = ?, cycle_days_off = ?, cycle_started_at = ?,
+      color_index = CASE WHEN ? = 1 THEN ? ELSE color_index END,
       composition = CASE WHEN ? = 1 THEN ? ELSE composition END,
       dose_by_day = CASE WHEN ? = 1 THEN ? ELSE dose_by_day END,
       vial_mg = CASE WHEN ? = 1 THEN ? ELSE vial_mg END,
@@ -188,6 +200,11 @@ export async function updateMedicationDefaults(
       // to `created_at`. The editor always sends the day it drew, so an edit
       // that leaves the cycle alone rewrites the same number.
       input.cycleDaysOn == null ? null : (input.cycleStartedAt ?? Date.now()),
+      // The same keep-or-write split as the two columns below. The medication
+      // form always sends the hue it drew, so undefined only comes from a
+      // caller that shows no colour picker.
+      input.colorIndex === undefined ? 0 : 1,
+      input.colorIndex ?? 0,
       // Undefined means the caller never drew the composition, so the row
       // keeps what it holds. Null is the user clearing it, and that writes.
       input.composition === undefined ? 0 : 1,
