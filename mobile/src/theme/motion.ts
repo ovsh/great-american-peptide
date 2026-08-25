@@ -126,8 +126,9 @@ export const welcomeBeats = {
 /**
  * The plan reveal, once per cold mount of the last onboarding screen.
  *
- * The order is the reading order: the date the user came for, then the bar the
- * date is measured on, then the fill and the dot that ride it, then the curve.
+ * The order builds to the curve, which sits at the top of the screen as the
+ * hero: first the date, then the bar the date is measured on, then the fill
+ * and the dot that ride it, and the curve strokes in last as the finale.
  * The fill does not overshoot. Everywhere else a soft overshoot reads as life,
  * and here the right end of the bar is the goal weight, so a bar that ran past
  * it and came back would be a claim. Last frame at 655 ms.

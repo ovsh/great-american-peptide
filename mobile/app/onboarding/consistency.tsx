@@ -7,6 +7,7 @@ import { InterstitialScene } from '@/components/onboarding/interstitial-scene';
 import { planProjection } from '@/services/onboardingPlan';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { colors } from '@/theme';
+import { goalFraming } from '@/utils/goalFraming';
 
 // Interstitial 2, straight after the pace slider, in the recording's position.
 // MeAgain uses the slot to promise the goal. Poke uses it to say exactly what
@@ -21,6 +22,11 @@ import { colors } from '@/theme';
 export default function ConsistencyScreen() {
   const weight = useOnboardingStore((state) => state.weight);
   const pace = useOnboardingStore((state) => state.pace);
+  const goalTags = useOnboardingStore((state) => state.goalTags);
+  // Only the skipped-answer panel below says "your plan" in words, so only that
+  // panel names the goal. The other two branches talk about a date and a pace,
+  // and a goal noun in either would be a word with no work to do.
+  const framing = goalFraming(goalTags);
   // Fixed at mount, so the drawn date cannot shift while the screen is open.
   const now = useMemo(() => Date.now(), []);
   const projection = useMemo(() => planProjection(weight, pace, now), [weight, pace, now]);
@@ -31,7 +37,9 @@ export default function ConsistencyScreen() {
         step="consistency"
         icon={<ShieldCheck size={34} color={colors.accent} />}
         title="Poke makes no number up"
-        body="Every figure on your plan comes from an answer you gave or from a published half-life. Poke fills no gap with an average."
+        body={framing
+          ? `Every figure on your ${framing.plan} plan comes from an answer you gave or from a published half-life. Poke fills no gap with an average.`
+          : 'Every figure on your plan comes from an answer you gave or from a published half-life. Poke fills no gap with an average.'}
         note="Skip a question and Poke leaves that part of the plan out."
       />
     );

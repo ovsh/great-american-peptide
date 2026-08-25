@@ -131,6 +131,13 @@ interface SelectionCardProps {
   /** A quiet word beside the title, for the one row in a list that needs it. */
   marker?: string;
   description?: string;
+  /**
+   * A mark in front of the title. It sits in a fixed box, so a list mixing
+   * marks of different widths still starts every title on one line. The box is
+   * hidden from the screen reader, because a glyph from a font would read as
+   * its codepoint; the title and description stay the whole accessible name.
+   */
+  leading?: ReactNode;
   selected: boolean;
   onPress: () => void;
   compact?: boolean;
@@ -141,6 +148,7 @@ export function SelectionCard({
   title,
   marker,
   description,
+  leading,
   selected,
   onPress,
   compact = false,
@@ -160,6 +168,15 @@ export function SelectionCard({
           { backgroundColor: selected ? colors.accentSoft : colors.surface },
         ]}
       >
+        {leading ? (
+          <View
+            style={styles.choiceLeading}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            {leading}
+          </View>
+        ) : null}
         <View style={styles.choiceCopy}>
           <View style={styles.choiceTitle}>
             <Text variant={compact ? 'smallStrong' : 'bodyStrong'} style={styles.choiceName}>
@@ -340,6 +357,14 @@ const styles = StyleSheet.create({
   choiceCopy: {
     flex: 1,
     gap: spacing.xs,
+  },
+  // Wide enough for the widest mark a caller passes, so eight different marks
+  // still make one straight column of titles.
+  choiceLeading: {
+    width: spacing.xxxl,
+    height: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   choiceTitle: {
     flexDirection: 'row',

@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
 } from 'react-native-reanimated';
 import { router } from 'expo-router';
-import { CircleCheck, Info } from 'lucide-react-native';
+import { ChevronRight, Info } from 'lucide-react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { LineChart } from '@/components/LineChart';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
+import { PLAN_CHART_HEIGHT, PlanLevelCurve } from '@/components/plan-level-curve';
 import { Slider } from '@/components/Slider';
 import { Text } from '@/components/Text';
 import { completeOnboarding } from '@/services/onboarding';
@@ -20,6 +20,7 @@ import {
   buildOnboardingPlan,
   planProjection,
   type OnboardingPlan,
+  type PlanCurve,
   type PlanMedication,
   type PlanProjection,
 } from '@/services/onboardingPlan';
@@ -47,9 +48,8 @@ import {
   timeTo,
 } from '@/theme';
 import { fmtClock } from '@/utils/date';
+import { goalFraming } from '@/utils/goalFraming';
 
-const CURVE_CARDS = 2;
-const CHART_HEIGHT = 148;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** The dot that rides the goal bar, and the height of the row it rides in. */
 const DOT_SIZE = 14;
@@ -60,6 +60,14 @@ const DOT_SIZE = 14;
  * It sits outside the counted steps and has no back chevron, exactly as it does
  * in the recording: the flow is over, and the only way on is through the button
  * that saves it.
+ *
+ * The screen is a picture and three quiet lines, in that order. It used to be
+ * six cards of prose, and the owner's note on 23 Aug 2026 was that the payoff of
+ * the whole funnel read as a report. So the level curve is the hero, it draws
+ * itself once, and every sentence that only explained the app rather than
+ * stating a fact about this user came off. What is left is what only Poke can
+ * work out: the curve, the goal date, the next shot. The user's own answers sit
+ * behind one tap, because a screen that reads them all back is a form receipt.
  *
  * The one thing this screen does that the rest of the app does not is project a
  * date. It is division, it is labelled as division on the card itself, and the
@@ -80,6 +88,7 @@ export default function PlanScreen() {
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // One clock for the whole screen, read once at mount. The pace slider below
   // recomputes the goal date on every drag, and a `Date.now()` read inside that
@@ -90,6 +99,10 @@ export default function PlanScreen() {
   // `goalLabelFor` covers the legacy goal ids too, so a draft restored from an
   // old install still names its goal instead of failing `validPlan`.
   const goalLabel = goalKind ? goalLabelFor(goalKind) : undefined;
+  // `goalKind` is the first pick on the goal screen, the same goal `leadGoal`
+  // would choose from the full tag list. Null framing falls back to the
+  // generic title below, byte for byte.
+  const framing = goalFraming(goalKind ? [goalKind] : null);
   const concernLabels = CONCERN_OPTIONS
     .filter((option) => option.id !== 'none' && concerns.includes(option.id))
     .map((option) => option.label.toLocaleLowerCase());
@@ -169,18 +182,12 @@ export default function PlanScreen() {
     );
   }
 
-  const curves = plan.medications.filter((medication) => medication.curve).slice(0, CURVE_CARDS);
-  const hiddenCurves = plan.curveCount - curves.length;
-
   return (
     <OnboardingScreen
       step={0}
       totalSteps={1}
       hideProgress
-      title="Your plan is ready"
-      // The cards below are the answer. A line over them saying where the
-      // numbers came from only delays the numbers, and each card that needs a
-      // source now carries its own.
+      title={framing ? `Your ${framing.plan} plan is ready` : 'Your plan is ready'}
       bodyStyle={styles.body}
       footer={(
         <View style={styles.actions}>
@@ -211,13 +218,10 @@ export default function PlanScreen() {
         </View>
       )}
     >
-      <View style={styles.crest}>
-        <CircleCheck size={20} color={colors.accent} />
-        <Text variant="smallStrong" color={colors.accent}>Setup complete</Text>
-      </View>
+      <CurveHero medications={plan.medications} />
 
       {plan.projection ? (
-        <ProjectionCard
+        <GoalCard
           anchor={plan.projection}
           live={liveProjection}
           pace={pace}
@@ -227,75 +231,208 @@ export default function PlanScreen() {
 
       <NextShotCard plan={plan} />
 
-      {curves.map((medication) => (
-        <CurveCard key={medication.id} medication={medication} />
-      ))}
-      {/* Today draws a level card per medication, not a curve. The curve is one
-          tap further in, at `/reports/level`. Name the tap. */}
-      {hiddenCurves > 0 ? (
-        <Text variant="small" color={colors.inkMuted}>
-          {hiddenCurves === 1
-            ? 'Your other medication has its own card on Today. Tap the card for the full curve.'
-            : `Your other ${hiddenCurves} medications each have a card on Today. Tap a card for the full curve.`}
-        </Text>
-      ) : null}
+      {/* The user's own answers, one tap away. Read back in full they are a
+          form receipt, and the reveal is not the place for one. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="See what Poke saved"
+        onPress={() => setDetailsOpen(true)}
+        style={({ pressed }) => [styles.detailsRow, pressed && styles.pressed]}
+      >
+        <Text variant="smallStrong" color={colors.inkMuted}>See what Poke saved</Text>
+        <ChevronRight size={18} color={colors.inkSubtle} />
+      </Pressable>
 
-      <Card padding="xl" style={styles.card}>
-        <Text variant="smallStrong" color={colors.inkMuted}>Your routine</Text>
-        {plan.medications.map((medication) => (
-          <View key={medication.id} style={styles.routineRow}>
-            <Text variant="bodyStrong">{medication.name}</Text>
-            {/* Two lines, because one sentence cannot hold a rate and a count
-                without a comma the schedule label may already have spent.
-                A deferred answer reads as the words "not set yet" rather than
-                as a blank, and the shot count is dropped rather than printed as
-                a zero, because zero is not what the run found out. */}
-            <Text variant="small" color={colors.inkMuted}>
-              {medication.doseSet && medication.scheduleSet
-                ? `${medication.doseLabel} ${lowerFirst(medication.scheduleLabel)}`
-                : unsetLine(medication.doseSet, medication.scheduleSet)}
-            </Text>
-            {medication.doseSet && medication.scheduleSet ? (
+      <BottomSheet
+        visible={detailsOpen}
+        title="What Poke saved"
+        onClose={() => setDetailsOpen(false)}
+      >
+        <ScrollView
+          contentContainerStyle={styles.sheetBody}
+          showsVerticalScrollIndicator={false}
+        >
+          {plan.medications.map((medication) => (
+            <View key={medication.id} style={styles.routineRow}>
+              <Text variant="bodyStrong">{medication.name}</Text>
+              {/* Two lines, because one sentence cannot hold a rate and a count
+                  without a comma the schedule label may already have spent.
+                  A deferred answer reads as the words "not set yet" rather than
+                  as a blank, and the shot count is dropped rather than printed
+                  as a zero, because zero is not what the run found out. */}
+              <Text variant="small" color={colors.inkMuted}>{routineLine(medication)}</Text>
               <Text variant="small" color={colors.inkMuted}>
-                {medication.shotsInFourWeeks} shots in the first 4 weeks
+                {medication.doseSet && medication.scheduleSet
+                  ? `${medication.shotsInFourWeeks} shots in the first 4 weeks`
+                  : 'Finish this one in Medications whenever you are ready.'}
               </Text>
-            ) : (
-              <Text variant="small" color={colors.inkMuted}>
-                Finish this one in Medications whenever you are ready.
-              </Text>
-            )}
-            {/* Why there is no curve. A medication that is still waiting for an
-                answer has no curve either, and the line above already gives the
-                reason, so naming the half-life here would state a second reason
-                that is not true. */}
-            {medication.curve === null && medication.doseSet && medication.scheduleSet ? (
-              <Text variant="small" color={colors.inkMuted}>
-                No published half-life, so no level curve.
-              </Text>
-            ) : null}
-          </View>
-        ))}
+              {/* Why there is no curve. A medication that is still waiting for an
+                  answer has no curve either, and the line above already gives the
+                  reason, so naming the half-life here would state a second reason
+                  that is not true. */}
+              {medication.curve === null && medication.doseSet && medication.scheduleSet ? (
+                <Text variant="small" color={colors.inkMuted}>
+                  No published half-life, so no level curve.
+                </Text>
+              ) : null}
+            </View>
+          ))}
 
-        {plan.sites.length > 0 ? (
-          <PlanRow label="First sites" value={plan.sites.join(' → ')} />
-        ) : null}
-        <PlanRow label="Goal" value={goalLabel ?? ''} />
-        {plan.body ? (
-          <PlanRow label="BMI" value={`${plan.body.value.toFixed(1)} in the ${plan.body.category.toLocaleLowerCase()} range`} />
-        ) : null}
-        <PlanRow
-          label="Watch list"
-          value={concernLabels.length > 0 ? namedList(concernLabels) : 'Nothing right now'}
-        />
-        {reminder.kind === 'enabled' ? (
-          <PlanRow label="Reminder" value={`Every shot day at ${fmtClock(reminder.time)}`} />
-        ) : null}
-      </Card>
+          {plan.sites.length > 0 ? (
+            <PlanRow label="First sites" value={plan.sites.join(' → ')} />
+          ) : null}
+          <PlanRow label="Goal" value={goalLabel ?? ''} />
+          {plan.body ? (
+            <PlanRow label="BMI" value={`${plan.body.value.toFixed(1)} in the ${plan.body.category.toLocaleLowerCase()} range`} />
+          ) : null}
+          <PlanRow
+            label="Watch list"
+            value={concernLabels.length > 0 ? namedList(concernLabels) : 'Nothing right now'}
+          />
+          {reminder.kind === 'enabled' ? (
+            <PlanRow label="Reminder" value={`Every shot day at ${fmtClock(reminder.time)}`} />
+          ) : null}
+        </ScrollView>
+      </BottomSheet>
     </OnboardingScreen>
   );
 }
 
-interface ProjectionCardProps {
+/**
+ * The hero. One medication's first four weeks, drawn.
+ *
+ * Every medication the user set up has a pill here, including one Poke cannot
+ * model: switching to it shows why there is no curve, in the space the curve
+ * would have taken. An empty state says it is empty, and hiding the medication
+ * would say the user never entered it.
+ *
+ * What the curve is drawn from is a disclosure, not a caption: principles §6
+ * puts it behind the (i) and keeps the words themselves word for word.
+ */
+function CurveHero({ medications }: { medications: PlanMedication[] }) {
+  const [selectedId, setSelectedId] = useState(
+    () => (medications.find((medication) => medication.curve) ?? medications[0])?.id ?? '',
+  );
+  const [width, setWidth] = useState(0);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const reduced = useReducedMotion();
+  const card = useSharedValue(0);
+
+  useEffect(() => {
+    card.value = timeTo(1, { duration: motion.base, easing: easing.out, reduced });
+  }, [card, reduced]);
+
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: card.value,
+    transform: [{ translateY: (1 - card.value) * rise.card }],
+  }));
+
+  const selected = medications.find((medication) => medication.id === selectedId) ?? medications[0];
+  if (!selected) return null;
+  const curve = selected.curve;
+
+  return (
+    <Animated.View style={cardStyle}>
+      <Card padding="xl" style={styles.card}>
+        <View style={styles.heroHead}>
+          {medications.length > 1 ? (
+            <View accessibilityRole="radiogroup" style={styles.pills}>
+              {medications.map((medication) => (
+                <Pressable
+                  key={medication.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: medication.id === selected.id }}
+                  accessibilityLabel={medication.name}
+                  hitSlop={6}
+                  onPress={() => setSelectedId(medication.id)}
+                  style={({ pressed }) => [
+                    styles.pill,
+                    medication.id === selected.id && styles.pillOn,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    variant="smallStrong"
+                    color={medication.id === selected.id ? colors.ink : colors.inkMuted}
+                  >
+                    {medication.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text variant="bodyStrong" style={styles.heroName}>{selected.name}</Text>
+          )}
+          {/* No curve, nothing to disclose. The box below states the reason
+              itself, and a sheet that then said where a curve comes from would
+              be answering a question this medication does not raise. */}
+          {curve ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="About this curve"
+              hitSlop={8}
+              onPress={() => setAboutOpen(true)}
+              style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]}
+            >
+              <Info size={18} color={colors.inkSubtle} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Text variant="small" color={colors.inkMuted}>{routineLine(selected)}</Text>
+
+        {/* The box keeps its height whichever medication is selected, so a pill
+            press swaps the picture instead of moving the page under the finger.
+            The two words sit against the curve rather than in the card's own
+            rhythm, because they are the axis and not the next thing to read. */}
+        <View style={styles.chartBlock}>
+          <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.chartHolder}>
+            {curve && width > 0 ? (
+              <PlanLevelCurve
+                points={curve.points}
+                width={width}
+                steadyWeek={curve.clearsBetweenDoses ? null : curve.steadyWeek}
+                play={!reduced}
+              />
+            ) : null}
+            {curve ? null : (
+              <View style={styles.chartEmpty}>
+                <Text variant="small" color={colors.inkMuted} align="center">
+                  {noCurveLine(selected)}
+                </Text>
+              </View>
+            )}
+          </View>
+          {curve ? (
+            <View style={styles.weekRow}>
+              <Text variant="caption" color={colors.inkSubtle}>Now</Text>
+              <Text variant="caption" color={colors.inkSubtle}>Week 4</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {curve ? <Text variant="bodyStrong">{steadyLine(curve)}</Text> : null}
+
+        {curve ? (
+          <BottomSheet
+            visible={aboutOpen}
+            title="About this curve"
+            onClose={() => setAboutOpen(false)}
+          >
+            <View style={styles.aboutBody}>
+              <Text>
+                The curve is in {curve.unit}. Poke draws the curve from your dose and your
+                schedule. {selected.evidenceNote}
+              </Text>
+            </View>
+          </BottomSheet>
+        ) : null}
+      </Card>
+    </Animated.View>
+  );
+}
+
+interface GoalCardProps {
   /** The weights and the direction, taken at mount. Only the pace moves. */
   anchor: PlanProjection;
   /** The same sum at the live pace. Null once the answer runs past five years. */
@@ -305,29 +442,25 @@ interface ProjectionCardProps {
 }
 
 /**
- * The payoff card, and the only forward-looking number Poke shows.
+ * The date, and the only forward-looking number Poke shows.
  *
  * MeAgain draws the same card, puts a decorative slider under it, and lets the
  * date read as a prediction. Poke draws the same card and then does two things
  * MeAgain does not: it says in the card what the number is, and it wires the
  * slider to the sum. Drag the pace and the date moves the same instant.
  *
- * Both of those are load-bearing. The sentence is the claim Poke is allowed to
- * make, and the live slider is what makes the claim visibly arithmetic. Do not
- * remove the sentence, and do not let the slider go decorative.
+ * Both of those are load-bearing, and `DECISIONS.md` row 20 is what they answer
+ * to. The sentence is the claim Poke is allowed to make, and the live slider is
+ * what makes the claim visibly arithmetic. Do not remove the sentence, and do
+ * not let the slider go decorative.
  */
-function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProps) {
+function GoalCard({ anchor, live, pace, onPaceChange }: GoalCardProps) {
   const { current, goal, unit } = anchor;
-  // The verb reads off the two weights and not off `anchor.direction`. The
-  // anchor is the sum as it stood at mount, a mount at a maintain pace carries
-  // no direction at all, and the weights themselves never move on this screen.
-  const verb = goal < current ? 'lose' : 'gain';
-  const distance = Math.abs(current - goal);
   const bounds = paceBounds(unit);
   const step = unit === 'lb' ? 0.1 : 0.05;
   const paceLabel = (value: number) => formatPace(value, unit);
   // The user set no rate of change. There is no date, so nothing on this card
-  // may name one, and the sentences below swap rather than fill a blank.
+  // may name one, and the label below swaps rather than fills a blank.
   const maintaining = live !== null && live.kind === 'maintain';
 
   const reduced = useReducedMotion();
@@ -369,7 +502,7 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
     <Card padding="xl" style={styles.card}>
       <Animated.View style={[styles.headline, dateStyle]}>
         <Text variant="smallStrong" color={colors.inkMuted}>
-          {maintaining ? 'Your plan, at the pace you set' : 'Your goal, at the pace you chose'}
+          {maintaining ? 'At the pace you set' : 'At the pace you chose'}
         </Text>
         {live === null ? (
           // Reachable from the slider alone: the low end of the range against a
@@ -377,23 +510,17 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
           // the drag stays alive, and it says what happened rather than a date.
           <>
             <Text variant="display">Over five years</Text>
-            <Text color={colors.inkMuted}>
-              {formatWeight(distance)} {unit} to {verb} at {paceLabel(pace)} a week runs
-              past five years. Poke puts no date on that.
+            <Text variant="small" color={colors.inkMuted}>
+              Poke puts no date on a plan that runs past five years.
             </Text>
           </>
         ) : live.kind === 'maintain' ? (
-          // The maintain branch states what the user set and nothing else. It
+          // The maintain branch names what the user set and nothing else. It
           // names no verb, because the user chose neither direction, and it
           // carries no line about stopping or holding a loss, because that
-          // would be Poke advising a rate of change.
-          <>
-            <Text variant="display">{MAINTAIN_PACE_LABEL}</Text>
-            <Text color={colors.inkMuted}>
-              You set your weekly pace to zero. Poke projects no date and records every
-              weight you log.
-            </Text>
-          </>
+          // would be Poke advising a rate of change. The sum below says why
+          // there is no date.
+          <Text variant="display">{MAINTAIN_PACE_LABEL}</Text>
         ) : (
           <Text variant="display">{longDate(live.reachesAt)}</Text>
         )}
@@ -414,7 +541,7 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
         </View>
         <View style={styles.trackEnd}>
           <Text variant="smallStrong" align="right">{formatWeight(goal)} {unit}</Text>
-          <Text variant="caption" color={colors.inkSubtle} align="right">Your goal</Text>
+          <Text variant="caption" color={colors.inkSubtle} align="right">Goal</Text>
         </View>
       </View>
 
@@ -449,108 +576,21 @@ function ProjectionCard({ anchor, live, pace, onPaceChange }: ProjectionCardProp
 }
 
 function NextShotCard({ plan }: { plan: OnboardingPlan }) {
-  if (!plan.nextShot) {
-    return (
-      <Card padding="xl" style={styles.card}>
-        <Text variant="smallStrong" color={colors.inkMuted}>Next shot</Text>
-        {/* Reached when every medication is still waiting for a dose or for a
-            schedule. Medications is where those rows are, so it names that
-            screen rather than Today. */}
-        <Text color={colors.inkMuted}>
-          You have no shot day set yet. Set one in Medications whenever you are ready.
-        </Text>
-      </Card>
-    );
-  }
-  const { name, at } = plan.nextShot;
+  const shot = plan.nextShot;
   return (
-    <Card padding="xl" style={styles.card}>
-      <Text variant="smallStrong" color={colors.inkMuted}>Next shot</Text>
-      <Text variant="display">{countdownLabel(at)}</Text>
-      <Text color={colors.inkMuted}>{name} on {longDate(at)}</Text>
-    </Card>
-  );
-}
-
-/**
- * One medication's first four weeks.
- *
- * What the curve is drawn from is a disclosure, not a caption: principles §6
- * puts it behind the (i) and keeps the words themselves word for word. The
- * chart draws itself once, under a wipe that crosses at a constant rate.
- */
-function CurveCard({ medication }: { medication: PlanMedication }) {
-  const [width, setWidth] = useState(0);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const reduced = useReducedMotion();
-  const draw = useSharedValue(0);
-
-  useEffect(() => {
-    draw.value = timeTo(1, {
-      duration: motion.draw,
-      easing: easing.linear,
-      delay: beatDelay(planBeats.curve, reduced),
-      reduced,
-    });
-  }, [draw, reduced]);
-
-  const curtainStyle = useAnimatedStyle(() => ({ left: `${draw.value * 100}%` }));
-
-  const curve = medication.curve;
-  if (!curve) return null;
-
-  // A short half-life does not plateau, so "steady" would misdescribe it. The
-  // curve returns near zero between doses, and the honest line says that.
-  const steady = curve.clearsBetweenDoses
-    ? 'Each dose clears before the next one.'
-    : curve.steadyWeek
-      ? `Estimated level is steady from week ${curve.steadyWeek}.`
-      : 'Estimated level is still rising at week 4.';
-
-  return (
-    <Card padding="xl" style={styles.card}>
-      <View style={styles.curveHead}>
-        <Text variant="smallStrong" color={colors.inkMuted} style={styles.curveTitle}>
-          {medication.name} over the first 4 weeks
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="About this curve"
-          hitSlop={8}
-          onPress={() => setAboutOpen(true)}
-          style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]}
-        >
-          <Info size={18} color={colors.inkSubtle} />
-        </Pressable>
+    <Card padding="lg" style={styles.quietCard}>
+      <View style={styles.quietHead}>
+        <Text variant="small" color={colors.inkMuted}>Next shot</Text>
+        <Text variant="bodyStrong">{shot ? countdownLabel(shot.at) : 'Not set yet'}</Text>
       </View>
-      <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={styles.chartHolder}>
-        {width > 0 ? (
-          <LineChart
-            data={curve.points}
-            width={width}
-            height={CHART_HEIGHT}
-            color={colors.chartLine}
-            xLabel={(t) => weekLabel(t, curve.points[0]?.t ?? t)}
-            xTickCount={5}
-            yTickCount={3}
-          />
-        ) : null}
-        <Animated.View pointerEvents="none" style={[styles.curtain, curtainStyle]} />
-      </View>
-      <Text variant="bodyStrong">{steady}</Text>
-
-      <BottomSheet
-        visible={aboutOpen}
-        title="About this curve"
-        onClose={() => setAboutOpen(false)}
-      >
-        <View style={styles.aboutBody}>
-          <Text>
-            The curve is in {curve.unit}. Poke draws the curve from your dose and your
-            schedule. {medication.evidenceNote}
-          </Text>
-        </View>
-      </BottomSheet>
+      {/* Reached when every medication is still waiting for a dose or for a
+          schedule. Medications is where those rows are, so it names that
+          screen rather than Today. */}
+      <Text variant="small" color={colors.inkMuted}>
+        {shot
+          ? `${shot.name} on ${longDate(shot.at)}`
+          : 'Set a shot day in Medications whenever you are ready.'}
+      </Text>
     </Card>
   );
 }
@@ -562,6 +602,39 @@ function PlanRow({ label, value }: { label: string; value: string }) {
       <Text variant="bodyStrong" align="right" style={styles.planValue}>{value}</Text>
     </View>
   );
+}
+
+/** The dose and the schedule as one line, or the words for the one that is missing. */
+function routineLine(medication: PlanMedication): string {
+  if (medication.doseSet && medication.scheduleSet) {
+    return `${medication.doseLabel} ${lowerFirst(medication.scheduleLabel)}`;
+  }
+  return unsetLine(medication.doseSet, medication.scheduleSet);
+}
+
+/**
+ * Why the hero has no picture for this medication.
+ *
+ * A missing answer and a missing half-life are two different reasons, and only
+ * one of them is the user's to fix, so the box never states the wrong one.
+ */
+function noCurveLine(medication: PlanMedication): string {
+  if (!medication.doseSet && !medication.scheduleSet) {
+    return 'Poke draws the curve once you set the dose and the schedule.';
+  }
+  if (!medication.doseSet) return 'Poke draws the curve once you set the dose.';
+  if (!medication.scheduleSet) return 'Poke draws the curve once you set the schedule.';
+  return 'No published half-life, so no level curve.';
+}
+
+// A short half-life does not plateau, so "steady" would misdescribe it. The
+// curve returns near zero between doses, and the honest line says that.
+// "week" and its number are joined with a no-break space: on a narrow screen
+// the sentence wraps before "week" instead of stranding the bare number.
+function steadyLine(curve: PlanCurve): string {
+  if (curve.clearsBetweenDoses) return 'Each dose clears before the next one.';
+  if (curve.steadyWeek) return `Estimated level is steady from week\u00A0${curve.steadyWeek}.`;
+  return 'Estimated level is still rising at week\u00A04.';
 }
 
 function formatWeight(value: number): string {
@@ -613,24 +686,62 @@ function longDate(at: number): string {
   });
 }
 
-function weekLabel(t: number, from: number): string {
-  const week = Math.round((t - from) / (7 * 24 * 60 * 60 * 1000));
-  return week === 0 ? 'now' : `w${week}`;
-}
-
 const styles = StyleSheet.create({
-  crest: {
+  card: {
+    gap: spacing.md,
+  },
+  quietCard: {
+    gap: spacing.xs,
+  },
+  // Air between the three things on the page, and enough at the foot to clear
+  // the pinned footer. Without the inset the last card stops half drawn against
+  // the consent text, which reads as a broken card.
+  body: {
+    gap: spacing.lg,
+    paddingBottom: spacing.hero,
+  },
+  heroHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  card: {
-    gap: spacing.sm,
+  heroName: {
+    flex: 1,
   },
-  // The whole list clears the pinned footer. Without the inset the last card
-  // stops half drawn against the consent text, which reads as a broken card.
-  body: {
-    paddingBottom: spacing.hero,
+  pills: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  pill: {
+    minHeight: 32,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  pillOn: {
+    backgroundColor: colors.accentSoft,
+  },
+  chartBlock: {
+    gap: spacing.xs,
+  },
+  chartHolder: {
+    width: '100%',
+    height: PLAN_CHART_HEIGHT,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  chartEmpty: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   headline: {
     gap: spacing.sm,
@@ -679,13 +790,11 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingTop: spacing.md,
   },
-  curveHead: {
+  quietHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
-  curveTitle: {
-    flex: 1,
+    justifyContent: 'space-between',
+    gap: spacing.lg,
   },
   infoButton: {
     width: 30,
@@ -697,23 +806,19 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
+  detailsRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
   aboutBody: {
     paddingBottom: spacing.md,
   },
-  chartHolder: {
-    width: '100%',
-    height: CHART_HEIGHT,
-    paddingTop: spacing.xs,
-    overflow: 'hidden',
-  },
-  // The card is the surface the chart sits on, so the wipe is the same colour
-  // and reads as the curve drawing itself rather than as a shape passing over.
-  curtain: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.surface,
+  sheetBody: {
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
   },
   routineRow: {
     gap: spacing.xs,

@@ -14,6 +14,7 @@ import { Text } from '@/components/Text';
 import { reduceMotionNow } from '@/components/onboardingTransition';
 import { useOnboardingStore, type OnboardingDraft } from '@/stores/onboarding';
 import { getPreset, hasUsableHalfLife } from '@/domain/peptides';
+import { goalFraming } from '@/utils/goalFraming';
 import {
   beatDelay,
   colors,
@@ -60,6 +61,7 @@ export default function ComputeScreen() {
   const insets = useSafeAreaInsets();
   const draft = useOnboardingStore((state) => state);
   const lines = useMemo(() => computeLines(draft), [draft]);
+  const framing = goalFraming(draft.goalTags);
   const clock = useRef(new Animated.Value(0)).current;
   const [percent, setPercent] = useState(0);
 
@@ -157,8 +159,13 @@ export default function ComputeScreen() {
         </View>
       </View>
 
+      {/* The goal the user picked names the plan being built. The draft is
+          already subscribed above, so this costs no second read, and a run with
+          no goal answer keeps the sentence the beat has always carried. */}
       <Text variant="bodyStrong" align="center" style={styles.heading}>
-        Poke is putting your plan together
+        {framing
+          ? `Poke is putting your ${framing.plan} plan together`
+          : 'Poke is putting your plan together'}
       </Text>
 
       <View style={styles.lines}>
