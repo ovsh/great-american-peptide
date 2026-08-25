@@ -15,6 +15,7 @@ import { Slider } from '@/components/Slider';
 import { ProfileRecordStrip, RECORD_WEEKS, type ProfileRecord } from '@/components/profile-record-strip';
 import {
   ProfileCard,
+  ProfileChipField,
   ProfileExportValue,
   ProfileLink,
   ProfileProSlot,
@@ -26,6 +27,7 @@ import { Text } from '@/components/Text';
 import { TimeRangeToggle } from '@/components/TimeRangeToggle';
 import { TodayRise } from '@/components/today-motion';
 import type { InjectionRow, PreferencesRow } from '@/db/types';
+import { SIDE_EFFECT_PRESETS, type SideEffectPresetId } from '@/domain/sideEffects';
 import { kgToLb, lbToKg, type WeightUnit } from '@/domain/units';
 import { listInjections } from '@/repositories/injections';
 import {
@@ -46,8 +48,9 @@ import {
   CHECKIN_DELAY_OPTIONS,
   checkinDelayHours,
   ensureNotificationPermission,
-  hasSideEffectWatchList,
   refreshScheduledReminders,
+  resolveSideEffectWatchList,
+  serializeSideEffectWatchList,
 } from '@/services/notifications';
 import { openManageSubscriptions } from '@/services/purchases';
 import { maybePromptForReview, openWriteReview } from '@/services/review';
@@ -97,6 +100,8 @@ export default function ProfileScreen() {
   const bumpVersion = useAppStore((state) => state.bumpVersion);
   const [preferences, setPreferences] = useState<PreferencesRow | null>(null);
   const [injections, setInjections] = useState<InjectionRow[] | null>(null);
+  /** The side effects the check-in asks about, in the order the chips draw. */
+  const [watchList, setWatchList] = useState<readonly SideEffectPresetId[]>([]);
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
@@ -133,6 +138,9 @@ export default function ProfileScreen() {
     setInjections(shots);
     setGoalDraft(row.goal_weight === null ? '' : String(row.goal_weight));
     setPaceDraft(row.weekly_pace ?? restingPace(row.weight_unit));
+    // Reading the list is also where the stored default lands, for a user who
+    // set Poke up before this field existed. The write happens once.
+    setWatchList(await resolveSideEffectWatchList(row.side_effect_concerns));
   }, []);
 
   useEffect(() => {
@@ -181,6 +189,17 @@ export default function ProfileScreen() {
     const next: 0 | 1 = preferences.notif_cycle_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_cycle_enabled: next }, true);
     track('reminder_toggled', { kind: 'cycle', on: next === 1 });
+  };
+
+  // Held in preset order rather than in tap order, so the chips never reshuffle
+  // under the finger that just pressed one.
+  const toggleWatched = async (id: SideEffectPresetId) => {
+    const on = watchList.includes(id);
+    const next = SIDE_EFFECT_PRESETS
+      .map((preset) => preset.id)
+      .filter((preset) => (preset === id ? !on : watchList.includes(preset)));
+    setWatchList(next);
+    await savePreferences({ side_effect_concerns: serializeSideEffectWatchList(next) }, true);
   };
 
   const setCheckinDelay = async (choice: string) => {
@@ -374,12 +393,6 @@ export default function ProfileScreen() {
   const missedOn = remindersOn && preferences?.notif_missed_enabled === 1;
   const cycleOn = remindersOn && preferences?.notif_cycle_enabled === 1;
   const checkinDelay = checkinDelayHours(preferences?.notif_checkin_delay_hours);
-  // The scheduler is silent when the user named nothing to watch, whatever the
-  // switch says. The row reads the list with the scheduler's own check, so a
-  // toggle that shows on cannot quietly promise a banner that never comes: the
-  // pill names the reason the loop is idle instead of the delay it would use.
-  const checkinWatching = hasSideEffectWatchList(preferences?.side_effect_concerns ?? null);
-  const checkinIdle = checkinOn && !checkinWatching;
   const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null;
 
   // The rows below all wait on `loaded`, so a failed read would hold them at
@@ -446,16 +459,11 @@ export default function ProfileScreen() {
               testID="profile-checkin-row"
               icon={<Activity size={22} strokeWidth={1.8} color={colors.inkMuted} />}
               label="Day-after check-in"
-              accessibilityLabel={checkinIdle
-                ? 'Day-after check-in. You named no side effects to watch, so Poke sends no check-in.'
-                : `Check-in delay, ${checkinDelay} hours after a shot`}
+              accessibilityLabel={`Check-in delay, ${checkinDelay} hours after a shot`}
               onPress={remindersOn ? () => setDelayOpen(true) : undefined}
               value={(
                 <>
-                  <ProfileValuePill
-                    label={checkinIdle ? 'Nothing to watch' : `${checkinDelay} h`}
-                    quiet={!checkinOn || checkinIdle}
-                  />
+                  <ProfileValuePill label={`${checkinDelay} h`} quiet={!checkinOn} />
                   <View onStartShouldSetResponder={() => true}>
                     <Switch
                       testID="profile-checkin-switch"
@@ -469,6 +477,17 @@ export default function ProfileScreen() {
                   </View>
                 </>
               )}
+            />
+            {/* What the check-in asks about, under the row that names it. The
+                chips are the whole editor: Poke used to take this list once in
+                setup and then never offer it again, so a user who answered
+                "None right now" had a switch that could never fire. */}
+            <ProfileChipField
+              testID="profile-checkin-watch"
+              options={SIDE_EFFECT_PRESETS}
+              selected={watchList}
+              onToggle={(id) => { void toggleWatched(id); }}
+              caption={watchList.length === 0 ? 'No check-in until you pick one.' : undefined}
             />
             <ProfileRow
               testID="profile-missed-row"

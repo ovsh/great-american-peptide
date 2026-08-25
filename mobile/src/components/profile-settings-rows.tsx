@@ -18,6 +18,9 @@ import { colors, fonts, radius, spacing } from '@/theme';
 const ROW_HEIGHT = 56;
 const PRO_ROW_HEIGHT = 60;
 const ICON_SLOT = 24;
+/** A chip stands short so the field stays a field. Hit slop brings it to 44. */
+const CHIP_HEIGHT = 34;
+const CHIP_SLOP = 5;
 /** Where a divider starts: past the icon, under the label. */
 const DIVIDER_INSET = spacing.lg + ICON_SLOT + spacing.md;
 
@@ -139,6 +142,57 @@ export function ProfileSegment<T extends string>({
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+/**
+ * The chips that belong to the row above them, indented to its label.
+ *
+ * A chip here is a switch and not a filter, so an on chip fills with the accent
+ * the way every other "this is on" surface in the app does. There is no header
+ * over the field and no count under it: the row names the setting, and the
+ * chips are the answer to it. `caption` is the one line the field may add, and
+ * the caller passes it only when the field says something the chips cannot.
+ */
+export function ProfileChipField<T extends string>({
+  options,
+  selected,
+  onToggle,
+  caption,
+  testID,
+}: {
+  options: readonly { id: T; label: string }[];
+  selected: readonly T[];
+  onToggle: (id: T) => void;
+  caption?: string;
+  testID?: string;
+}) {
+  return (
+    <View testID={testID} style={styles.chipField}>
+      <View style={styles.chips}>
+        {options.map((option) => {
+          const on = selected.includes(option.id);
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="checkbox"
+              accessibilityLabel={option.label}
+              accessibilityState={{ checked: on }}
+              hitSlop={{ top: CHIP_SLOP, bottom: CHIP_SLOP }}
+              onPress={() => onToggle(option.id)}
+              style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && styles.chipPressed]}
+            >
+              <Text variant="caption" color={on ? colors.inkInverse : colors.ink} style={styles.pillText}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {caption === undefined ? null : (
+        <Text variant="caption" color={colors.inkSubtle}>{caption}</Text>
+      )}
     </View>
   );
 }
@@ -304,6 +358,35 @@ const styles = StyleSheet.create({
   },
   pillQuietText: {
     fontVariant: ['tabular-nums'],
+  },
+  // Indented to the label of the row above, so the chips read as its answer
+  // rather than as a block of their own.
+  chipField: {
+    gap: spacing.sm,
+    paddingLeft: DIVIDER_INSET,
+    paddingRight: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  chip: {
+    minHeight: CHIP_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.background,
+  },
+  chipOn: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  chipPressed: {
+    opacity: 0.78,
   },
   segment: {
     flexDirection: 'row',
