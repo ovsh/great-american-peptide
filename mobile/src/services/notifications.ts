@@ -17,7 +17,6 @@ import { SIDE_EFFECT_PRESETS, type SideEffectPresetId } from '../domain/sideEffe
 import { formatDose } from '../domain/units';
 import { cycleStateOf } from '../utils/cycle';
 import { startOfDay } from '../utils/date';
-import { track } from './analytics';
 
 type ExpoNotifications = typeof import('expo-notifications');
 
@@ -81,9 +80,6 @@ export async function ensureNotificationPermission(): Promise<boolean> {
     ios: { allowAlert: true, allowBadge: true, allowSound: false },
   });
   const granted = req.status === 'granted';
-  // Only the real prompt is counted. A permission iOS granted earlier returns
-  // above, and counting that would inflate the answer.
-  track('notification_permission_result', { granted });
   return granted;
 }
 

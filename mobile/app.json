@@ -3,7 +3,7 @@
     "name": "Poke",
     "owner": "ovsh-2",
     "slug": "peptide-tracker",
-    "version": "1.6.0",
+    "version": "1.6.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "peptidetracker",
@@ -15,7 +15,11 @@
       "appStoreUrl": "https://apps.apple.com/app/id6764757185",
       "infoPlist": {
         "CFBundleDisplayName": "Poke",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "SKAdNetworkItems": [
+          { "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork" },
+          { "SKAdNetworkIdentifier": "n38lu8286q.skadnetwork" }
+        ]
       }
     },
     "android": {
@@ -67,6 +71,24 @@
           "NSHealthShareUsageDescription": "Poke reads your weight from Health so that you do not type it by hand. Poke reads no other health data, and Poke sends your health data nowhere.",
           "NSHealthUpdateUsageDescription": "Poke does not save data to Health and never asks for this permission. Apple requires this text because the Health library contains save functions.",
           "background": false
+        }
+      ],
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "1402932788402301",
+          "clientToken": "7cc80b50917cee791d9ea0f2d572d646",
+          "displayName": "Poke",
+          "scheme": "fb1402932788402301",
+          "autoLogAppEventsEnabled": true,
+          "advertiserIDCollectionEnabled": false,
+          "isAutoInitEnabled": false
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "Poke uses this permission to measure ads that lead to installs and subscriptions. Your shots, your weights and your side effects stay on this phone."
         }
       ]
     ],

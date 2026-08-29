@@ -13,7 +13,6 @@ import { PRIVACY_URL, TERMS_URL } from '@/config/legal';
 import type { GoalKind } from '@/db/types';
 import { buildPlanOptions, type PlanId, type PlanOption } from '@/domain/plans';
 import { getPreferences } from '@/repositories/preferences';
-import { track } from '@/services/analytics';
 import { useEntitlementStore, type OfferingState } from '@/stores/entitlement';
 import { colors, radius, spacing } from '@/theme';
 import { goalFraming } from '@/utils/goalFraming';
@@ -89,8 +88,7 @@ const BENEFITS: readonly Benefit[] = [
  *
  * It sits apart from the benefit list for that reason: it is not a lock, it is
  * the reason a person picked Poke over an app with an account. `profile.tsx`
- * carries the same promise in the same words, and `services/analytics.ts` is the
- * only file that may reach a server with an event that holds no health data.
+ * carries the same promise in the same words.
  */
 const PRIVACY = {
   title: 'On this phone and nowhere else',
@@ -140,10 +138,6 @@ export default function PaywallScreen() {
     if (offeringState === 'idle') loadOffering().catch(() => {});
   }, [offeringState, loadOffering]);
 
-  useEffect(() => {
-    track('paywall_viewed', { source: typeof source === 'string' && source ? source : 'unknown' });
-  }, [source]);
-
   const plans = buildPlanOptions(offering);
   const plan = plans.find((option) => option.id === selected) ?? plans[0];
   // `canSell` is whether Poke can sell anything here at all. `storeReady` is
@@ -172,7 +166,6 @@ export default function PaywallScreen() {
     if (!plan.pkg) return;
     const outcome = await buy(plan.pkg);
     if (outcome.kind === 'purchased') {
-      track('purchase_completed', { plan: plan.id === 'annual' ? 'yearly' : 'monthly' });
       leave();
     }
   };

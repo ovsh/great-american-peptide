@@ -14,7 +14,6 @@ import {
 } from '../domain/peptides';
 import { WEEKDAY_OPTIONS, weekdayMask, type Weekday } from '../domain/scheduling';
 import { cmToIn, inToCm, kgToLb, lbToKg, type HeightUnit, type WeightUnit } from '../domain/units';
-import type { AnalyticsEvents } from '../services/analytics';
 
 // The ids that are not catalog presets. Each custom medication the user names
 // gets its own id, `custom:1`, `custom:2` and so on, so setup can hold as many
@@ -69,30 +68,6 @@ export const EXPERIENCE_OPTIONS: readonly {
   { id: 'new', label: 'Brand new', description: 'Poke explains each step on the way.' },
   { id: 'basics', label: 'I know the basics', description: 'Poke keeps the notes short.' },
   { id: 'experienced', label: 'I have done this before', description: 'Poke skips the explanations.' },
-];
-
-/**
- * Where a user says they found Poke.
- *
- * The ids come from the analytics schema rather than the other way round,
- * because the event is the only place this answer lands. Nothing on any screen
- * reads it back, and no column holds it: attribution tells the owner which
- * channel to spend on, and it tells the user nothing about their own treatment.
- * A channel added here fails to compile until the event knows about it too.
- */
-export type FoundChannel = AnalyticsEvents['onboarding_channel_picked']['channel'];
-
-// One tap each and no description line. Every label is the whole answer, and a
-// gloss under "TikTok" would tell nobody anything.
-export const FOUND_OPTIONS: readonly { id: FoundChannel; label: string }[] = [
-  { id: 'app_store', label: 'App Store search' },
-  { id: 'tiktok', label: 'TikTok' },
-  { id: 'instagram', label: 'Instagram' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'reddit', label: 'Reddit' },
-  { id: 'creator', label: 'A creator or influencer' },
-  { id: 'friend', label: 'A friend or family member' },
-  { id: 'other', label: 'Something else' },
 ];
 
 export const LAST_SHOT_OPTIONS: readonly { id: LastShotChoice; label: string }[] = [
@@ -450,12 +425,6 @@ export interface OnboardingDraft {
   goalTags: GoalKind[];
   /** Null until the knowledge question is answered, and null when it is skipped. */
   experienceLevel: ExperienceLevel | null;
-  /**
-   * The channel the user picked on the found screen, and null when they skipped
-   * it. It rides one analytics event and no column, so `completeOnboarding`
-   * reads past it. See `FoundChannel`.
-   */
-  foundChannel: FoundChannel | null;
   reminder: ReminderDraft;
 }
 
@@ -490,7 +459,6 @@ export interface OnboardingState extends OnboardingDraft {
   setHeightValue: (value: number | null) => void;
   toggleGoal: (goalKind: GoalKind) => void;
   setExperienceLevel: (level: ExperienceLevel | null) => void;
-  setFoundChannel: (channel: FoundChannel | null) => void;
   setWeightUnit: (unit: WeightUnit) => void;
   setWeightValue: (field: 'current' | 'goal', value: number | null) => void;
   setPace: (pace: number) => void;
@@ -515,7 +483,6 @@ const initialDraft: OnboardingDraft = {
   goalKind: null,
   goalTags: [],
   experienceLevel: null,
-  foundChannel: null,
   reminder: { kind: 'skipped', time: '09:00' },
 };
 
@@ -668,10 +635,6 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     return { goalTags, goalKind: goalTags[0] ?? null };
   }),
   setExperienceLevel: (experienceLevel) => set({ experienceLevel }),
-  // Null is the record of a skip, exactly as it is for the knowledge question.
-  // The found screen sends its event on the way out and never on a tap, so this
-  // setter stays a plain write.
-  setFoundChannel: (foundChannel) => set({ foundChannel }),
   setWeightUnit: (unit) => set((state) => ({
     weight: {
       unit,
@@ -857,7 +820,6 @@ export function getOnboardingDraft(state: OnboardingState): OnboardingDraft {
     goalKind: state.goalKind,
     goalTags: state.goalTags,
     experienceLevel: state.experienceLevel,
-    foundChannel: state.foundChannel,
     reminder: state.reminder,
   };
 }
@@ -905,7 +867,6 @@ export type PreScheduleStep =
   | 'birthday'
   | 'goal'
   | 'knowledge'
-  | 'found'
   | 'creator'
   | 'journey'
   | 'taking';
@@ -922,12 +883,9 @@ export const PRE_SCHEDULE_ORDER: readonly PreScheduleStep[] = [
   'birthday',
   'goal',
   'knowledge',
-  // The two attribution questions sit here, after the last question about the
-  // user and before the first one about their treatment. They ask about how the
-  // user arrived rather than about their health, so they belong on the near side
-  // of the medical run, and the creator code has to land before the plan screen
+  // The creator code sits after the last question about the user and before the
+  // first one about their treatment. It has to land before the plan screen
   // decides whether to open the paywall.
-  'found',
   'creator',
   'journey',
   'taking',
@@ -938,7 +896,6 @@ export const PRE_SCHEDULE_ROUTES: Record<PreScheduleStep, Href> = {
   birthday: '/onboarding/birthday',
   goal: '/onboarding/goal',
   knowledge: '/onboarding/knowledge',
-  found: '/onboarding/found',
   creator: '/onboarding/creator',
   journey: '/onboarding/journey',
   taking: '/onboarding/taking',

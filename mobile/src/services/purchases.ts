@@ -80,7 +80,30 @@ async function configure(): Promise<PurchasesAvailability> {
   // accounts yet, so an anonymous id is the only identity we can honestly claim.
   // When Sign in with Apple lands, call `logIn` with the stable user id here.
   await rc.default.configure({ apiKey });
+  // RevenueCat records Apple's ATT state with its normal customer attributes.
+  // Failure here must not make the store unavailable: attribution is optional,
+  // while entitlements and purchases are core app functions.
+  await rc.default.collectDeviceIdentifiers().catch(() => {});
   return { kind: 'ready' };
+}
+
+/**
+ * Adds or clears Meta matching identifiers when the current ATT answer changes.
+ *
+ * The caller owns that consent boundary. This function only speaks to
+ * RevenueCat, and repeated calls converge on the same subscriber attributes.
+ */
+export async function syncRevenueCatMetaAttribution(
+  facebookAnonymousId: string | null,
+): Promise<void> {
+  const availability = await initPurchases();
+  if (availability.kind !== 'ready') throw new Error('RevenueCat is unavailable.');
+  const rc = await loadModule();
+  if (!rc) throw new Error('RevenueCat native module is unavailable.');
+
+  await rc.default.setFBAnonymousID(facebookAnonymousId);
+  await rc.default.collectDeviceIdentifiers();
+  await rc.default.syncAttributesAndOfferingsIfNeeded();
 }
 
 export function isPro(info: CustomerInfo | null | undefined): boolean {

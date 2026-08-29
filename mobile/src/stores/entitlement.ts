@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CustomerInfo, PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
-import { setTesterId, track } from '../services/analytics';
+import { prepareAttributionForPurchase } from '../services/attribution';
 import {
   addCustomerInfoListener,
   fetchCustomerInfo,
@@ -217,6 +217,7 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
 
   buy: async (pkg) => {
     set({ purchasing: true, error: null });
+    await prepareAttributionForPurchase();
     const outcome = await purchasePackage(pkg);
     if (outcome.kind === 'purchased') {
       set({ status: isPro(outcome.info) ? 'pro' : 'free', purchasing: false });
@@ -241,12 +242,7 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
       }
       const pro = isPro(info);
       set({ status: pro ? 'pro' : 'free', restoring: false });
-      if (pro) {
-        // Here rather than on the paywall, because the profile tab restores
-        // through this same door.
-        track('purchase_restored');
-        return 'restored';
-      }
+      if (pro) return 'restored';
       set({ error: 'Poke found no active subscription for this Apple Account.' });
       return 'none';
     } catch (caught: unknown) {
@@ -260,8 +256,6 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
     const { outcome, at, id } = await grantTesterPro(code);
     if (outcome === 'granted' && id !== null) {
       set({ testerProAt: at, testerId: id });
-      setTesterId(id);
-      track('tester_code_redeemed', { tester_id: id });
     }
     return outcome;
   },
@@ -271,7 +265,6 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
   revokeTesterCode: async () => {
     await revokeTesterPro();
     set({ testerProAt: null, testerId: null });
-    setTesterId(null);
   },
 
   setDevOverride: (value) => set({ devOverride: value }),

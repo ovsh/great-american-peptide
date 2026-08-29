@@ -36,7 +36,6 @@ import {
   updatePreferences,
   type PreferencesPatch,
 } from '@/repositories/preferences';
-import { track } from '@/services/analytics';
 import { exportHistory } from '@/services/export';
 import {
   importHealthWeights,
@@ -167,28 +166,24 @@ export default function ProfileScreen() {
       }
     }
     await savePreferences({ notifications_enabled: next }, true);
-    track('reminder_toggled', { kind: 'shot_day', on: next === 1 });
   };
 
   const toggleCheckin = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_checkin_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_checkin_enabled: next }, true);
-    track('reminder_toggled', { kind: 'checkin', on: next === 1 });
   };
 
   const toggleMissed = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_missed_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_missed_enabled: next }, true);
-    track('reminder_toggled', { kind: 'missed', on: next === 1 });
   };
 
   const toggleCycle = async () => {
     if (!preferences) return;
     const next: 0 | 1 = preferences.notif_cycle_enabled === 1 ? 0 : 1;
     await savePreferences({ notif_cycle_enabled: next }, true);
-    track('reminder_toggled', { kind: 'cycle', on: next === 1 });
   };
 
   // Held in preset order rather than in tap order, so the chips never reshuffle

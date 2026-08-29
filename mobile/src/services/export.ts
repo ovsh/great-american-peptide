@@ -11,7 +11,6 @@ import { listInjections } from '../repositories/injections';
 import { listMeasurements } from '../repositories/measurements';
 import { listMedications } from '../repositories/medications';
 import { listSideEffects } from '../repositories/sideEffects';
-import { track } from './analytics';
 
 export type ExportOutcome =
   | { kind: 'shared' }
@@ -90,9 +89,6 @@ async function shareCsv(csv: string, now: number): Promise<ExportOutcome> {
     : await Share.share({ message: csv });
 
   if (result.action === Share.dismissedAction) return { kind: 'dismissed' };
-  // The file itself never leaves the phone by this route, so the event says
-  // only that an export reached the share sheet.
-  track('export_csv');
   return { kind: 'shared' };
 }
 

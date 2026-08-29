@@ -46,7 +46,7 @@ const ESTIMATE_DISCLAIMER = 'Estimate only. Do not use it to make dosing decisio
  * receive. There is no variant of this screen that does. The only proof on a
  * first run is the way the app is built, and that is the line under the button.
  */
-const TRUST_LINE = 'No account. Nothing leaves this phone.';
+const TRUST_LINE = 'No account. Your health record stays on this phone.';
 
 /**
  * Slide three's headline, broken by hand.

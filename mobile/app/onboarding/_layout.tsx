@@ -1,21 +1,8 @@
-import { useEffect } from 'react';
-import { useSegments } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 
-import { track } from '@/services/analytics';
 import { colors } from '@/theme';
 
 export default function OnboardingLayout() {
-  // One place for every step, however many the answers leave in the run.
-  // Segments are route patterns, so a dynamic step reads as
-  // `setup/[index]/vial` and no answer a person typed can reach the event.
-  const segments = useSegments() as readonly string[];
-  const step = segments.slice(segments.indexOf('onboarding') + 1).join('/') || 'index';
-
-  useEffect(() => {
-    track('onboarding_step_viewed', { step });
-  }, [step]);
-
   return (
     <Stack
       screenOptions={{

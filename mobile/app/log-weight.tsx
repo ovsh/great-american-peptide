@@ -12,7 +12,6 @@ import { WeightPicker } from '@/components/WeightPicker';
 import { createMeasurement, latestMeasurement } from '@/repositories/measurements';
 import { getPreferences, updatePreferences } from '@/repositories/preferences';
 import type { PreferencesRow } from '@/db/types';
-import { track } from '@/services/analytics';
 import { useAppStore } from '@/stores/app';
 import { WEIGHT_BOUNDS, WEIGHT_REST } from '@/stores/onboarding';
 import { colors, spacing } from '@/theme';
@@ -62,8 +61,6 @@ export default function LogWeightScreen() {
     setSubmitting(true);
     try {
       await createMeasurement({ kind: 'weight', value, unit, takenAt: Date.now() });
-      // The number itself never travels.
-      track('weight_logged', { source: 'manual' });
       // remember unit preference
       await updatePreferences({
         weight_unit: unit,

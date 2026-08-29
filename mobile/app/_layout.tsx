@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
@@ -18,7 +18,7 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { initDb } from '@/db/client';
 import { getPreferences } from '@/repositories/preferences';
-import { initAnalytics } from '@/services/analytics';
+import { startAttribution } from '@/services/attribution';
 import { exportWithoutMigrating } from '@/services/export';
 import { listenForReminderTaps, refreshScheduledReminders } from '@/services/notifications';
 import { useAppStore } from '@/stores/app';
@@ -69,12 +69,6 @@ export default function RootLayout() {
   // database error screen does not wait, because it has more to say than this.
   const entitlementPending = !entitlementSettled && gate.kind !== 'error';
 
-  // Analytics starts before the gate, so the launch itself is counted. The
-  // call is inert without EXPO_PUBLIC_POSTHOG_KEY.
-  useEffect(() => {
-    initAnalytics();
-  }, []);
-
   useEffect(() => {
     if (gate.kind !== 'checking') return;
     bootstrapApp()
@@ -115,6 +109,23 @@ export default function RootLayout() {
     if (fontsReady && gate.kind !== 'checking' && !entitlementPending) {
       SplashScreen.hideAsync().catch(() => {});
     }
+  }, [fontsReady, gate.kind, entitlementPending]);
+
+  // The tracking prompt waits for the first screen, so it never covers the
+  // splash. It has to come on the first launch, because the install is the
+  // moment an ad is credited or not. Every return to the foreground reads ATT
+  // again, so a change in Settings takes effect without a relaunch.
+  useEffect(() => {
+    if (!fontsReady || gate.kind === 'checking' || entitlementPending) return;
+    const run = () => startAttribution().catch(() => {});
+    const timer = setTimeout(run, 800);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') run();
+    });
+    return () => {
+      clearTimeout(timer);
+      subscription.remove();
+    };
   }, [fontsReady, gate.kind, entitlementPending]);
 
   if (!fontsReady || gate.kind === 'checking' || entitlementPending) {

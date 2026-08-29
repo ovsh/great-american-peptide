@@ -27,7 +27,6 @@ import {
 import { updatePreferences } from '../repositories/preferences';
 import { isProNow } from '../stores/entitlement';
 import { endOfDay, startOfDay } from '../utils/date';
-import { track, type AnalyticsEvents } from './analytics';
 import { refreshScheduledReminders } from './notifications';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -237,9 +236,6 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
     const created = await createMedication({ ...seed.medication, colorIndex });
     if (status !== 'active') await setMedicationStatus(created.id, status);
     saved.push({ id: created.id, seed });
-    // Only a new row counts as an addition, and only the shape of the pick
-    // travels. The name stays on the phone.
-    track('medication_added', { kind: seedKind(seed), source: 'onboarding' });
   }
 
   await recordLastShot(draft, saved, now);
@@ -307,16 +303,6 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<void> 
 
   await updatePreferences(preferences);
   await refreshScheduledReminders().catch(() => {});
-  track('onboarding_completed');
-}
-
-/** Which shape of medication the user picked. Never which medication. */
-function seedKind(seed: MedicationSeed): AnalyticsEvents['medication_added']['kind'] {
-  if (isCustomMedicationId(seed.selectionId)) return 'custom';
-  const entry = getPresetEntry(seed.selectionId);
-  if (!entry) return 'custom';
-  if (isBlend(entry.preset)) return 'blend';
-  return entry.moleculeName ? 'brand' : 'preset';
 }
 
 function positive(value: number | null): number | null {

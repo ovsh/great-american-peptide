@@ -37,7 +37,7 @@ export default function WeightScreen() {
 
   const readHealth = async () => {
     setHealth({ kind: 'reading' });
-    const result = await importHealthWeights('onboarding');
+    const result = await importHealthWeights();
     if (result.kind === 'imported') setWeightValue('current', wheelValue(result.latestKg, weight.unit));
     setHealth({ kind: 'done', message: healthMessage(result, weight.unit) });
   };

@@ -35,6 +35,27 @@ trust than a cheerful one. These are tests, not preferences.
 
 ---
 
+## 1.6.1
+
+Prepared for App Review 29 August 2026.
+
+- Poke asks the iOS tracking question after the first screen appears. A denial keeps
+  every app function available. Your health record stays on this phone either way.
+
+## 1.6.0
+
+Released 26 August 2026.
+
+- A new setup flow: the goal you pick shapes the words you read, from the first
+  screens to your plan.
+- A redesigned plan: the level curve leads the screen, and the page reads like a
+  diary.
+- A simpler mix step: enter the water, and Poke shows the units on your syringe.
+- The welcome screens show the reminder banner as it appears on your lock screen.
+- Reminder banners speak one clear voice, and a tap opens the right log screen.
+- Pick the color each medication draws with.
+- Touch and hold the Today chart to read your estimated level hour by hour.
+
 ## 1.5.0
 
 Released 14 August 2026.
